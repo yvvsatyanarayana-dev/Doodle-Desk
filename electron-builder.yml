@@ -1,0 +1,98 @@
+appId: com.doodledesk.desktop
+productName: Doodle Desk
+copyright: Copyright © 2026 Antigravity
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - "dist/**/*"
+  - "electron/**/*"
+  - "public/**/*"
+  - "package.json"
+
+extraResources:
+  - from: "public/fonts"
+    to: "fonts"
+    filter: ["**/*"]
+
+protocols:
+  - name: Doodle Desk Protocol
+    schemes:
+      - doodle-desk
+
+fileAssociations:
+  - ext: doodle
+    name: Doodle Desk Document
+    description: Doodle Desk Drawing File
+    mimeType: application/vnd.doodledesk+json
+    role: Editor
+    icon: build/icon.ico
+  - ext: doodlelib
+    name: Doodle Desk Library
+    description: Doodle Desk Library File
+    mimeType: application/vnd.doodledesk.library+json
+    role: Editor
+    icon: build/icon.ico
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.ico
+  legalTrademarks: Doodle Desk
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Doodle Desk
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: build/icon.icns
+  category: public.app-category.graphics-design
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  darkModeSupport: true
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  icon: build/icon.png
+  category: Graphics
+  synopsis: Hand-drawn diagramming desktop editor
+  description: A production-quality offline desktop application for hand-drawn diagramming.
+  mimeTypes:
+    - application/vnd.doodledesk+json
+    - application/vnd.doodledesk.library+json
+
+publish:
+  provider: github
+  owner: doodledesk
+  repo: doodle-desk
+  releaseType: release
