@@ -1,88 +1,131 @@
-# Doodle Desk
+<p align="center">
+  <a href="#doodle-desk">
+    <img src="public/logo-transparent.png" width="96" height="96" alt="Doodle Desk Logo" />
+  </a>
+</p>
 
-A production-quality, fully offline desktop diagramming application built with **Electron**, **Vite**, **React**, and a native high-performance canvas engine.
+<h1 align="center">Doodle Desk</h1>
 
-![Doodle Desk](public/logo.png)
+<p align="center">
+  <b>A production-grade, offline desktop whiteboard for sketching hand-drawn diagrams.</b>
+  <br />
+  Fast, privacy-focused, zero-cloud dependency, and 100% free for a lifetime.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-007ACC?style=flat-square&logo=windows&logoColor=white" alt="Platforms" />
+  <img src="https://img.shields.io/badge/Electron-33.x-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/Vite-6.x-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Tests-30%20Passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/License-Free%20Forever-2ea44f?style=flat-square" alt="License" />
+</p>
+
+<p align="center">
+  <a href="#-key-features"><b>Features</b></a> •
+  <a href="#-tech-stack"><b>Tech Stack</b></a> •
+  <a href="#-quick-start"><b>Quick Start</b></a> •
+  <a href="#-keyboard-shortcuts"><b>Shortcuts</b></a> •
+  <a href="#-packaging--installers"><b>Packaging</b></a> •
+  <a href="#-offline--privacy-guarantee"><b>Privacy</b></a>
+</p>
 
 ---
 
-## 🎨 Features & Capabilities
+## 🎨 Key Features
 
-### 1. Native Diagramming Engine
-- **Complete Toolset:** Shapes (Rectangle, Diamond, Ellipse, Arrow, Line, Freehand draw), Text, Eraser, Laser Pointer, Frames, Image Insertion, Web Embeds, Sticky Notes, Precision Ruler, and Flood Fill.
-- **Hand-Drawn & Clean Styles:** Sloppiness / roughness controls, stroke styles, fill styles (solid, hachure, cross-hatch), typography, and curated color palettes.
-- **Custom Shape Libraries:** Import and export custom shape libraries (`.doodlelib` files).
-- **Dark Mode & Theming:** System-synchronized or manual Light / Dark themes.
-- **Zen Mode & Grid Styles:** Dot grid, engineering grid, isometric, blueprint, parchment, and standard canvas styles.
-- **Command Palette:** Fast keyboard-driven command navigation (`Ctrl+K` / `Cmd+K`).
+### 🖌️ Native Hand-Drawn Diagramming Engine
+- **Versatile Toolset:** Rectangles, diamonds, ellipses, lines, arrows, freehand sketching, text, eraser, laser pointer, and flood fill.
+- **Organic Hand-Drawn Aesthetic:** Customize stroke roughness, hachure/cross-hatch fills, stroke widths, hand-drawn typography, and curated color palettes.
+- **Canvas Styles & Themes:** Standard whiteboard, blueprint grid, dot grid, isometric grid, engineering dark, and warm parchment styles with smooth light/dark switching.
+- **Precision Drawing Tools:** Built-in precision ruler, lasso selection, and shape-recognition auto-detection for quick clean sketches.
 
-### 2. File Handling & Lossless Storage
-- **Native Document Format:** Open and save `.doodle` JSON documents.
-- **Scene-Embedded Exports:** Export to `.png` and `.svg` with embedded diagram metadata, allowing drawings to be reopened and edited losslessly at any time.
-- **Shape Libraries:** Save and load reusable component packages (`.doodlelib`).
-- **Save Operations:** Save, Save As, and Save a Copy with full path memory.
-- **Unsaved Changes Protection:** Native confirmation dialogs on file open, window close, or app quit.
-- **Auto-Save & Crash Recovery:** Continuous background snapshots with automatic session restoration if interrupted.
-- **Drag & Drop:** Drag diagram files directly from Windows Explorer, macOS Finder, or Linux file managers onto the canvas.
+### 📁 Multi-Board Workspaces & Lossless Storage
+- **Native Document Format:** Lossless `.doodle` JSON documents preserve full vector state, stroke history, and editable layers.
+- **Multi-Workspace Hub:** Organize multiple files into distinct boards and switch seamlessly without clutter.
+- **Embedded PNG & SVG Exports:** Export `.png` and `.svg` files with embedded diagram metadata, allowing drawings to be reopened and edited losslessly at any time.
+- **Shape Component Libraries:** Export and import reusable component packages (`.doodlelib`).
+- **Crash Recovery & Auto-Save:** Background snapshot engine ensures zero data loss upon unexpected shutdowns or crashes.
 
-### 3. OS Integration
-- **Native Platform Menus:** Customized menus respecting macOS, Windows, and Linux conventions.
-- **Keyboard Shortcuts:** Standard platform shortcuts (`Ctrl+N`, `Ctrl+S`, `Ctrl+O`, `Ctrl+P`, zoom, zen mode).
-- **Recent Files:** Persistent recent file list in File Menu and Jump Lists.
-- **Multi-Window Support:** Open multiple independent documents simultaneously in separate windows.
-- **Window State Persistence:** Memorizes window size, position, and maximization state.
-- **Export Formats:** PNG (1x, 2x, 3x), SVG, PDF (via Chromium printToPDF), and Clipboard copy.
-- **Deep Linking:** Registers `doodle-desk://` protocol for opening drawings via URLs.
+### 🌐 Peer-to-Peer Live Collaboration
+- **Zero-Cloud Collaboration:** Share your room ID to draw together in real time over direct WebRTC / PeerJS connections.
+- **Collaborator Cursor Tracking:** Follow collaborator viewports and view live cursor positions in color-coded badges.
+- **Built-in Session Chat:** Floating peer chat panel with quick message reactions and message history.
 
-### 4. 100% Offline & Secure
-- **Zero External Dependencies:** Native rendering and math engine without third-party web CDNs.
-- **Context Isolation & Preload Bridge:** `contextIsolation: true`, `nodeIntegration: false`, minimal typed API surface.
-- **Strict Content Security Policy (CSP):** No remote code execution. External links are strictly validated and opened in the default browser.
+### 🖥️ Native Desktop Integration
+- **Frameless Studio Design:** Custom dark/light window titlebar with native min, max/restore, and close controls.
+- **Native Print Preview:** Built-in print preview with matching studio top bar, landscape/portrait orientation, and OS print dialog integration.
+- **Cross-Platform Menus & Deep Linking:** Native application menus, recent files jump list, and `doodle-desk://` protocol support.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+N` / `Cmd+N` | New file in workspace |
+| `Ctrl+O` / `Cmd+O` | Open diagram file |
+| `Ctrl+S` / `Cmd+S` | Save document |
+| `Ctrl+Shift+S` / `Cmd+Shift+S` | Save As... |
+| `Ctrl+P` / `Cmd+P` | Print Canvas |
+| `Ctrl+K` / `Cmd+K` | Open Command Palette |
+| `Ctrl+Z` / `Cmd+Z` | Undo |
+| `Ctrl+Y` / `Cmd+Shift+Z` | Redo |
+| `Ctrl+Shift+E` / `Cmd+Shift+E` | Export canvas dialog |
+| `Ctrl+0` / `Cmd+0` | Reset canvas zoom to 100% |
+| `Alt+F4` / `Cmd+Q` | Quit Doodle Desk |
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Desktop Framework:** [Electron](https://www.electronjs.org/) (Main process in CommonJS)
-- **Frontend Framework:** [React 18](https://react.dev/) + [Vite](https://vitejs.dev/)
-- **Canvas Engine:** Native high-performance hand-drawn 2D vector renderer
-- **Settings Store:** `electron-store`
-- **Auto Updater:** `electron-updater`
-- **Testing:** `Vitest` (Unit tests) + `Playwright` (Electron E2E tests)
-- **Packaging:** `electron-builder`
+| Layer | Technologies |
+|---|---|
+| **Runtime & Shell** | [Electron 33](https://www.electronjs.org/) (Secure preload IPC bridge, context isolation, native menus) |
+| **Frontend Framework** | [React 18](https://react.dev/) + [Vite 6](https://vitejs.dev/) |
+| **Canvas Engine** | High-performance 2D vector drawing pipeline with hand-drawn roughness math |
+| **Persistence** | [electron-store](https://github.com/sindresorhus/electron-store) (Window state, themes, and user preferences) |
+| **Icons & UI** | [Lucide React](https://lucide.dev/) + Vanilla CSS token design system |
+| **Testing** | [Vitest](https://vitest.dev/) (Unit/Integration) + [Playwright](https://playwright.dev/) (Electron E2E) |
+| **Distribution** | [electron-builder](https://www.electron.build/) (Cross-platform installer packaging) |
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ (tested on Node v20/v22)
-- npm 9+
+- **Node.js 18+** (Node 20 or 22 LTS recommended)
+- **npm 9+**
 
 ### Installation
+
 ```bash
-git clone <your-repo-url>
-cd EX
+# Clone the repository
+git clone https://github.com/yvvsatyanarayana-dev/Doodle-Desk.git
+
+# Navigate to project directory
+cd Doodle-Desk
+
+# Install dependencies
 npm install
 ```
 
 ### Running in Development
+
 ```bash
+# Launches Vite dev server + Electron with hot-reloading
 npm run dev
 ```
-Starts the Vite dev server on port `5173` and launches Electron with hot-reload.
 
 ---
 
 ## 🧪 Testing
 
-### Run Unit Tests
 ```bash
+# Run unit & integration test suite (Vitest)
 npm test
-```
 
-### Run End-to-End Smoke Tests (Playwright Electron)
-```bash
+# Run end-to-end Electron desktop smoke tests (Playwright)
 npm run test:e2e
 ```
 
@@ -90,33 +133,34 @@ npm run test:e2e
 
 ## 📦 Packaging & Installers
 
-Build native installers for your current platform:
+Generate production-ready standalone installers into the `release/` directory:
 
 ```bash
-# Build for current OS
+# Package for your current operating system
 npm run build
 
-# Windows: NSIS Installer (.exe) and Portable build (.exe)
+# Windows: NSIS Installer (.exe) + Portable executable (.exe)
 npm run build:win
 
-# macOS: DMG (.dmg) and ZIP (.zip) for x64 / Apple Silicon arm64
+# macOS: Apple Disk Image (.dmg) + Universal Zip (.zip)
 npm run build:mac
 
 # Linux: AppImage, Debian (.deb), and RPM (.rpm)
 npm run build:linux
 ```
 
-All installer artifacts will be created in the `release/` directory.
+---
+
+## 🔒 Offline & Privacy Guarantee
+
+- **100% Offline by Default:** Zero tracking, telemetry, or remote server pings.
+- **Strict Content Security Policy (CSP):** No remote script execution or external CDN downloads.
+- **Context Isolation:** Web content runs completely isolated with strict preload IPC communication channels.
 
 ---
 
-## 📜 Copyright & Free Lifetime Usage
+## 📜 License & Free Lifetime Commitment
 
 Copyright (c) 2026. All rights reserved.
 
-**Doodle Desk** is created and dedicated for **students, teachers, creators, and developers** to use completely free for a lifetime. 
-
-- **100% Free Forever:** No paywalls, no subscriptions, no locked features, and no purchase required.
-- **100% Offline & Private:** Your work stays entirely on your local machine with zero external tracking.
-
-Built with ❤️ for learners and developers everywhere.
+**Doodle Desk** is built and maintained as a **100% free lifetime resource for students, teachers, creators, and developers worldwide**. No subscriptions, no paywalls, and no hidden fees — forever.
