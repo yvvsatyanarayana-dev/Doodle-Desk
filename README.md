@@ -17,8 +17,12 @@
   <img src="https://img.shields.io/badge/Electron-33.x-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Vite-6.x-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
-  <img src="https://img.shields.io/badge/Tests-30%20Passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-32%20Passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
   <img src="https://img.shields.io/badge/License-Free%20Forever-2ea44f?style=flat-square" alt="License" />
+</p>
+
+<p align="center">
+  <img src="public/App.png" alt="Doodle Desk Application Screenshot" width="850" />
 </p>
 
 <p align="center">
@@ -71,8 +75,19 @@
 | `Ctrl+K` / `Cmd+K` | Open Command Palette |
 | `Ctrl+Z` / `Cmd+Z` | Undo |
 | `Ctrl+Y` / `Cmd+Shift+Z` | Redo |
-| `Ctrl+Shift+E` / `Cmd+Shift+E` | Export canvas dialog |
+| `Ctrl+C` / `Ctrl+V` | Copy / Paste elements |
+| `Ctrl+D` | Duplicate selected elements |
+| `Alt+Drag` | Duplicate and drag clone |
+| `Alt+Resize` | Resize symmetrically from center |
+| `Shift+Draw` | Constrain 1:1 square / circle / straight angle |
+| `Shift+Drag` | Constrain element dragging to axis |
+| `Ctrl+]` / `Ctrl+[` | Bring to front / Send to back |
+| `Ctrl+G` / `Ctrl+Shift+G` | Group / Ungroup selected elements |
+| `Ctrl+Shift+>` / `<` | Increase / Decrease text font size |
+| `Ctrl++` / `Ctrl+-` | Zoom in / Zoom out |
 | `Ctrl+0` / `Cmd+0` | Reset canvas zoom to 100% |
+| `Space+Drag` / `Middle Click` | Pan canvas |
+| `1` - `0` / `V, R, D, O, A, L, P, T, E, H, F` | Quick tool selection |
 | `Alt+F4` / `Cmd+Q` | Quit Doodle Desk |
 
 ---

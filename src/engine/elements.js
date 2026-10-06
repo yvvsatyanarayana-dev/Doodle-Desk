@@ -13,7 +13,17 @@ export function versionNonce() {
 
 // Deep clone an element
 export function cloneElement(el, overrides = {}) {
-  return { ...el, ...overrides, id: generateId(), version: 1, versionNonce: versionNonce() };
+  const cloned = { ...el, ...overrides, id: generateId(), version: 1, versionNonce: versionNonce() };
+  if (Array.isArray(el.points)) {
+    cloned.points = el.points.map(p => [...p]);
+  }
+  if (Array.isArray(el.pressures)) {
+    cloned.pressures = [...el.pressures];
+  }
+  if (Array.isArray(el.groupIds)) {
+    cloned.groupIds = [...el.groupIds];
+  }
+  return cloned;
 }
 
 // All font families

@@ -2234,8 +2234,7 @@
 }
 
 .doodle-canvas-root .App-menu__left-wrapper {
-  position: relative;
-  z-index: 20;
+  z-index: 150;
 }
 
 .doodle-canvas-root .App-menu__left {

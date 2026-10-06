@@ -568,10 +568,22 @@ export function wrapText(ctx, text, maxWidth) {
 
 // Measure text element dimensions
 export function measureText(text, fontSize, fontFamily = 5, maxWidth = null) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
+  if (!ctx) {
+    const lines = (text || '').split('\n');
+    let maxLen = 0;
+    for (const line of lines) {
+      if (line.length > maxLen) maxLen = line.length;
+    }
+    return {
+      width: Math.ceil(maxLen * fontSize * 0.6) + 2,
+      height: Math.ceil(lines.length * fontSize * 1.25) + 2,
+      lines,
+    };
+  }
   ctx.font = `${fontSize}px ${getFontStack(fontFamily)}`;
-  const lines = maxWidth && maxWidth > 0 ? wrapText(ctx, text, maxWidth) : text.split('\n');
+  const lines = maxWidth && maxWidth > 0 ? wrapText(ctx, text, maxWidth) : (text || '').split('\n');
   let maxW = 0;
   for (const line of lines) {
     const m = ctx.measureText(line || ' ');

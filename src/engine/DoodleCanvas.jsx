@@ -149,6 +149,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     lassoPoints: [],
     isLassoActive: false,
     spaceDown: false,
+    hasAltDuplicated: false,
+    dragStartPositions: null,
   });
 
   // ── Setters ──
@@ -664,18 +666,36 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const selectedIds = as?.selectedElementIds || {};
         const isAlreadySelected = selectedIds[hit.id];
 
+        // If hit belongs to a group, gather all sibling elements in the topmost group
+        const groupMembers = (hit.groupIds?.length)
+          ? elementsRef.current.filter(e => !e.isDeleted && e.groupIds?.includes(hit.groupIds[hit.groupIds.length - 1]))
+          : [hit];
+
+        let nextSelectedIds = { ...selectedIds };
         if (e.shiftKey) {
           // Toggle selection
-          setAppState(prev => ({
-            selectedElementIds: {
-              ...(prev?.selectedElementIds || {}),
-              [hit.id]: !(prev?.selectedElementIds || {})[hit.id] || undefined,
-            }
-          }));
+          const shouldSelect = !isAlreadySelected;
+          for (const m of groupMembers) {
+            if (shouldSelect) nextSelectedIds[m.id] = true;
+            else delete nextSelectedIds[m.id];
+          }
+          setAppState({ selectedElementIds: nextSelectedIds });
         } else if (!isAlreadySelected) {
-          setAppState({ selectedElementIds: { [hit.id]: true } });
+          nextSelectedIds = {};
+          for (const m of groupMembers) nextSelectedIds[m.id] = true;
+          setAppState({ selectedElementIds: nextSelectedIds });
         }
+
         interaction.current.isDragging = true;
+        interaction.current.hasAltDuplicated = false;
+        // Snapshot original states for Alt-drag duplication
+        const startPositions = {};
+        for (const el of elementsRef.current) {
+          if ((nextSelectedIds[el.id] || el.id === hit.id) && !el.isDeleted) {
+            startPositions[el.id] = cloneElement(el);
+          }
+        }
+        interaction.current.dragStartPositions = startPositions;
         return;
       }
 
@@ -863,14 +883,71 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const dy = iy - ia.dragStartY;
       let { x, y, width: w, height: h } = el;
 
-      if (handle.includes('e')) w = Math.max(2, el.width + dx);
-      if (handle.includes('s')) h = Math.max(2, el.height + dy);
-      if (handle.includes('w')) { x = el.x + dx; w = Math.max(2, el.width - dx); }
-      if (handle.includes('n')) { y = el.y + dy; h = Math.max(2, el.height - dy); }
+      if (e.altKey) {
+        // Center-origin (symmetric) resize
+        if (handle.includes('e')) { w = Math.max(2, el.width + dx * 2); x = el.x - dx; }
+        else if (handle.includes('w')) { w = Math.max(2, el.width - dx * 2); x = el.x + dx; }
+
+        if (handle.includes('s')) { h = Math.max(2, el.height + dy * 2); y = el.y - dy; }
+        else if (handle.includes('n')) { h = Math.max(2, el.height - dy * 2); y = el.y + dy; }
+      } else {
+        if (handle.includes('e')) w = Math.max(2, el.width + dx);
+        if (handle.includes('s')) h = Math.max(2, el.height + dy);
+        if (handle.includes('w')) { x = el.x + dx; w = Math.max(2, el.width - dx); }
+        if (handle.includes('n')) { y = el.y + dy; h = Math.max(2, el.height - dy); }
+      }
 
       let updatedPoints = undefined;
+      let updatedFontSize = undefined;
 
-      if (el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length) {
+      if (el.type === ELEMENT_TYPES.TEXT) {
+        const origW = Math.max(1, el.width || 1);
+        const origH = Math.max(1, el.height || 1);
+        const origFontSize = el.fontSize || FONT_SIZE_DEFAULT;
+
+        const factor = e.altKey ? 2 : 1;
+        const effDx = dx * factor;
+        const effDy = dy * factor;
+
+        const scaleX = handle.includes('e') ? (el.width + effDx) / origW : handle.includes('w') ? (el.width - effDx) / origW : 1;
+        const scaleY = handle.includes('s') ? (el.height + effDy) / origH : handle.includes('n') ? (el.height - effDy) / origH : 1;
+
+        let scale = 1;
+        if (handle === 'e' || handle === 'w') {
+          scale = scaleX;
+        } else if (handle === 's' || handle === 'n') {
+          scale = scaleY;
+        } else {
+          scale = Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY;
+        }
+
+        const newFontSize = Math.max(8, Math.min(180, Math.round(origFontSize * Math.max(0.1, scale))));
+        updatedFontSize = newFontSize;
+
+        const metrics = measureText(el.text || ' ', newFontSize, el.fontFamily);
+        const newW = metrics.width;
+        const newH = metrics.height;
+
+        if (e.altKey) {
+          x = (el.x + el.width / 2) - newW / 2;
+          y = (el.y + el.height / 2) - newH / 2;
+        } else {
+          if (handle.includes('w')) {
+            x = el.x + (el.width - newW);
+          } else {
+            x = el.x;
+          }
+
+          if (handle.includes('n')) {
+            y = el.y + (el.height - newH);
+          } else {
+            y = el.y;
+          }
+        }
+
+        w = newW;
+        h = newH;
+      } else if (el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length) {
         const originalBounds = getBoundsFromPoints(el.points);
         if (originalBounds) {
           updatedPoints = el.points.map(([px, py]) => [
@@ -910,6 +987,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             y,
             width: w,
             height: h,
+            ...(updatedFontSize ? { fontSize: updatedFontSize } : {}),
             ...(updatedPoints ? { points: updatedPoints } : {}),
             version: (e2.version || 1) + 1,
             versionNonce: versionNonce(),
@@ -933,12 +1011,58 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (ia.isDragging) {
+      // Alt + Drag duplication: duplicate selected elements on drag
+      if (e.altKey && !ia.hasAltDuplicated) {
+        ia.hasAltDuplicated = true;
+        const currentElements = elementsRef.current;
+        const ids = as?.selectedElementIds || {};
+
+        const clones = [];
+        const newSelectedIds = {};
+        for (const el of currentElements) {
+          if (ids[el.id] && !el.isDeleted) {
+            const startState = ia.dragStartPositions?.[el.id];
+            const baseEl = startState || el;
+            const clone = cloneElement(baseEl);
+            clones.push(clone);
+            newSelectedIds[clone.id] = true;
+          }
+        }
+
+        if (clones.length > 0) {
+          if (ia.dragStartPositions) {
+            setElements(prev => [
+              ...prev.map(el => {
+                const startState = ia.dragStartPositions[el.id];
+                return startState ? { ...startState, version: (startState.version || 1) + 1, versionNonce: versionNonce() } : el;
+              }),
+              ...clones,
+            ]);
+          } else {
+            setElements(prev => [...prev, ...clones]);
+          }
+          setAppState({ selectedElementIds: newSelectedIds });
+          as.selectedElementIds = newSelectedIds;
+        }
+      }
+
       // We need scene delta, not canvas delta
       const z = as.zoom.value;
-      const sdx = (e.clientX - ia.dragLastX) / z;
-      const sdy = (e.clientY - ia.dragLastY) / z;
+      let sdx = (e.clientX - ia.dragLastX) / z;
+      let sdy = (e.clientY - ia.dragLastY) / z;
       ia.dragLastX = e.clientX;
       ia.dragLastY = e.clientY;
+
+      // Shift + Drag: snap to primary axis (horizontal or vertical)
+      if (e.shiftKey) {
+        const totalDx = ix - ia.dragStartX;
+        const totalDy = iy - ia.dragStartY;
+        if (Math.abs(totalDx) >= Math.abs(totalDy)) {
+          sdy = 0;
+        } else {
+          sdx = 0;
+        }
+      }
 
       const ids = as?.selectedElementIds || {};
       const allIdsToMove = new Set(Object.keys(ids).filter(id => ids[id]));
@@ -952,6 +1076,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           }
           if (el.containerId) {
             allIdsToMove.add(el.containerId);
+          }
+          if (el.groupIds?.length) {
+            for (const other of currentElements) {
+              if (other.groupIds?.some(gid => el.groupIds.includes(gid))) {
+                allIdsToMove.add(other.id);
+              }
+            }
           }
         }
       }
@@ -1098,6 +1229,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     if (ia.isDragging) {
       ia.isDragging = false;
+      ia.hasAltDuplicated = false;
+      ia.dragStartPositions = null;
       commitHistory();
       notifyChange();
       return;
@@ -1241,6 +1374,76 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
   }, [getCanvasPoint, setAppState]);
 
+  // ── Action Handlers (usable in shortcuts and components) ──
+  const handleAction = useCallback((action) => {
+    if (action === 'openColorPalette') {
+      onOpenColorPalette?.();
+      return;
+    }
+    const selectedIds = appStateRef.current.selectedElementIds || {};
+    if (action === 'delete') {
+      setElements(prev => {
+        const next = prev.map(el => (selectedIds[el.id] ? { ...el, isDeleted: true } : el));
+        if (next.filter(el => !el.isDeleted).length === 0) {
+          setAppState(as => ({ ...as, showWelcomeScreen: true }));
+        }
+        return next;
+      });
+      setAppState({ selectedElementIds: {} });
+      commitHistory();
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'duplicate') {
+      const toDuplicate = elementsRef.current.filter(el => selectedIds[el.id] && !el.isDeleted);
+      if (toDuplicate.length === 0) return;
+      const newSelected = {};
+      const newEls = toDuplicate.map(el => {
+        const cloned = cloneElement(el, { x: el.x + 20, y: el.y + 20 });
+        newSelected[cloned.id] = true;
+        return cloned;
+      });
+      setElements(prev => [...prev, ...newEls]);
+      setAppState({ selectedElementIds: newSelected });
+      commitHistory();
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'bringToFront') {
+      const selected = [];
+      const unselected = [];
+      elementsRef.current.forEach(el => {
+        if (selectedIds[el.id]) selected.push(el);
+        else unselected.push(el);
+      });
+      setElements([...unselected, ...selected]);
+      commitHistory();
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'sendToBack') {
+      const selected = [];
+      const unselected = [];
+      elementsRef.current.forEach(el => {
+        if (selectedIds[el.id]) selected.push(el);
+        else unselected.push(el);
+      });
+      setElements([...selected, ...unselected]);
+      commitHistory();
+      notifyChange();
+      scheduleRender();
+    }
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
+
+  const handleZoomIn = useCallback(() => {
+    setAppState(prev => ({ zoom: { value: Math.min(30, Number((prev.zoom.value * 1.15).toFixed(2))) } }));
+  }, [setAppState]);
+
+  const handleZoomOut = useCallback(() => {
+    setAppState(prev => ({ zoom: { value: Math.max(0.1, Number((prev.zoom.value / 1.15).toFixed(2))) } }));
+  }, [setAppState]);
+
+  const handleZoomReset = useCallback(() => {
+    setAppState({ zoom: { value: 1 } });
+  }, [setAppState]);
+
   // ── Key events ──
   const onKeyDown = useCallback((e) => {
     if (e.code === 'Space') interaction.current.spaceDown = true;
@@ -1319,6 +1522,105 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         scheduleRender();
       }
       return;
+    }
+
+    // Font size increase/decrease shortcut for selected text elements (Ctrl+Shift+> / Ctrl+Shift+<)
+    if (isCtrl && (e.key === '>' || e.key === '<' || (e.shiftKey && (e.key === '.' || e.key === ',')))) {
+      const selectedIds = appStateRef.current?.selectedElementIds || {};
+      const selectedTextEls = elementsRef.current.filter(el => selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT);
+      if (selectedTextEls.length > 0) {
+        e.preventDefault();
+        const delta = (e.key === '>' || e.key === '.') ? 4 : -4;
+        setElements(prev =>
+          prev.map(el => {
+            if (selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT) {
+              const currentSize = el.fontSize || FONT_SIZE_DEFAULT;
+              const newSize = Math.max(8, Math.min(180, currentSize + delta));
+              const metrics = measureText(el.text || ' ', newSize, el.fontFamily);
+              return {
+                ...el,
+                fontSize: newSize,
+                width: metrics.width,
+                height: metrics.height,
+                version: (el.version || 1) + 1,
+                versionNonce: versionNonce(),
+              };
+            }
+            return el;
+          })
+        );
+        commitHistory();
+        notifyChange();
+        scheduleRender();
+        return;
+      }
+    }
+
+    // Ctrl+] / Ctrl+[: Bring to front / Send to back
+    if (isCtrl && (e.key === ']' || e.key === '[')) {
+      e.preventDefault();
+      handleAction(e.key === ']' ? 'bringToFront' : 'sendToBack');
+      return;
+    }
+
+    // Ctrl++ / Ctrl+= (Zoom in), Ctrl+- (Zoom out), Ctrl+0 (Reset zoom)
+    if (isCtrl && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      handleZoomIn();
+      return;
+    }
+    if (isCtrl && (e.key === '-' || e.key === '_')) {
+      e.preventDefault();
+      handleZoomOut();
+      return;
+    }
+    if (isCtrl && e.key === '0') {
+      e.preventDefault();
+      handleZoomReset();
+      return;
+    }
+
+    // Ctrl+G: Group, Ctrl+Shift+G: Ungroup
+    if (isCtrl && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      const selectedIds = appStateRef.current?.selectedElementIds || {};
+      const activeIds = Object.keys(selectedIds).filter(id => selectedIds[id]);
+      if (activeIds.length > 0) {
+        if (e.shiftKey) {
+          setElements(prev =>
+            prev.map(el => {
+              if (selectedIds[el.id] && el.groupIds?.length) {
+                return {
+                  ...el,
+                  groupIds: el.groupIds.slice(0, -1),
+                  version: (el.version || 1) + 1,
+                  versionNonce: versionNonce(),
+                };
+              }
+              return el;
+            })
+          );
+        } else {
+          const newGroupId = generateId();
+          setElements(prev =>
+            prev.map(el => {
+              if (selectedIds[el.id]) {
+                return {
+                  ...el,
+                  groupIds: [...(el.groupIds || []), newGroupId],
+                  version: (el.version || 1) + 1,
+                  versionNonce: versionNonce(),
+                };
+              }
+              return el;
+            })
+          );
+        }
+        commitHistory();
+        notifyChange();
+        scheduleRender();
+        return;
+      }
     }
 
     // Escape
@@ -1823,6 +2125,20 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       setElements(prev =>
         prev.map(el => {
           if (selectedIds[el.id]) {
+            if (el.type === ELEMENT_TYPES.TEXT && (key === 'fontSize' || key === 'fontFamily' || key === 'text')) {
+              const newFontSize = key === 'fontSize' ? normalizedValue : (el.fontSize || FONT_SIZE_DEFAULT);
+              const newFontFamily = key === 'fontFamily' ? normalizedValue : (el.fontFamily || 5);
+              const newText = key === 'text' ? normalizedValue : (el.text || ' ');
+              const metrics = measureText(newText, newFontSize, newFontFamily);
+              return {
+                ...el,
+                [key]: normalizedValue,
+                width: metrics.width,
+                height: metrics.height,
+                version: (el.version || 1) + 1,
+                versionNonce: versionNonce(),
+              };
+            }
             return {
               ...el,
               [key]: normalizedValue,
@@ -1856,75 +2172,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
-
-  const handleAction = useCallback((action) => {
-    if (action === 'openColorPalette') {
-      onOpenColorPalette?.();
-      return;
-    }
-    const selectedIds = appStateRef.current.selectedElementIds || {};
-    if (action === 'delete') {
-      setElements(prev => {
-        const next = prev.map(el => (selectedIds[el.id] ? { ...el, isDeleted: true } : el));
-        if (next.filter(el => !el.isDeleted).length === 0) {
-          setAppState(as => ({ ...as, showWelcomeScreen: true }));
-        }
-        return next;
-      });
-      setAppState({ selectedElementIds: {} });
-      commitHistory();
-      notifyChange();
-      scheduleRender();
-    } else if (action === 'duplicate') {
-      const toDuplicate = elementsRef.current.filter(el => selectedIds[el.id] && !el.isDeleted);
-      if (toDuplicate.length === 0) return;
-      const newSelected = {};
-      const newEls = toDuplicate.map(el => {
-        const cloned = cloneElement(el, { x: el.x + 20, y: el.y + 20 });
-        newSelected[cloned.id] = true;
-        return cloned;
-      });
-      setElements(prev => [...prev, ...newEls]);
-      setAppState({ selectedElementIds: newSelected });
-      commitHistory();
-      notifyChange();
-      scheduleRender();
-    } else if (action === 'bringToFront') {
-      const selected = [];
-      const unselected = [];
-      elementsRef.current.forEach(el => {
-        if (selectedIds[el.id]) selected.push(el);
-        else unselected.push(el);
-      });
-      setElements([...unselected, ...selected]);
-      commitHistory();
-      notifyChange();
-      scheduleRender();
-    } else if (action === 'sendToBack') {
-      const selected = [];
-      const unselected = [];
-      elementsRef.current.forEach(el => {
-        if (selectedIds[el.id]) selected.push(el);
-        else unselected.push(el);
-      });
-      setElements([...selected, ...unselected]);
-      commitHistory();
-      notifyChange();
-      scheduleRender();
-    }
-  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
-
-  const handleZoomIn = useCallback(() => {
-    setAppState(prev => ({ zoom: { value: Math.min(30, Number((prev.zoom.value * 1.15).toFixed(2))) } }));
-  }, [setAppState]);
-
-  const handleZoomOut = useCallback(() => {
-    setAppState(prev => ({ zoom: { value: Math.max(0.1, Number((prev.zoom.value / 1.15).toFixed(2))) } }));
-  }, [setAppState]);
-
-  const handleZoomReset = useCallback(() => {
-    setAppState({ zoom: { value: 1 } });
-  }, [setAppState]);
 
   // ── Welcome screen ──
   const nonDeletedElements = elements.filter(e => !e.isDeleted);
