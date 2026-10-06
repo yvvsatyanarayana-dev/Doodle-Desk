@@ -1,5 +1,7 @@
 const { autoUpdater } = require('electron-updater');
 const { Notification, dialog } = require('electron');
+const path = require('path');
+const fs = require('fs');
 
 function setupAutoUpdater(getMainWindow) {
   autoUpdater.autoDownload = true;
@@ -18,9 +20,11 @@ function setupAutoUpdater(getMainWindow) {
       win.webContents.send('updater:status', { status: 'available', version: info.version });
     }
     if (Notification.isSupported()) {
+      const iconPath = path.join(__dirname, '../build/icon.png');
       new Notification({
         title: 'Doodle Desk Update Available',
         body: `Version ${info.version} is downloading in the background.`,
+        icon: fs.existsSync(iconPath) ? iconPath : undefined,
       }).show();
     }
   });

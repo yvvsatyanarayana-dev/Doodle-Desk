@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
 
   // Clipboard & External
+  writeClipboardText: (text) => ipcRenderer.invoke('clipboard:write-text', text),
   writeClipboardImage: (dataUrl) => ipcRenderer.invoke('clipboard:write-image', dataUrl),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 

@@ -420,7 +420,17 @@ export function CommandPalette({
       category: 'Export',
       icon: <Copy size={14} />,
       action: () => {
-        onCopyToClipboard('png');
+        onCopyToClipboard?.('png');
+        onClose();
+      },
+    },
+    {
+      id: 'copy_svg',
+      title: 'Copy SVG to Clipboard',
+      category: 'Export',
+      icon: <Copy size={14} />,
+      action: () => {
+        onCopyToClipboard?.('svg');
         onClose();
       },
     },

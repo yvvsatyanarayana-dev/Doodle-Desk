@@ -393,6 +393,8 @@ export default function App() {
     handleSave,
     handleSaveAs,
     handleExport,
+    handleExportPDF,
+    handleCopyToClipboard,
     resolveUnsavedModal,
     loadFileFromDisk,
   } = useFileActions({
@@ -1050,8 +1052,8 @@ export default function App() {
         onSave={handleSave}
         onSaveAs={handleSaveAs}
         onExport={handleExport}
-        onExportPdf={() => window.electronAPI?.exportPDF?.({ landscape: true })}
-        onCopyToClipboard={(fmt) => handleExport(fmt, { clipboardOnly: true })}
+        onExportPdf={handleExportPDF}
+        onCopyToClipboard={handleCopyToClipboard}
         onPrint={handlePrintCanvas}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenTemplates={handleOpenTemplates}
@@ -1224,8 +1226,8 @@ export default function App() {
         onToggleMiniMap={() => setIsMiniMapOpen((prev) => !prev)}
         onSetCanvasStyle={handleSetCanvasStyle}
         onExport={handleExport}
-        onExportPdf={() => window.electronAPI?.exportPDF?.({ landscape: true })}
-        onCopyToClipboard={(fmt) => handleExport(fmt, { clipboardOnly: true })}
+        onExportPdf={handleExportPDF}
+        onCopyToClipboard={handleCopyToClipboard}
         onOpenStickyNotes={() => setIsStickyNotesOpen(true)}
         onToggleRuler={() => setIsRulerActive((prev) => !prev)}
         onOpenColorPalette={() => setIsColorPaletteOpen(true)}

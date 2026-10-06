@@ -24,8 +24,9 @@ if (!gotTheLock) {
 }
 
 // Windows Taskbar & App User Model ID
+app.name = 'Doodle Desk';
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.doodledesk.desktop');
+  app.setAppUserModelId('Doodle Desk');
 }
 
 // Hardware acceleration & GPU performance settings
@@ -384,9 +385,11 @@ ipcMain.handle('fs:export-pdf', async (event, options = {}) => {
     await fs.promises.writeFile(saveResult.filePath, pdfData);
 
     if (Notification.isSupported()) {
+      const iconPath = path.join(__dirname, '../build/icon.png');
       new Notification({
         title: 'Export PDF Complete',
         body: `Saved to ${path.basename(saveResult.filePath)}`,
+        icon: fs.existsSync(iconPath) ? iconPath : undefined,
       }).show();
     }
 
@@ -960,12 +963,29 @@ ipcMain.handle('updater:check', (event) => {
 // Native Notification
 ipcMain.handle('app:notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
-    new Notification({ title: title || 'Doodle Desk', body: body || '' }).show();
+    const iconPath = path.join(__dirname, '../build/icon.png');
+    new Notification({
+      title: title || 'Doodle Desk',
+      body: body || '',
+      icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    }).show();
   }
 });
 
 // App Version
 ipcMain.handle('app:get-version', () => app.getVersion());
+
+// Clipboard write text
+ipcMain.handle('clipboard:write-text', (event, text) => {
+  try {
+    const { clipboard } = require('electron');
+    clipboard.writeText(typeof text === 'string' ? text : String(text || ''));
+    return true;
+  } catch (err) {
+    console.error('Failed to write text to clipboard:', err);
+    return false;
+  }
+});
 
 // Clipboard write image
 ipcMain.handle('clipboard:write-image', (event, dataUrl) => {

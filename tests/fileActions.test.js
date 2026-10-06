@@ -94,4 +94,30 @@ describe('Doodle Document File Handling', () => {
     expect(restored.filePath).toBe('C:/drawings/test.doodle');
     expect(restored.timestamp).toBeGreaterThan(0);
   });
+
+  it('should export valid SVG vector with elements and dimensions', async () => {
+    const { exportToSvg } = await import('../src/engine/io/export.js');
+    const elements = [
+      {
+        id: '1',
+        type: 'rectangle',
+        x: 50,
+        y: 50,
+        width: 100,
+        height: 80,
+        strokeColor: '#000000',
+        backgroundColor: '#ff0000',
+        strokeWidth: 2,
+        opacity: 100,
+        isDeleted: false,
+      },
+    ];
+    const appState = { viewBackgroundColor: '#ffffff' };
+    const svg = await exportToSvg(elements, appState, {}, { exportBackground: true });
+
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(svg).toContain('<rect');
+    expect(svg).toContain('</svg>');
+  });
 });

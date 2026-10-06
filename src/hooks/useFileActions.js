@@ -229,16 +229,144 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
     }
   }, [currentFilePath, activeAPI]);
 
-  // Export to PNG / SVG Image
-  const handleExport = useCallback(async ({ format = 'png', scale = 2, background = true, darkMode = false, embedScene = true } = {}) => {
-    if (!activeAPI || !window.electronAPI) return;
+  // Copy PNG / SVG to Clipboard
+  const handleCopyToClipboard = useCallback(async (optionsOrFormat = 'png') => {
+    if (!activeAPI) return false;
+
+    let format = 'png';
+    let scale = 2;
+    let background = true;
+
+    if (typeof optionsOrFormat === 'string') {
+      format = optionsOrFormat.toLowerCase();
+    } else if (typeof optionsOrFormat === 'object' && optionsOrFormat !== null) {
+      if (optionsOrFormat.format) format = String(optionsOrFormat.format).toLowerCase();
+      if (optionsOrFormat.scale !== undefined) scale = optionsOrFormat.scale;
+      if (optionsOrFormat.background !== undefined) background = optionsOrFormat.background;
+    }
 
     try {
       const elements = activeAPI.getSceneElements();
       const appState = activeAPI.getAppState();
       const files = activeAPI.getFiles();
 
-      if (elements.length === 0) {
+      const active = elements ? elements.filter(el => !el.isDeleted) : [];
+      if (active.length === 0) {
+        alert('Canvas is empty. Nothing to copy.');
+        return false;
+      }
+
+      if (format === 'svg') {
+        const svgXml = await exportToSvg(elements, appState, files, {
+          exportBackground: background,
+          viewBackgroundColor: appState.viewBackgroundColor,
+        });
+
+        let copied = false;
+        if (window.electronAPI?.writeClipboardText) {
+          copied = await window.electronAPI.writeClipboardText(svgXml);
+        }
+        if (!copied && navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(svgXml);
+            copied = true;
+          } catch (clipErr) {
+            console.warn('navigator.clipboard.writeText failed:', clipErr);
+          }
+        }
+
+        if (window.electronAPI?.showNotification) {
+          window.electronAPI.showNotification('Clipboard', 'Copied SVG vector to clipboard');
+        }
+        return true;
+      } else {
+        const blob = await exportToBlob(elements, appState, files, {
+          exportBackground: background,
+          exportScale: scale,
+        });
+        if (!blob) {
+          alert('Export failed: unable to create image.');
+          return false;
+        }
+
+        let copied = false;
+        if (window.electronAPI?.writeClipboardImage) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          copied = await window.electronAPI.writeClipboardImage(dataUrl);
+        }
+
+        if (!copied && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob }),
+            ]);
+            copied = true;
+          } catch (clipErr) {
+            console.warn('navigator.clipboard.write failed:', clipErr);
+          }
+        }
+
+        if (window.electronAPI?.showNotification) {
+          window.electronAPI.showNotification('Clipboard', 'Copied PNG image to clipboard');
+        }
+        return true;
+      }
+    } catch (err) {
+      console.error('Copy to clipboard failed:', err);
+      alert(`Failed to copy to clipboard: ${err.message}`);
+      return false;
+    }
+  }, [activeAPI]);
+
+  // Export to PDF
+  const handleExportPDF = useCallback(async () => {
+    if (window.electronAPI?.exportPDF) {
+      const defaultName = currentFilePath
+        ? currentFilePath.replace(/\.[^/.]+$/, '') + '.pdf'
+        : 'drawing.pdf';
+      return await window.electronAPI.exportPDF({ defaultPath: defaultName, landscape: true });
+    } else {
+      window.print();
+    }
+  }, [currentFilePath]);
+
+  // Export to PNG / SVG / PDF Image or File
+  const handleExport = useCallback(async (optionsOrFormat = 'png') => {
+    if (!activeAPI) return;
+
+    let format = 'png';
+    let scale = 2;
+    let background = true;
+    let embedScene = true;
+
+    if (typeof optionsOrFormat === 'string') {
+      format = optionsOrFormat.toLowerCase();
+    } else if (typeof optionsOrFormat === 'object' && optionsOrFormat !== null) {
+      if (optionsOrFormat.format) format = String(optionsOrFormat.format).toLowerCase();
+      if (optionsOrFormat.scale !== undefined) scale = optionsOrFormat.scale;
+      if (optionsOrFormat.background !== undefined) background = optionsOrFormat.background;
+      if (optionsOrFormat.embedScene !== undefined) embedScene = optionsOrFormat.embedScene;
+      if (optionsOrFormat.clipboardOnly) {
+        return handleCopyToClipboard(optionsOrFormat);
+      }
+    }
+
+    if (format === 'pdf') {
+      return handleExportPDF();
+    }
+
+    try {
+      const elements = activeAPI.getSceneElements();
+      const appState = activeAPI.getAppState();
+      const files = activeAPI.getFiles();
+
+      const active = elements ? elements.filter(el => !el.isDeleted) : [];
+      if (active.length === 0) {
         alert('Canvas is empty. Nothing to export.');
         return;
       }
@@ -246,96 +374,80 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       const defaultExt = format === 'svg' ? 'svg' : (embedScene ? 'doodle.png' : 'png');
       const defaultName = `drawing.${defaultExt}`;
 
-      const savePath = await window.electronAPI.showSaveDialog({
-        defaultPath: defaultName,
-        filters: format === 'svg'
-          ? [{ name: 'SVG Vector Image (*.svg)', extensions: ['svg'] }]
-          : [{ name: 'PNG Image (*.png)', extensions: ['png', 'doodle.png'] }],
-      });
-
-      if (!savePath) return;
-
-      if (format === 'svg') {
-        const svgXml = await exportToSvg(elements, appState, files, {
-          exportBackground: background,
-          viewBackgroundColor: appState.viewBackgroundColor,
+      if (window.electronAPI) {
+        const savePath = await window.electronAPI.showSaveDialog({
+          defaultPath: defaultName,
+          filters: format === 'svg'
+            ? [{ name: 'SVG Vector Image (*.svg)', extensions: ['svg'] }]
+            : [{ name: 'PNG Image (*.png)', extensions: ['png', 'doodle.png'] }],
         });
-        await window.electronAPI.writeFile(savePath, svgXml, false);
-      } else {
-        const blob = await exportToBlob(elements, appState, files, {
-          exportBackground: background,
-          exportScale: scale,
-        });
-        if (!blob) { alert('Export failed: canvas is empty'); return; }
-        // Convert blob to base64
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(',')[1];
+
+        if (!savePath) return;
+
+        if (format === 'svg') {
+          const svgXml = await exportToSvg(elements, appState, files, {
+            exportBackground: background,
+            viewBackgroundColor: appState.viewBackgroundColor,
+          });
+          await window.electronAPI.writeFile(savePath, svgXml, false);
+        } else {
+          const blob = await exportToBlob(elements, appState, files, {
+            exportBackground: background,
+            exportScale: scale,
+          });
+          if (!blob) { alert('Export failed: canvas is empty'); return; }
+
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const res = reader.result;
+              resolve(typeof res === 'string' ? res.split(',')[1] : '');
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
           await window.electronAPI.writeFile(savePath, base64, true);
-        };
-        reader.readAsDataURL(blob);
-      }
+        }
 
-      window.electronAPI.showNotification('Export Complete', `Saved to ${savePath.split(/[\\/]/).pop()}`);
+        window.electronAPI.showNotification('Export Complete', `Saved to ${savePath.split(/[\\/]/).pop()}`);
+      } else {
+        // Web fallback (Browser direct download)
+        if (format === 'svg') {
+          const svgXml = await exportToSvg(elements, appState, files, {
+            exportBackground: background,
+            viewBackgroundColor: appState.viewBackgroundColor,
+          });
+          const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = defaultName;
+          a.click();
+          URL.revokeObjectURL(url);
+        } else {
+          const blob = await exportToBlob(elements, appState, files, {
+            exportBackground: background,
+            exportScale: scale,
+          });
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = defaultName;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }
     } catch (err) {
       console.error('Export failed:', err);
       alert(`Export failed: ${err.message}`);
     }
-  }, [activeAPI]);
-
-  // Copy PNG / SVG to Clipboard
-  const handleCopyToClipboard = useCallback(async ({ format = 'png' } = {}) => {
-    if (!activeAPI || !window.electronAPI) return;
-
-    try {
-      const elements = activeAPI.getSceneElements();
-      const appState = activeAPI.getAppState();
-      const files = activeAPI.getFiles();
-
-      if (elements.length === 0) {
-        alert('Canvas is empty.');
-        return;
-      }
-
-      if (format === 'svg') {
-        const svgXml = await exportToSvg(elements, appState, files, {
-          exportBackground: true,
-          viewBackgroundColor: appState.viewBackgroundColor,
-        });
-        await navigator.clipboard.writeText(svgXml);
-        window.electronAPI.showNotification('Clipboard', 'Copied SVG to clipboard');
-      } else {
-        const blob = await exportToBlob(elements, appState, files, {
-          exportBackground: true,
-          exportScale: 2,
-        });
-        if (!blob) return;
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const dataUrl = reader.result;
-          await window.electronAPI.writeClipboardImage(dataUrl);
-          window.electronAPI.showNotification('Clipboard', 'Copied PNG to clipboard');
-        };
-        reader.readAsDataURL(blob);
-      }
-    } catch (err) {
-      console.error('Copy to clipboard failed:', err);
-    }
-  }, [activeAPI]);
+  }, [activeAPI, handleCopyToClipboard, handleExportPDF]);
 
   // Print
   const handlePrint = useCallback(() => {
     window.print();
   }, []);
-
-  // Export to PDF
-  const handleExportPDF = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const defaultName = currentFilePath
-      ? currentFilePath.replace(/\.[^/.]+$/, '') + '.pdf'
-      : 'drawing.pdf';
-    await window.electronAPI.exportPDF({ defaultPath: defaultName });
-  }, [currentFilePath]);
 
   // Process Unsaved Changes Modal Decisions
   const resolveUnsavedModal = useCallback(async (decision) => {
