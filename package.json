@@ -6,7 +6,7 @@
   "main": "electron/main.js",
   "author": "Satyanarayana",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "dev": "concurrently -k -n \"VITE,ELECTRON\" -c \"cyan,magenta\" \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",

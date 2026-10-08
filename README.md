@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <a href="#doodle-desk">
     <img src="public/logo-transparent.png" width="96" height="96" alt="Doodle Desk Logo" />
   </a>
@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Vite-6.x-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
   <img src="https://img.shields.io/badge/Tests-32%20Passing-success?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
-  <img src="https://img.shields.io/badge/License-Free%20Forever-2ea44f?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
@@ -176,6 +176,8 @@ npm run build:linux
 
 ## 📜 License & Free Lifetime Commitment
 
-Copyright (c) 2026. All rights reserved.
+This project is open-source and released under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Satyanarayana.
 
 **Doodle Desk** is built and maintained as a **100% free lifetime resource for students, teachers, creators, and developers worldwide**. No subscriptions, no paywalls, and no hidden fees — forever.
