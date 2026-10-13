@@ -20,22 +20,14 @@ import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
 import { exportToBlob, exportToSvg } from './io/export.js';
-import { BookOpen, Box, CirclePlay, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop, Smartphone } from 'lucide-react';
+import { BookOpen, Box, CirclePlay, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop } from 'lucide-react';
 import { LayersPanel } from './components/LayersPanel.jsx';
 import { SmartComponentsPanel } from './components/SmartComponentsPanel.jsx';
 import { BoardPortalPanel } from './components/BoardPortalPanel.jsx';
 import { SimulationPanel } from './components/SimulationPanel.jsx';
 import { ChangeTrackingPanel } from './components/ChangeTrackingPanel.jsx';
-import { ResponsiveLayoutPanel } from './components/ResponsiveLayoutPanel.jsx';
 import { findShortcutAction, getShortcutBindings } from './keyboardShortcuts.js';
 import { buildSimulationGraph, getSimulationChoices } from './simulation.js';
-import {
-  applyResponsiveLayout,
-  captureResponsiveLayout,
-  countResponsiveOverrides,
-  initializeResponsiveBase,
-  RESPONSIVE_BREAKPOINTS,
-} from './responsiveLayouts.js';
 import {
   clearChangeSnapshot,
   compareSceneToSnapshot,
@@ -50,6 +42,7 @@ import {
   updateSmartComponentInstances,
   writeSmartComponents,
 } from './components/smartComponents.js';
+import { adaptDefaultStrokeColors } from './themeColors.js';
 
 // ──────────────────────────────────────────────
 //  Tool → cursor mapping
@@ -151,8 +144,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const [isComponentsPanelOpen, setIsComponentsPanelOpen] = useState(false);
   const [smartComponents, setSmartComponents] = useState([]);
   const [isPortalPanelOpen, setIsPortalPanelOpen] = useState(false);
-  const [isResponsivePanelOpen, setIsResponsivePanelOpen] = useState(false);
-  const [responsiveBreakpoint, setResponsiveBreakpoint] = useState(null);
   const [isSimulationActive, setIsSimulationActive] = useState(false);
   const [simulationCurrentId, setSimulationCurrentId] = useState(null);
   const [simulationPath, setSimulationPath] = useState([]);
@@ -180,8 +171,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     setSimulationCurrentId(null);
     setSimulationPath([]);
     setIsPortalPanelOpen(false);
-    setIsResponsivePanelOpen(false);
-    setResponsiveBreakpoint(null);
     setIsChangeTrackingOpen(false);
     try {
       setChangeSnapshot(readChangeSnapshot(workspaceId, fileId));
@@ -2186,20 +2175,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         setIsComponentsPanelOpen(false);
         return;
       }
-      if (isPortalPanelOpen || isChangeTrackingOpen || isSimulationActive ||
-          isResponsivePanelOpen) {
-        if (responsiveBreakpoint) {
-          const savedElements = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
-          commitHistory();
-          setElements(applyResponsiveLayout(savedElements, 'desktop'));
-          notifyChange();
-          scheduleRender();
-        }
+      if (isPortalPanelOpen || isChangeTrackingOpen || isSimulationActive) {
         setIsPortalPanelOpen(false);
         setIsChangeTrackingOpen(false);
         setIsSimulationActive(false);
-        setIsResponsivePanelOpen(false);
-        setResponsiveBreakpoint(null);
         setSimulationCurrentId(null);
         setSimulationPath([]);
         return;
@@ -2245,7 +2224,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       commitHistory();
       notifyChange();
     }
-  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange, scheduleRender, handleAction, handleZoomIn, handleZoomOut, handleZoomReset, isLayersPanelOpen, isComponentsPanelOpen, isPortalPanelOpen, isChangeTrackingOpen, isSimulationActive, isResponsivePanelOpen, responsiveBreakpoint]);
+  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange, scheduleRender, handleAction, handleZoomIn, handleZoomOut, handleZoomReset, isLayersPanelOpen, isComponentsPanelOpen, isPortalPanelOpen, isChangeTrackingOpen, isSimulationActive]);
 
   const onKeyUp = useCallback((e) => {
     if (e.code === 'Space') interaction.current.spaceDown = false;
@@ -2977,8 +2956,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         currentItemStrokeColor: shouldUpdateStroke ? newStroke : currentStroke,
       };
     });
+    const nextElements = adaptDefaultStrokeColors(elementsRef.current, theme);
+    if (nextElements !== elementsRef.current) {
+      commitHistory();
+      setElements(nextElements);
+      notifyChange();
+    }
     scheduleRender();
-  }, [theme, setAppState, scheduleRender]);
+  }, [theme, setAppState, setElements, commitHistory, notifyChange, scheduleRender]);
 
   // Attach global key listeners
   useEffect(() => {
@@ -3128,23 +3113,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const changeRows = changeSnapshot
     ? compareSceneToSnapshot(elements, changeSnapshot)
     : [];
-  const responsiveViewport = responsiveBreakpoint
-    ? (() => {
-      const target = RESPONSIVE_BREAKPOINTS[responsiveBreakpoint];
-      const canvasRect = canvasRef.current?.getBoundingClientRect();
-      const scale = Math.min(
-        1,
-        (canvasRect?.width || target.width) / target.width,
-        (canvasRect?.height || target.height) / target.height
-      );
-      return {
-        ...target,
-        displayWidth: Math.round(target.width * scale),
-        displayHeight: Math.round(target.height * scale),
-      };
-    })()
-    : null;
-
   const createComponentFromSelection = (name) => {
     const component = createSmartComponent(selectedElementsForComponent, name, filesRef.current);
     const nextComponents = writeSmartComponents([...readSmartComponents(), component]);
@@ -3289,7 +3257,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   };
 
   const startSimulation = () => {
-    closeResponsivePreview();
     setIsLayersPanelOpen(false);
     setIsComponentsPanelOpen(false);
     setIsPortalPanelOpen(false);
@@ -3309,42 +3276,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const chooseSimulationBranch = (choice) => {
     setSimulationCurrentId(choice.to);
     setSimulationPath(path => [...path, choice.to]);
-  };
-
-  const selectResponsiveBreakpoint = (breakpoint) => {
-    let source = elementsRef.current;
-    if (responsiveBreakpoint) {
-      source = captureResponsiveLayout(source, responsiveBreakpoint);
-    } else {
-      source = initializeResponsiveBase(source);
-    }
-    const next = applyResponsiveLayout(source, breakpoint);
-    commitHistory();
-    setElements(next);
-    setResponsiveBreakpoint(breakpoint);
-    notifyChange();
-    scheduleRender();
-  };
-
-  const saveCurrentResponsiveLayout = () => {
-    if (!responsiveBreakpoint) return;
-    const next = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
-    commitHistory();
-    setElements(next);
-    notifyChange();
-    scheduleRender();
-  };
-
-  const closeResponsivePreview = () => {
-    if (responsiveBreakpoint) {
-      const source = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
-      commitHistory();
-      setElements(applyResponsiveLayout(source, 'desktop'));
-      notifyChange();
-      scheduleRender();
-    }
-    setResponsiveBreakpoint(null);
-    setIsResponsivePanelOpen(false);
   };
 
   // ── Welcome screen ──
@@ -3369,19 +3300,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />
-
-      {responsiveViewport && (
-        <div
-          className="doodle-responsive-preview-frame"
-          style={{
-            width: responsiveViewport.displayWidth,
-            height: responsiveViewport.displayHeight,
-          }}
-          aria-label={`${responsiveViewport.label} preview, ${responsiveViewport.width} by ${responsiveViewport.height}`}
-        >
-          <span>{responsiveViewport.label} · {responsiveViewport.width} × {responsiveViewport.height}</span>
-        </div>
-      )}
 
       {changeRows.map(change => {
         const bounds = getElementBounds(change.element);
@@ -3519,27 +3437,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       />
 
       <div className="doodle-feature-tools-left" aria-label="Diagram features">
-        <button
-          type="button"
-          className={`doodle-feature-tool-button${isResponsivePanelOpen ? ' is-active' : ''}`}
-          onClick={() => {
-            if (isResponsivePanelOpen) {
-              closeResponsivePreview();
-              return;
-            }
-            setIsLayersPanelOpen(false);
-            setIsComponentsPanelOpen(false);
-            setIsPortalPanelOpen(false);
-            setIsChangeTrackingOpen(false);
-            setIsSimulationActive(false);
-            setIsResponsivePanelOpen(true);
-          }}
-          title="Responsive layouts"
-          aria-label="Toggle responsive layouts"
-          aria-expanded={isResponsivePanelOpen}
-        >
-          <Smartphone size={18} strokeWidth={1.8} />
-        </button>
         <button
           type="button"
           className={`doodle-feature-tool-button${isSimulationActive ? ' is-active' : ''}`}
@@ -3680,17 +3577,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           onInsert={insertComponent}
           onUpdate={updateComponentMaster}
           onDelete={deleteSmartComponent}
-        />
-      )}
-      {isResponsivePanelOpen && (
-        <ResponsiveLayoutPanel
-          activeBreakpoint={responsiveBreakpoint}
-          overrideCounts={Object.fromEntries(
-            ['phone', 'tablet', 'desktop'].map(key => [key, countResponsiveOverrides(elements, key)])
-          )}
-          onSelect={selectResponsiveBreakpoint}
-          onSave={saveCurrentResponsiveLayout}
-          onClose={closeResponsivePreview}
         />
       )}
       {isPortalPanelOpen && (
