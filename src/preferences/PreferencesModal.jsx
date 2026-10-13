@@ -169,29 +169,35 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
           {/* Appearance & Theme */}
           <div className="pref-sidebar-section">
             <h4 className="pref-sidebar-section-title">Appearance & Theme</h4>
-            <div className="pref-sidebar-row">
+            <div className="pref-sidebar-row pref-theme-row">
               <span className="pref-sidebar-label">Color Theme</span>
               <div className="pref-segmented-control">
                 <button
+                  type="button"
                   className={`pref-segment-btn ${settings.theme === 'system' ? 'active' : ''}`}
                   onClick={() => updateSetting('theme', 'system')}
                   title="Follow System Theme"
+                  aria-pressed={settings.theme === 'system'}
                 >
                   <Monitor size={12} />
                   <span>System</span>
                 </button>
                 <button
+                  type="button"
                   className={`pref-segment-btn ${settings.theme === 'light' ? 'active' : ''}`}
                   onClick={() => updateSetting('theme', 'light')}
                   title="Light Theme"
+                  aria-pressed={settings.theme === 'light'}
                 >
                   <Sun size={12} />
                   <span>Light</span>
                 </button>
                 <button
+                  type="button"
                   className={`pref-segment-btn ${settings.theme === 'dark' ? 'active' : ''}`}
                   onClick={() => updateSetting('theme', 'dark')}
                   title="Dark Theme"
+                  aria-pressed={settings.theme === 'dark'}
                 >
                   <Moon size={12} />
                   <span>Dark</span>

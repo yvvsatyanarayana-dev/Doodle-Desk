@@ -107,18 +107,18 @@ export const SmartAutoLayoutModal = memo(function SmartAutoLayoutModal({
   const subTextColor     = isDark ? '#a1a1aa' : '#52525b';
   const cardBg           = isDark ? 'rgba(255,255,255,0.04)' : '#ffffff';
   const cardBorder       = isDark ? 'rgba(255,255,255,0.07)' : '#e4e4e7';
-  const cardActiveBg     = isDark ? 'rgba(255,255,255,0.09)' : '#eef2ff';
-  const cardActiveBorder = isDark ? 'rgba(255,255,255,0.28)' : '#6366f1';
+  const cardActiveBg     = isDark ? 'rgba(255,255,255,0.09)' : '#f4f4f5';
+  const cardActiveBorder = isDark ? 'rgba(255,255,255,0.28)' : '#18181b';
   const iconBg           = isDark ? 'rgba(255,255,255,0.07)' : '#f1f5f9';
-  const iconActiveBg     = isDark ? 'rgba(255,255,255,0.18)' : '#4f46e5';
+  const iconActiveBg     = isDark ? 'rgba(255,255,255,0.18)' : '#18181b';
   const iconColor        = isDark ? '#f4f4f5' : '#52525b';
   const iconActiveColor  = '#ffffff';
-  const checkBg          = isDark ? '#ffffff' : '#4f46e5';
+  const checkBg          = isDark ? '#ffffff' : '#18181b';
   const checkColor       = isDark ? '#09090b' : '#ffffff';
   const settingsBg       = isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc';
   const settingsBorder   = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0';
   const footerBg         = isDark ? '#141417' : '#ffffff';
-  const applyBtnBg       = isDark ? '#ffffff' : '#4f46e5';
+  const applyBtnBg       = isDark ? '#ffffff' : '#18181b';
   const applyBtnColor    = isDark ? '#09090b' : '#ffffff';
   const cancelColor      = isDark ? '#a1a1aa' : '#52525b';
   const cancelBorder     = isDark ? 'rgba(255,255,255,0.14)' : '#d4d4d8';
@@ -246,6 +246,7 @@ export const SmartAutoLayoutModal = memo(function SmartAutoLayoutModal({
 
       {/* ── BODY — scrollable ── */}
       <div
+        className="auto-layout-sidebar-content"
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -271,7 +272,7 @@ export const SmartAutoLayoutModal = memo(function SmartAutoLayoutModal({
                   border: isSelected
                     ? `1px solid ${cardActiveBorder}`
                     : `1px solid ${cardBorder}`,
-                  boxShadow: isSelected && !isDark ? '0 0 0 2px rgba(99, 102, 241, 0.10)' : 'none',
+                  boxShadow: isSelected && !isDark ? '0 0 0 2px rgba(24, 24, 27, 0.08)' : 'none',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -472,7 +473,7 @@ export const SmartAutoLayoutModal = memo(function SmartAutoLayoutModal({
             gap: '6px',
             boxShadow: isDark
               ? '0 2px 10px rgba(255, 255, 255, 0.15)'
-              : '0 4px 12px rgba(79, 70, 229, 0.24)',
+              : '0 4px 12px rgba(24, 24, 27, 0.16)',
             transition: 'all 0.15s ease',
             fontFamily,
           }}

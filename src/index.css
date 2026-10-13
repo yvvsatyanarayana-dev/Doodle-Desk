@@ -184,6 +184,7 @@ textarea.font-mono {
 .settings-sidebar-panel {
   background: #141417;
   color: #f4f4f5;
+  color-scheme: dark;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.6);
 }
@@ -192,6 +193,7 @@ textarea.font-mono {
 .theme--light .settings-sidebar-panel {
   background: #ffffff !important;
   color: #18181b !important;
+  color-scheme: light;
   border-left: 1px solid #e4e4e7 !important;
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08) !important;
 }
@@ -297,25 +299,85 @@ textarea.font-mono {
 .settings-sidebar-content {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   box-sizing: border-box;
+  scrollbar-color: rgba(161, 161, 170, 0.48) transparent;
+  scrollbar-width: thin;
 }
 
-.settings-sidebar-content::-webkit-scrollbar {
-  width: 5px;
+.settings-sidebar-content::-webkit-scrollbar,
+.pref-shortcuts-list::-webkit-scrollbar,
+.auto-layout-sidebar-content::-webkit-scrollbar {
+  width: 8px;
 }
 
-.settings-sidebar-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+.settings-sidebar-content::-webkit-scrollbar-track,
+.pref-shortcuts-list::-webkit-scrollbar-track,
+.auto-layout-sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-sidebar-content::-webkit-scrollbar-thumb,
+.pref-shortcuts-list::-webkit-scrollbar-thumb,
+.auto-layout-sidebar-content::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 99px;
+  background: rgba(161, 161, 170, 0.48);
+  background-clip: padding-box;
+}
+
+.settings-sidebar-content::-webkit-scrollbar-thumb:hover,
+.pref-shortcuts-list::-webkit-scrollbar-thumb:hover,
+.auto-layout-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.72);
+  background-clip: padding-box;
+}
+
+.settings-sidebar-content::-webkit-scrollbar-button,
+.pref-shortcuts-list::-webkit-scrollbar-button,
+.auto-layout-sidebar-content::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+[data-theme='light'] .settings-sidebar-content,
+[data-theme='light'] .pref-shortcuts-list,
+[data-theme='light'] .auto-layout-sidebar-content,
+.theme--light .settings-sidebar-content,
+.theme--light .pref-shortcuts-list,
+.theme--light .auto-layout-sidebar-content {
+  scrollbar-color: rgba(71, 85, 105, 0.38) transparent;
 }
 
 [data-theme='light'] .settings-sidebar-content::-webkit-scrollbar-thumb,
-.theme--light .settings-sidebar-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15) !important;
+[data-theme='light'] .pref-shortcuts-list::-webkit-scrollbar-thumb,
+[data-theme='light'] .auto-layout-sidebar-content::-webkit-scrollbar-thumb,
+.theme--light .settings-sidebar-content::-webkit-scrollbar-thumb,
+.theme--light .pref-shortcuts-list::-webkit-scrollbar-thumb,
+.theme--light .auto-layout-sidebar-content::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.38);
+  background-clip: padding-box;
+}
+
+[data-theme='light'] .settings-sidebar-content::-webkit-scrollbar-thumb:hover,
+[data-theme='light'] .pref-shortcuts-list::-webkit-scrollbar-thumb:hover,
+[data-theme='light'] .auto-layout-sidebar-content::-webkit-scrollbar-thumb:hover,
+.theme--light .settings-sidebar-content::-webkit-scrollbar-thumb:hover,
+.theme--light .pref-shortcuts-list::-webkit-scrollbar-thumb:hover,
+.theme--light .auto-layout-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.62);
+  background-clip: padding-box;
+}
+
+.settings-sidebar-content::-webkit-scrollbar-corner,
+.pref-shortcuts-list::-webkit-scrollbar-corner,
+.auto-layout-sidebar-content::-webkit-scrollbar-corner {
+  border-radius: 99px;
 }
 
 .pref-sidebar-section {
@@ -364,6 +426,13 @@ textarea.font-mono {
   white-space: nowrap;
 }
 
+.pref-theme-row .pref-segment-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 6px;
+  gap: 4px;
+}
+
 [data-theme='light'] .pref-sidebar-label,
 .theme--light .pref-sidebar-label {
   color: #334155 !important;
@@ -373,37 +442,46 @@ textarea.font-mono {
 .pref-segmented-control {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 2px;
-  gap: 2px;
+  min-width: 0;
+  background: #111113;
+  border: 1px solid #303036;
+  border-radius: 9px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.pref-theme-row .pref-segmented-control {
+  flex: 1 1 180px;
 }
 
 [data-theme='light'] .pref-segmented-control,
 .theme--light .pref-segmented-control {
-  background: #e2e8f0 !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
 }
 
 .pref-segment-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
   font-size: 11.5px;
   font-weight: 500;
   border-radius: 6px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: #a1a1aa;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   user-select: none;
+  white-space: nowrap;
 }
 
 .pref-segment-btn:hover {
   color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme='light'] .pref-segment-btn {
@@ -412,26 +490,42 @@ textarea.font-mono {
 
 [data-theme='light'] .pref-segment-btn:hover {
   color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
 }
 
 .pref-segment-btn.active {
-  background: #27272a;
+  background: #27272c;
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  border-color: #41414a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
 }
 
 [data-theme='light'] .pref-segment-btn.active {
   background: #ffffff !important;
   color: #0f172a !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  border-color: #dbe2ea !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1) !important;
+}
+
+.pref-segment-btn:focus-visible,
+.pref-select:focus-visible,
+.pref-shortcuts-reset:focus-visible,
+.pref-shortcut-key:focus-visible,
+.pref-shortcut-clear:focus-visible {
+  outline: 2px solid #18181b;
+  outline-offset: 2px;
 }
 
 /* Select Dropdown */
 .pref-select {
-  padding: 5px 10px;
+  flex: 0 1 180px;
+  width: min(180px, 58%);
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 30px 6px 10px;
   font-size: 12px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #1e1e24;
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #f4f4f5;
@@ -444,7 +538,12 @@ textarea.font-mono {
 
 .pref-select:hover,
 .pref-select:focus {
-  border-color: rgba(105, 101, 219, 0.5);
+  border-color: #52525b;
+}
+
+.pref-select option {
+  background: #1e1e24;
+  color: #f4f4f5;
 }
 
 [data-theme='light'] .pref-select,
@@ -454,9 +553,15 @@ textarea.font-mono {
   color: #1e293b !important;
 }
 
+[data-theme='light'] .pref-select option,
+.theme--light .pref-select option {
+  background: #ffffff;
+  color: #1e293b;
+}
+
 [data-theme='light'] .pref-select:hover,
 [data-theme='light'] .pref-select:focus {
-  border-color: #555555 !important;
+  border-color: #18181b !important;
 }
 
 /* Modern iOS Style Toggle Switch */
@@ -2027,6 +2132,10 @@ textarea.font-mono {
   gap: 5px;
   max-height: 360px;
   overflow: auto;
+  padding-right: 3px;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(161, 161, 170, 0.48) transparent;
+  scrollbar-width: thin;
 }
 
 .pref-shortcut-row {
@@ -2034,6 +2143,7 @@ textarea.font-mono {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex: 0 0 auto;
   min-height: 34px;
   font-size: 11px;
 }
@@ -2045,19 +2155,21 @@ textarea.font-mono {
 }
 
 .pref-shortcut-key {
-  min-width: 92px;
-  min-height: 26px;
-  padding: 0 7px;
+  min-width: 104px;
+  min-height: 32px;
+  padding: 0 9px;
   border-color: rgba(148, 163, 184, 0.28);
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(148, 163, 184, 0.08);
-  font-size: 10px;
+  font-size: 11px;
   font-family: inherit;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
 .pref-shortcut-key.is-recording {
-  border-color: #818cf8;
-  background: rgba(99, 102, 241, 0.15);
+  border-color: #a1a1aa;
+  background: rgba(161, 161, 170, 0.14);
+  color: #e4e4e7;
 }
 
 .pref-shortcut-clear {
@@ -2087,6 +2199,33 @@ textarea.font-mono {
 .theme--light .pref-shortcut-key {
   border-color: #d4d4d8;
   background: #fafafa;
+}
+
+.theme--light .pref-shortcut-key.is-recording {
+  border-color: #18181b;
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+@media (max-width: 380px) {
+  .pref-sidebar-row {
+    flex-wrap: wrap;
+  }
+
+  .pref-sidebar-row > .pref-select {
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .pref-segmented-control {
+    width: 100%;
+  }
+
+  .pref-segment-btn {
+    flex: 1 1 0;
+    padding-inline: 6px;
+  }
 }
 
 .doodle-canvas-root .layer-ui__wrapper__top-right>* {
