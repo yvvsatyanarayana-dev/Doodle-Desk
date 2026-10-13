@@ -57,7 +57,7 @@ export default function WorkspaceModal({
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('palette');
-  const [selectedColor, setSelectedColor] = useState('#3b82f6');
+  const [selectedColor, setSelectedColor] = useState('#888888');
   const [confirmDeleteWs, setConfirmDeleteWs] = useState(null);
 
   // Inline edit state
@@ -248,7 +248,7 @@ export default function WorkspaceModal({
                 borderRadius: '12px',
                 backgroundColor: isLightTheme ? 'rgba(99, 102, 241, 0.12)' : 'rgba(59, 130, 246, 0.15)',
                 border: '1px solid ' + (isLightTheme ? 'rgba(99, 102, 241, 0.25)' : 'rgba(59, 130, 246, 0.3)'),
-                color: isLightTheme ? '#4f46e5' : '#60a5fa',
+                color: isLightTheme ? '#111111' : '#d4d4d8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -331,7 +331,7 @@ export default function WorkspaceModal({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#3b82f6',
+              backgroundColor: '#111111',
               color: '#fff',
               border: 'none',
               borderRadius: '10px',
@@ -393,7 +393,7 @@ export default function WorkspaceModal({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: isLightTheme ? '#4f46e5' : '#93c5fd' }}>Create New Board</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: isLightTheme ? '#111111' : '#d4d4d8' }}>Create New Board</span>
                 <button
                   onClick={() => setIsCreating(false)}
                   style={{ background: 'none', border: 'none', color: T.textMuted, cursor: 'pointer', padding: 0 }}
@@ -428,7 +428,7 @@ export default function WorkspaceModal({
                 <button
                   onClick={handleConfirmCreate}
                   style={{
-                    backgroundColor: isLightTheme ? '#6366f1' : '#3b82f6',
+                    backgroundColor: isLightTheme ? '#111111' : '#27272a',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
@@ -465,8 +465,8 @@ export default function WorkspaceModal({
                           height: '34px',
                           borderRadius: '8px',
                           backgroundColor: isSelected ? (isLightTheme ? 'rgba(99, 102, 241, 0.15)' : 'rgba(59, 130, 246, 0.25)') : (isLightTheme ? '#f1f5f9' : 'rgba(255, 255, 255, 0.04)'),
-                          border: isSelected ? ('1.5px solid ' + (isLightTheme ? '#6366f1' : '#3b82f6')) : ('1px solid ' + T.border),
-                          color: isSelected ? (isLightTheme ? '#6366f1' : '#60a5fa') : T.textMuted,
+                          border: isSelected ? ('1.5px solid ' + (isLightTheme ? '#333333' : 'rgba(255,255,255,0.4)')) : ('1px solid ' + T.border),
+                          color: isSelected ? (isLightTheme ? '#111111' : '#ffffff') : T.textMuted,
                           cursor: 'pointer',
                           transition: 'all 0.1s',
                         }}
@@ -557,7 +557,7 @@ export default function WorkspaceModal({
                         title="Click to change workspace icon"
                         style={{ cursor: 'pointer' }}
                       >
-                        <WorkspaceIconBadge icon={ws.icon} color={ws.color || (isLightTheme ? '#6366f1' : '#3b82f6')} size={18} />
+                        <WorkspaceIconBadge icon={ws.icon} color={ws.color || (isLightTheme ? '#555555' : '#888888')} size={18} />
                       </div>
 
                       {/* Name display or inline edit */}
@@ -579,7 +579,7 @@ export default function WorkspaceModal({
                               onBlur={() => handleSaveEdit(ws.id)}
                               style={{
                                 backgroundColor: T.inputBg,
-                                border: '1.5px solid ' + (isLightTheme ? '#6366f1' : '#3b82f6'),
+                                border: '1.5px solid ' + (isLightTheme ? '#333333' : 'rgba(255,255,255,0.4)'),
                                 borderRadius: '6px',
                                 padding: '4px 8px',
                                 fontSize: '13px',
@@ -628,7 +628,7 @@ export default function WorkspaceModal({
                                   padding: '2px 7px',
                                   borderRadius: '999px',
                                   backgroundColor: isLightTheme ? 'rgba(99, 102, 241, 0.12)' : 'rgba(59, 130, 246, 0.25)',
-                                  color: isLightTheme ? '#4f46e5' : '#60a5fa',
+                                  color: isLightTheme ? '#111111' : '#d4d4d8',
                                   border: '1px solid ' + (isLightTheme ? 'rgba(99, 102, 241, 0.25)' : 'rgba(59, 130, 246, 0.4)'),
                                   letterSpacing: '0.04em',
                                 }}
@@ -745,7 +745,7 @@ export default function WorkspaceModal({
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '11px', color: isLightTheme ? '#4f46e5' : '#93c5fd', fontWeight: 600 }}>Change Theme Icon & Color</span>
+                        <span style={{ fontSize: '11px', color: isLightTheme ? '#111111' : '#d4d4d8', fontWeight: 600 }}>Change Theme Icon & Color</span>
                         <button
                           onClick={() => setEditingIconWorkspaceId(null)}
                           style={{ background: 'none', border: 'none', color: T.textMuted, cursor: 'pointer', padding: 0 }}
@@ -773,8 +773,8 @@ export default function WorkspaceModal({
                                 height: '30px',
                                 borderRadius: '6px',
                                 backgroundColor: isSelected ? (isLightTheme ? 'rgba(99, 102, 241, 0.15)' : 'rgba(59, 130, 246, 0.25)') : (isLightTheme ? '#ffffff' : 'rgba(255, 255, 255, 0.05)'),
-                                border: isSelected ? ('1.5px solid ' + (isLightTheme ? '#6366f1' : '#3b82f6')) : ('1px solid ' + T.border),
-                                color: isSelected ? (isLightTheme ? '#6366f1' : '#60a5fa') : T.textMuted,
+                                border: isSelected ? ('1.5px solid ' + (isLightTheme ? '#333333' : 'rgba(255,255,255,0.4)')) : ('1px solid ' + T.border),
+                                color: isSelected ? (isLightTheme ? '#111111' : '#ffffff') : T.textMuted,
                                 cursor: 'pointer',
                               }}
                             >
@@ -788,7 +788,7 @@ export default function WorkspaceModal({
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '11px', color: T.textMuted }}>Color:</span>
                         {WORKSPACE_COLORS.map((col) => {
-                          const isSelected = (ws.color || (isLightTheme ? '#6366f1' : '#3b82f6')) === col.id;
+                          const isSelected = (ws.color || (isLightTheme ? '#555555' : '#888888')) === col.id;
                           return (
                             <button
                               key={col.id}

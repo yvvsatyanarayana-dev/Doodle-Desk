@@ -67,8 +67,107 @@ const CURATED_PALETTES = [
   },
 ];
 
-function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
+function hexToHsl(hex) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const num = parseInt(c, 16) || 0;
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) * 60; break;
+      case g: h = ((b - r) / d + 2) * 60; break;
+      case b: h = ((r - g) / d + 4) * 60; break;
+    }
+  }
+  return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
+}
+
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(100, s)) / 100;
+  l = Math.max(0, Math.min(100, l)) / 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = x => Math.round(x * 255).toString(16).padStart(2, '0');
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+
+function generateHarmonies(baseHex) {
+  const [h, s, l] = hexToHsl(baseHex);
+  return [
+    {
+      id: 'harmony-comp',
+      name: 'Complementary Harmony',
+      description: 'Opposite hues across color wheel for maximum contrast',
+      stroke: hslToHex(h + 180, s, Math.min(75, l + 10)),
+      bg: hslToHex(h, Math.max(20, s - 20), 18),
+      canvasBg: '#0f172a',
+      colors: [
+        baseHex,
+        hslToHex(h + 180, s, l),
+        hslToHex(h + 180, Math.max(30, s - 20), 80),
+        hslToHex(h, Math.max(20, s - 30), 20),
+      ],
+    },
+    {
+      id: 'harmony-analog',
+      name: 'Analogous Harmony',
+      description: 'Serene adjacent colors that blend seamlessly together',
+      stroke: hslToHex(h + 30, s, l),
+      bg: hslToHex(h - 30, Math.max(20, s - 30), 20),
+      canvasBg: '#111827',
+      colors: [
+        hslToHex(h - 30, s, l),
+        baseHex,
+        hslToHex(h + 30, s, l),
+        hslToHex(h + 60, s, Math.min(80, l + 15)),
+      ],
+    },
+    {
+      id: 'harmony-triad',
+      name: 'Triadic Harmony',
+      description: 'Balanced 120-degree dynamic triad offering vibrant contrast',
+      stroke: hslToHex(h + 120, s, l),
+      bg: hslToHex(h + 240, Math.max(20, s - 30), 22),
+      canvasBg: '#0d1117',
+      colors: [
+        baseHex,
+        hslToHex(h + 120, s, l),
+        hslToHex(h + 240, s, l),
+        hslToHex(h, 30, 85),
+      ],
+    },
+    {
+      id: 'harmony-mono',
+      name: 'Monochromatic Tonal Range',
+      description: 'Variations in tint, shade, and luminance of the seed tone',
+      stroke: hslToHex(h, Math.min(100, s + 10), 85),
+      bg: hslToHex(h, s, 22),
+      canvasBg: hslToHex(h, Math.max(10, s - 40), 8),
+      colors: [
+        hslToHex(h, s, 25),
+        hslToHex(h, s, 45),
+        baseHex,
+        hslToHex(h, Math.max(20, s - 20), 75),
+        hslToHex(h, Math.max(10, s - 40), 92),
+      ],
+    },
+  ];
+}
+
+function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAPI, theme }) {
   doodleAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
+  const [activeTab, setActiveTab] = useState('curated'); // 'curated' | 'harmony'
+  const [seedColor, setSeedColor] = useState('#ff6b6b');
   const [selectedPalette, setSelectedPalette] = useState(CURATED_PALETTES[0]);
   const [customStroke, setCustomStroke] = useState('#eab308');
   const [customBg, setCustomBg] = useState('#1c1917');
@@ -185,7 +284,7 @@ function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAP
     onClose();
   };
 
-  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
+  const isLight = theme === 'light' || (!theme && typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light');
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -256,12 +355,72 @@ function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAP
 
         {/* Modal Body */}
         <div className="color-palette-modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+          {/* Tab Selection */}
+          <div style={{ display: 'flex', gap: '8px', borderBottom: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '12px' }}>
+            <button
+              onClick={() => setActiveTab('curated')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: 'none',
+                background: activeTab === 'curated' ? (isLight ? '#111111' : '#ffffff') : 'transparent',
+                color: activeTab === 'curated' ? '#ffffff' : (isLight ? '#64748b' : '#9ca3af'),
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Curated Designer Palettes
+            </button>
+            <button
+              onClick={() => setActiveTab('harmony')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: 'none',
+                background: activeTab === 'harmony' ? (isLight ? '#111111' : '#ffffff') : 'transparent',
+                color: activeTab === 'harmony' ? '#ffffff' : (isLight ? '#64748b' : '#9ca3af'),
+                transition: 'all 0.15s ease',
+              }}
+            >
+              ✨ Smart Color Harmony Generator
+            </button>
+          </div>
+
+          {activeTab === 'harmony' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px', borderRadius: '10px', background: isLight ? '#f1f5f9' : 'rgba(255, 255, 255, 0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isLight ? '#0f172a' : '#f3f4f6' }}>
+                  Pick Seed Color:
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="color"
+                    value={seedColor}
+                    onChange={(e) => setSeedColor(e.target.value)}
+                    style={{ width: '32px', height: '28px', border: 'none', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                  />
+                  <input
+                    type="text"
+                    value={seedColor}
+                    onChange={(e) => setSeedColor(e.target.value)}
+                    style={{ width: '80px', padding: '4px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid #94a3b8', background: isLight ? '#fff' : '#1e293b', color: isLight ? '#000' : '#fff' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600 }}>
-            Choose Color Harmony
+            {activeTab === 'curated' ? 'Curated Color Schemes' : 'Generated Mathematical Harmonies'}
           </label>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
-            {CURATED_PALETTES.map((pal) => {
+            {(activeTab === 'curated' ? CURATED_PALETTES : generateHarmonies(seedColor)).map((pal) => {
               const isSelected = selectedPalette.id === pal.id;
               return (
                 <div
@@ -274,7 +433,7 @@ function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAP
                       ? (isLight ? '#eff6ff' : 'rgba(255, 255, 255, 0.08)')
                       : (isLight ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)'),
                     border: isSelected
-                      ? (isLight ? '1.5px solid #4f46e5' : '1.5px solid #ffffff')
+                      ? (isLight ? '1.5px solid #111111' : '1.5px solid #ffffff')
                       : (isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)'),
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
@@ -282,10 +441,10 @@ function ColorPaletteStudioModalComponent({ isOpen, onClose, doodleAPI, canvasAP
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: isSelected ? (isLight ? '#4f46e5' : '#ffffff') : (isLight ? '#1e293b' : '#d1d5db') }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: isSelected ? (isLight ? '#111111' : '#ffffff') : (isLight ? '#1e293b' : '#d1d5db') }}>
                       {pal.name}
                     </span>
-                    {isSelected && <Check size={14} style={{ color: isLight ? '#4f46e5' : '#ffffff' }} />}
+                    {isSelected && <Check size={14} style={{ color: isLight ? '#111111' : '#ffffff' }} />}
                   </div>
 
                   {/* Swatches strip */}

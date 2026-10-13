@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Sliders } from 'lucide-react';
+import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Keyboard } from 'lucide-react';
 import { ThemedConfirmDialog } from '../components/ThemedConfirmDialog';
+import {
+  formatShortcutEvent,
+  findShortcutConflict,
+  getShortcutBindings,
+  resetShortcutBindings,
+  saveShortcutBindings,
+  SHORTCUT_DEFINITIONS,
+} from '../engine/keyboardShortcuts';
 
 export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange }) {
   const [settings, setSettings] = useState({
@@ -18,10 +26,16 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
   });
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [shortcutBindings, setShortcutBindings] = useState(() => getShortcutBindings());
+  const [recordingShortcut, setRecordingShortcut] = useState(null);
+  const [shortcutError, setShortcutError] = useState('');
 
   // Sync settings when opened
   useEffect(() => {
     if (isOpen) {
+      setShortcutBindings(getShortcutBindings());
+      setRecordingShortcut(null);
+      setShortcutError('');
       if (currentTheme) {
         setSettings(prev => ({ ...prev, theme: currentTheme }));
       }
@@ -39,12 +53,16 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        if (recordingShortcut) {
+          setRecordingShortcut(null);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, recordingShortcut]);
 
   if (!isOpen) return null;
 
@@ -55,6 +73,46 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
     }
     if (key === 'theme' && onThemeChange) {
       onThemeChange(val);
+    }
+  };
+
+  const recordShortcut = (event, actionId) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
+    const shortcut = formatShortcutEvent(event);
+    if (!shortcut) return;
+    const conflictingAction = findShortcutConflict(shortcut, actionId, shortcutBindings);
+    if (conflictingAction) {
+      setShortcutError(`${shortcut} is reserved for or already assigned to ${conflictingAction}.`);
+      return;
+    }
+    try {
+      const updated = saveShortcutBindings({ ...shortcutBindings, [actionId]: shortcut });
+      setShortcutBindings(updated);
+      setShortcutError('');
+      setRecordingShortcut(null);
+    } catch {
+      setShortcutError('Could not save this shortcut. Check browser storage permissions.');
+    }
+  };
+
+  const clearShortcut = (actionId) => {
+    try {
+      const updated = saveShortcutBindings({ ...shortcutBindings, [actionId]: '' });
+      setShortcutBindings(updated);
+      setShortcutError('');
+    } catch {
+      setShortcutError('Could not save this shortcut. Check browser storage permissions.');
+    }
+  };
+
+  const restoreDefaultShortcuts = () => {
+    try {
+      setShortcutBindings(resetShortcutBindings());
+      setShortcutError('');
+    } catch {
+      setShortcutError('Could not reset shortcuts. Check browser storage permissions.');
     }
   };
 
@@ -142,7 +200,50 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
             </div>
           </div>
 
-          {/* Backup & Recovery */}
+          <div className="pref-sidebar-section">
+            <div className="pref-shortcuts-heading">
+              <Keyboard size={14} />
+              <h4 className="pref-sidebar-section-title">Keyboard Shortcuts</h4>
+              <button type="button" className="pref-shortcuts-reset" onClick={restoreDefaultShortcuts}>
+                <RotateCcw size={12} /> Reset
+              </button>
+            </div>
+            <p className="pref-shortcuts-hint">Click a shortcut and press the new key combination. Use Ctrl on Windows/Linux or Command on macOS.</p>
+            <div className="pref-shortcuts-list">
+              {SHORTCUT_DEFINITIONS.map(({ id, label }) => (
+                <div className="pref-shortcut-row" key={id}>
+                  <span>{label}</span>
+                  <div className="pref-shortcut-controls">
+                    <button
+                      type="button"
+                      className={`pref-shortcut-key${recordingShortcut === id ? ' is-recording' : ''}`}
+                      onClick={() => {
+                        setShortcutError('');
+                        setRecordingShortcut(id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (recordingShortcut === id) recordShortcut(event, id);
+                      }}
+                      onBlur={() => {
+                        if (recordingShortcut === id) setRecordingShortcut(null);
+                      }}
+                      aria-label={`Change shortcut for ${label}`}
+                    >
+                      {recordingShortcut === id ? 'Press keys…' : shortcutBindings[id] || 'Unassigned'}
+                    </button>
+                    <button
+                      type="button"
+                      className="pref-shortcut-clear"
+                      onClick={() => clearShortcut(id)}
+                      aria-label={`Clear shortcut for ${label}`}
+                    >×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {shortcutError && <p className="pref-shortcuts-error" role="alert">{shortcutError}</p>}
+          </div>
+
           <div className="pref-sidebar-section">
             <h4 className="pref-sidebar-section-title">Backup & Recovery</h4>
             <div className="pref-sidebar-row">

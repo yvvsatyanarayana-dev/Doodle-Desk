@@ -148,8 +148,8 @@ export default function LiveCollabModal({
         btnBg: '#f1f5f9',
         btnBorder: 'rgba(0, 0, 0, 0.1)',
         btnText: '#1e293b',
-        primaryBtnBg: '#6366f1',
-        primaryBtnHover: '#4f46e5',
+        primaryBtnBg: '#111111',
+        primaryBtnHover: '#333333',
         shadow: '0 25px 60px -15px rgba(0, 0, 0, 0.18), 0 0 35px rgba(99, 102, 241, 0.08)',
       }
     : {
@@ -452,7 +452,7 @@ export default function LiveCollabModal({
                       borderRadius: '10px',
                       backgroundColor: isLightTheme ? '#f1f5f9' : 'rgba(255, 255, 255, 0.06)',
                       border: '1px solid ' + (isLightTheme ? 'rgba(0,0,0,0.08)' : 'rgba(255, 255, 255, 0.1)'),
-                      color: isLightTheme ? '#4f46e5' : '#d4d4d8',
+                      color: isLightTheme ? '#111111' : '#d4d4d8',
                       marginBottom: '8px',
                     }}
                   >
@@ -469,9 +469,9 @@ export default function LiveCollabModal({
                   style={{
                     width: '100%',
                     padding: '12px 16px',
-                    backgroundColor: isLightTheme ? '#6366f1' : 'rgba(255, 255, 255, 0.1)',
+                    backgroundColor: isLightTheme ? '#111111' : 'rgba(255, 255, 255, 0.1)',
                     color: '#ffffff',
-                    border: '1px solid ' + (isLightTheme ? '#4f46e5' : 'rgba(255, 255, 255, 0.18)'),
+                    border: '1px solid ' + (isLightTheme ? '#333333' : 'rgba(255, 255, 255, 0.18)'),
                     borderRadius: '10px',
                     fontSize: '13px',
                     fontWeight: 600,
@@ -542,7 +542,7 @@ export default function LiveCollabModal({
                     disabled={!inputRoomId.trim()}
                     style={{
                       padding: '10px 16px',
-                      backgroundColor: inputRoomId.trim() ? (isLightTheme ? '#6366f1' : '#27272a') : (isLightTheme ? '#e2e8f0' : 'rgba(255, 255, 255, 0.04)'),
+                      backgroundColor: inputRoomId.trim() ? (isLightTheme ? '#111111' : '#27272a') : (isLightTheme ? '#e2e8f0' : 'rgba(255, 255, 255, 0.04)'),
                       color: inputRoomId.trim() ? '#fff' : (isLightTheme ? '#94a3b8' : '#71717a'),
                       border: '1px solid ' + (isLightTheme ? 'transparent' : 'rgba(255, 255, 255, 0.1)'),
                       borderRadius: '10px',
@@ -873,7 +873,7 @@ export default function LiveCollabModal({
                       type="submit"
                       disabled={!chatInput.trim()}
                       style={{
-                        backgroundColor: isLightTheme ? '#6366f1' : '#3b82f6',
+                        backgroundColor: isLightTheme ? '#111111' : '#27272a',
                         border: 'none',
                         borderRadius: '6px',
                         padding: '0 10px',

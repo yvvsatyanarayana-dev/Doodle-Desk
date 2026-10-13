@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useFileActions } from './hooks/useFileActions';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -26,6 +27,10 @@ const WorkspaceModal = lazy(() => import('./components/WorkspaceModal'));
 const LiveCollabModal = lazy(() => import('./components/LiveCollabModal'));
 const HelpModal = lazy(() => import('./components/HelpModal').then((module) => ({ default: module.HelpModal })));
 const MermaidToDoodleModal = lazy(() => import('./components/MermaidToDoodleModal').then((module) => ({ default: module.MermaidToDoodleModal })));
+const SmartDiagramGeneratorModal = lazy(() => import('./components/SmartDiagramGeneratorModal').then((module) => ({ default: module.SmartDiagramGeneratorModal || module.default })));
+const CanvasTimeMachine = lazy(() => import('./components/CanvasTimeMachine').then((module) => ({ default: module.CanvasTimeMachine })));
+const SmartAutoLayoutModal = lazy(() => import('./components/SmartAutoLayoutModal').then((module) => ({ default: module.SmartAutoLayoutModal })));
+const FocusModeOverlay = lazy(() => import('./components/FocusModeOverlay').then((module) => ({ default: module.FocusModeOverlay })));
 import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
@@ -57,6 +62,8 @@ export default function App() {
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
   const [isLiveChatOpen, setIsLiveChatOpen] = useState(false);
   const [isMermaidModalOpen, setIsMermaidModalOpen] = useState(false);
+  const [isSmartDiagramOpen, setIsSmartDiagramOpen] = useState(false);
+  const [libraryInitialTab, setLibraryInitialTab] = useState('templates');
   const [canvasStyle, setCanvasStyle] = useState('standard');
   const [globalDialog, setGlobalDialog] = useState(null);
 
@@ -81,6 +88,9 @@ export default function App() {
   const [isStickyNotesOpen, setIsStickyNotesOpen] = useState(false);
   const [isRulerActive, setIsRulerActive] = useState(false);
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
+  const [isTimeMachineOpen, setIsTimeMachineOpen] = useState(false);
+  const [isAutoLayoutOpen, setIsAutoLayoutOpen] = useState(false);
+  const [isFocusModeActive, setIsFocusModeActive] = useState(false);
 
   // Creative drawing tools
   const [isDrawToShapeActive, setIsDrawToShapeActive] = useState(false);
@@ -116,6 +126,7 @@ export default function App() {
     renameFile,
     duplicateFile,
     deleteFile,
+    updateComponentInstancesOnBoards,
   } = useWorkspaces({ doodleAPI });
 
   // Live Collaboration & Real-time WebRTC Mesh
@@ -195,6 +206,16 @@ export default function App() {
       document.removeEventListener('pointerdown', handleLaserToggleClick);
     };
   }, [doodleAPI]);
+
+  // Sync body classes so CSS can hide canvas footer controls (zoom, undo/redo) and manage bottom dock
+  useEffect(() => {
+    document.body.classList.toggle('presentation-active', Boolean(isPresentationActive));
+    document.body.classList.toggle('timemachine-active', Boolean(isTimeMachineOpen));
+    document.body.classList.toggle('presentation-and-timemachine', Boolean(isPresentationActive && isTimeMachineOpen));
+    return () => {
+      document.body.classList.remove('presentation-active', 'timemachine-active', 'presentation-and-timemachine');
+    };
+  }, [isPresentationActive, isTimeMachineOpen]);
 
   // Pointer broadcast callback
   const handlePointerUpdate = useCallback(
@@ -485,8 +506,16 @@ export default function App() {
 
   // Open Library Sidebar on the Smart Templates tab
   const handleOpenTemplates = useCallback(() => {
+    setLibraryInitialTab('templates');
     setIsLibraryOpen(true);
     window.__doodleOpenLibraryTemplates?.();
+  }, []);
+
+  // Open Library Sidebar on the Tech & Architecture Icons tab
+  const handleOpenIconLibrary = useCallback(() => {
+    setLibraryInitialTab('icons');
+    setIsLibraryOpen(true);
+    window.__doodleOpenLibraryIcons?.();
   }, []);
 
   // Set authentic Doodle Desk hand-drawn font by default
@@ -737,6 +766,30 @@ export default function App() {
         return;
       }
 
+      // Shift+A (AI Smart Auto-Layout)
+      if (e.shiftKey && e.key.toLowerCase() === 'a' && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsAutoLayoutOpen((prev) => !prev);
+        return;
+      }
+
+      // Shift+T (Canvas Time Machine)
+      if (e.shiftKey && e.key.toLowerCase() === 't' && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsTimeMachineOpen((prev) => !prev);
+        return;
+      }
+
+      // Shift+F (Spotlight Focus Mode)
+      if (e.shiftKey && e.key.toLowerCase() === 'f' && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFocusModeActive((prev) => !prev);
+        return;
+      }
+
       // N (Sticky Notes & Quick Cards)
       if (e.key.toLowerCase() === 'n' && !isCtrlOrCmd && !e.shiftKey && !e.altKey && !isInputFocused) {
         e.preventDefault();
@@ -825,6 +878,22 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         handleExport('png');
+        return;
+      }
+
+      // Ctrl+Shift+A (AI Smart Diagram Generator)
+      if (key === 'a' && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSmartDiagramOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl+Shift+I (Tech & Architecture Icon Library)
+      if (key === 'i' && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleOpenIconLibrary();
         return;
       }
     };
@@ -1056,6 +1125,10 @@ export default function App() {
         onCopyToClipboard={handleCopyToClipboard}
         onPrint={handlePrintCanvas}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenSmartDiagram={() => setIsSmartDiagramOpen(true)}
+        onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
+        onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
+        isFocusModeActive={isFocusModeActive}
         onOpenTemplates={handleOpenTemplates}
         onTogglePresentation={() => setIsPresentationActive((prev) => !prev)}
         onToggleMiniMap={() => setIsMiniMapOpen((prev) => !prev)}
@@ -1129,6 +1202,20 @@ export default function App() {
           onOpenTemplates={handleOpenTemplates}
           onOpenHelp={() => setIsHelpModalOpen(true)}
           onOpenColorPalette={() => setIsColorPaletteOpen(true)}
+          onUpdateComponentInstances={updateComponentInstancesOnBoards}
+          workspaces={workspaces}
+          workspaceId={activeWorkspaceId}
+          fileId={activeFileId}
+          onNavigateBoardPortal={(targetWorkspaceId, targetFileId) => {
+            const targetWorkspace = workspaces.find(workspace => workspace.id === targetWorkspaceId);
+            const targetFileExists = targetWorkspace?.files?.some(file => file.id === targetFileId);
+            if (!targetFileExists) {
+              window.alert('This board portal points to a board that no longer exists.');
+              return;
+            }
+            saveActiveWorkspaceSnapshot(true);
+            switchFile(targetFileId, targetWorkspaceId);
+          }}
           canvasStyle={canvasStyle}
           initialData={{
             appState: {
@@ -1156,6 +1243,17 @@ export default function App() {
         </DoodleCanvas>
       </div>
 
+      <button
+        type="button"
+        className="auto-layout-sidebar-trigger"
+        onClick={() => setIsAutoLayoutOpen(true)}
+        title="AI Smart Auto-Layout (Shift+A)"
+        aria-label="Open AI Smart Auto-Layout"
+        aria-expanded={isAutoLayoutOpen}
+      >
+        <Sparkles size={18} strokeWidth={1.8} />
+      </button>
+
       <CanvasExtraToolsDropdown
         doodleAPI={doodleAPI}
         isDrawToShapeActive={isDrawToShapeActive}
@@ -1174,6 +1272,10 @@ export default function App() {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenTemplates={handleOpenTemplates}
         onOpenMermaid={() => setIsMermaidModalOpen(true)}
+        onOpenSmartDiagram={() => setIsSmartDiagramOpen(true)}
+        onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
+        onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
+        isFocusModeActive={isFocusModeActive}
       />
 
       {isLaserActive && (
@@ -1231,7 +1333,11 @@ export default function App() {
         onOpenStickyNotes={() => setIsStickyNotesOpen(true)}
         onToggleRuler={() => setIsRulerActive((prev) => !prev)}
         onOpenColorPalette={() => setIsColorPaletteOpen(true)}
+        onOpenIconLibrary={handleOpenIconLibrary}
         onOpenMermaid={() => setIsMermaidModalOpen(true)}
+        onOpenAutoLayout={() => setIsAutoLayoutOpen(true)}
+        onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
+        onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         onOpenWorkspaces={() => {
           saveActiveWorkspaceSnapshot(true);
           setIsWorkspaceModalOpen(true);
@@ -1268,6 +1374,7 @@ export default function App() {
         onClose={() => setIsLibraryOpen(false)}
         doodleAPI={doodleAPI}
         theme={effectiveTheme}
+        initialTab={libraryInitialTab}
       />
 
       {/* Smart Template Library */}
@@ -1277,12 +1384,40 @@ export default function App() {
         doodleAPI={doodleAPI}
       /></Suspense>}
 
-      {/* Interactive Presentation Mode */}
-      {isPresentationActive && <Suspense fallback={null}><PresentationMode
-        isActive={isPresentationActive}
-        onClose={() => setIsPresentationActive(false)}
-        doodleAPI={doodleAPI}
-      /></Suspense>}
+      {/* Interactive Presentation Mode & Canvas Time Machine Single-Row Bottom Dock */}
+      {(isPresentationActive || isTimeMachineOpen) && (
+        <div
+          className="bottom-decks-dock"
+          role="region"
+          aria-label="Canvas presentation and timeline controls"
+        >
+          {isPresentationActive && (
+            <Suspense fallback={null}>
+              <PresentationMode
+                isActive={isPresentationActive}
+                onClose={() => setIsPresentationActive(false)}
+                doodleAPI={doodleAPI}
+                canvasAPI={canvasAPI}
+                standalone={false}
+              />
+            </Suspense>
+          )}
+
+          {isTimeMachineOpen && (
+            <Suspense fallback={null}>
+              <CanvasTimeMachine
+                isOpen={isTimeMachineOpen}
+                onClose={() => setIsTimeMachineOpen(false)}
+                doodleAPI={doodleAPI}
+                canvasAPI={canvasAPI}
+                theme={effectiveTheme}
+                isPresentationActive={isPresentationActive}
+                standalone={false}
+              />
+            </Suspense>
+          )}
+        </div>
+      )}
 
       {/* Preferences Modal */}
       {isPreferencesOpen && <Suspense fallback={null}><PreferencesModal
@@ -1337,6 +1472,7 @@ export default function App() {
         isOpen={isColorPaletteOpen}
         onClose={() => setIsColorPaletteOpen(false)}
         doodleAPI={doodleAPI}
+        theme={effectiveTheme}
       /></Suspense>}
 
       {/* Workspace Management System Modal */}
@@ -1393,6 +1529,18 @@ export default function App() {
         </Suspense>
       )}
 
+      {/* AI Text-to-Diagram Assistant Modal */}
+      {isSmartDiagramOpen && (
+        <Suspense fallback={null}>
+          <SmartDiagramGeneratorModal
+            isOpen={isSmartDiagramOpen}
+            onClose={() => setIsSmartDiagramOpen(false)}
+            doodleAPI={doodleAPI}
+            canvasAPI={canvasAPI}
+          />
+        </Suspense>
+      )}
+
       {/* Mermaid to Doodle Modal */}
       {isMermaidModalOpen && (
         <Suspense fallback={null}>
@@ -1400,6 +1548,33 @@ export default function App() {
             isOpen={isMermaidModalOpen}
             onClose={() => setIsMermaidModalOpen(false)}
             doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {/* AI Smart Auto-Layout Modal */}
+      {isAutoLayoutOpen && (
+        <Suspense fallback={null}>
+          <SmartAutoLayoutModal
+            isOpen={isAutoLayoutOpen}
+            onClose={() => setIsAutoLayoutOpen(false)}
+            doodleAPI={doodleAPI}
+            canvasAPI={canvasAPI}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+
+      {/* Canvas Spotlight Focus Mode Overlay */}
+      {isFocusModeActive && (
+        <Suspense fallback={null}>
+          <FocusModeOverlay
+            isActive={isFocusModeActive}
+            onClose={() => setIsFocusModeActive(false)}
+            doodleAPI={doodleAPI}
+            canvasAPI={canvasAPI}
             theme={effectiveTheme}
           />
         </Suspense>

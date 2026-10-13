@@ -1,5 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  GitBranch,
+  CornerDownRight,
+  ArrowRight,
+  LayoutGrid,
+  Menu,
   Copy,
   Trash2,
   BringToFront,
@@ -38,6 +43,8 @@ export function PropertiesPanel({
   onAction,
   onOpenColorPalette,
 }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   // If no elements are selected and active tool is not a shape/text tool, don't show
   const activeTool = appState.activeTool?.type || 'selection';
   const isCreationMode = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'frame', 'embeddable'].includes(activeTool);
@@ -47,9 +54,10 @@ export function PropertiesPanel({
     return null;
   }
 
-  // Determine current active values (either from primary selected element or current appState defaults)
   const primaryEl = selectedElements[0] || {};
   const isText = hasSelection ? selectedElements.some((e) => e.type === 'text') : activeTool === 'text';
+  const isFreedraw = hasSelection ? selectedElements.every((e) => e.type === 'freedraw') : activeTool === 'freedraw';
+  const isLinearOrFreedraw = isFreedraw || (hasSelection ? selectedElements.every((e) => e.type === 'line' || e.type === 'arrow') : (activeTool === 'line' || activeTool === 'arrow'));
 
   const strokeColor = primaryEl.strokeColor ?? appState.currentItemStrokeColor ?? '#1e1e1e';
   const bgColor = primaryEl.backgroundColor ?? appState.currentItemBackgroundColor ?? 'transparent';
@@ -71,7 +79,17 @@ export function PropertiesPanel({
 
   return (
     <div className="App-menu__left-wrapper">
-      <div className="Island App-menu__left">
+      <button
+        type="button"
+        className={`doodle-properties-sidebar-toggle${isSidebarOpen ? ' is-open' : ''}`}
+        onClick={() => setIsSidebarOpen(open => !open)}
+        aria-label={`${isSidebarOpen ? 'Hide' : 'Show'} properties sidebar`}
+        aria-expanded={isSidebarOpen}
+        title={`${isSidebarOpen ? 'Hide' : 'Show'} properties sidebar`}
+      >
+        <Menu size={17} strokeWidth={1.8} />
+      </button>
+      {isSidebarOpen && <div className="Island App-menu__left">
         <div className="panelColumn">
           {/* Stroke Color */}
           <div>
@@ -119,7 +137,7 @@ export function PropertiesPanel({
           </div>
 
           {/* Background Fill Color (for shapes) */}
-          {!isText && (
+          {!isText && !isLinearOrFreedraw && (
             <div>
               <div className="control-label">Background</div>
               <div className="color-picker" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
@@ -169,7 +187,7 @@ export function PropertiesPanel({
           )}
 
           {/* Fill Style (for shapes) - SVG Icons */}
-          {!isText && (
+          {!isText && !isLinearOrFreedraw && (
             <div>
               <div className="control-label">Fill</div>
               <div className="buttonList">
@@ -300,7 +318,7 @@ export function PropertiesPanel({
           )}
 
           {/* Sloppiness / Roughness - SVG Curve Icons */}
-          {!isText && (
+          {!isText && !isFreedraw && (
             <div>
               <div className="control-label">Sloppiness</div>
               <div className="buttonList">
@@ -343,7 +361,7 @@ export function PropertiesPanel({
           )}
 
           {/* Edges / Roundness - SVG Corner Icons */}
-          {!isText && (
+          {!isText && !isLinearOrFreedraw && (
             <div>
               <div className="control-label">Edges</div>
               <div className="buttonList">
@@ -475,13 +493,53 @@ export function PropertiesPanel({
               onChange={(e) => onUpdateProperty('opacity', Number(e.target.value))}
               style={{
                 width: '100%',
-                accentColor: '#6965db',
+                accentColor: '#555555',
                 cursor: 'pointer',
                 height: '4px',
               }}
               aria-label="Shape opacity"
             />
           </div>
+
+          {/* Mind Map Controls */}
+          {hasSelection && (
+            <div>
+              <div className="control-label">Mind map</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                <button
+                  type="button"
+                  className="property-action-button"
+                  onClick={() => onAction('branchChildRight')}
+                  title="Branch right (Tab)"
+                  aria-label="Branch right"
+                >
+                  <ArrowRight size={13} />
+                  <span>Right</span>
+                </button>
+                <button
+                  type="button"
+                  className="property-action-button"
+                  onClick={() => onAction('branchChildDown')}
+                  title="Branch down (Shift+Tab)"
+                  aria-label="Branch down"
+                >
+                  <CornerDownRight size={13} />
+                  <span>Down</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                className="property-action-button"
+                onClick={() => onAction('autoArrangeTree')}
+                title="Auto-arrange connected nodes into a clean hierarchy"
+                aria-label="Auto arrange tree"
+                style={{ width: '100%' }}
+              >
+                <LayoutGrid size={13} />
+                <span>Auto arrange</span>
+              </button>
+            </div>
+          )}
 
           {/* Actions for Selected Elements */}
           {hasSelection && (
@@ -532,7 +590,7 @@ export function PropertiesPanel({
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

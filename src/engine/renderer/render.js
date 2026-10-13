@@ -64,7 +64,7 @@ function applyFill(ctx, el, polygon) {
 
 // Draw a single element to the canvas context
 export function renderElement(ctx, el, imageCache = {}) {
-  if (el.isDeleted) return;
+  if (el.isDeleted || el.isHidden) return;
   if ((el.opacity ?? 100) === 0) return;
 
   ctx.save();
@@ -301,67 +301,94 @@ export function renderElement(ctx, el, imageCache = {}) {
       break;
     }
 
+// Catmull-Rom spline with Chaikin corner-smoothing for fluid, organic handwriting
+function renderSmoothFreedraw(ctx, x, y, pts, baseWidth) {
+  if (pts.length === 1) {
+    ctx.beginPath();
+    ctx.arc(x + pts[0][0], y + pts[0][1], Math.max(1, baseWidth / 2), 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  if (pts.length === 2) {
+    ctx.beginPath();
+    ctx.moveTo(x + pts[0][0], y + pts[0][1]);
+    ctx.lineTo(x + pts[1][0], y + pts[1][1]);
+    ctx.stroke();
+    return;
+  }
+
+  // Pre-filter micro-jitter duplicates
+  const filtered = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = pts[i];
+    const dx = curr[0] - prev[0];
+    const dy = curr[1] - prev[1];
+    if (dx * dx + dy * dy >= 1.0 || i === pts.length - 1) {
+      filtered.push(curr);
+    }
+  }
+
+  // Apply Chaikin corner-cutting to round out mouse stair-steps
+  let renderPts = filtered;
+  if (filtered.length >= 4) {
+    const chaikin = [filtered[0]];
+    for (let i = 0; i < filtered.length - 1; i++) {
+      const p0 = filtered[i];
+      const p1 = filtered[i + 1];
+      chaikin.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
+      chaikin.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
+    }
+    chaikin.push(filtered[filtered.length - 1]);
+    renderPts = chaikin;
+  }
+
+  const n = renderPts.length;
+  ctx.beginPath();
+  ctx.moveTo(x + renderPts[0][0], y + renderPts[0][1]);
+
+  // Catmull-Rom to cubic Bezier curve fitting
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = renderPts[i === 0 ? 0 : i - 1];
+    const p1 = renderPts[i];
+    const p2 = renderPts[i + 1];
+    const p3 = renderPts[i + 2 >= n ? n - 1 : i + 2];
+
+    const cp1x = x + p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = y + p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = x + p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = y + p2[1] - (p3[1] - p1[1]) / 6;
+
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x + p2[0], y + p2[1]);
+  }
+
+  ctx.stroke();
+}
+
     case ELEMENT_TYPES.FREEDRAW: {
-      if (!el.points || el.points.length < 2) break;
+      if (!el.points || el.points.length === 0) break;
       const pts = el.points;
-      const pressures = el.pressures || [];
-      const baseWidth = STROKE_WIDTHS[el.strokeWidth] ?? 2;
+      const baseWidth = STROKE_WIDTHS[el.strokeWidth] ?? (typeof el.strokeWidth === 'number' ? el.strokeWidth : 2);
 
-      // Build smooth polyline using midpoints
-      const smoothPts = [];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const ax = x + pts[i][0], ay = y + pts[i][1];
-        const bx = x + pts[i + 1][0], by = y + pts[i + 1][1];
-        smoothPts.push([ax, ay, (ax + bx) / 2, (ay + by) / 2]);
-      }
-      const lastPt = pts[pts.length - 1];
-      smoothPts.push([x + lastPt[0], y + lastPt[1], x + lastPt[0], y + lastPt[1]]);
+      ctx.save();
+      ctx.strokeStyle = el.strokeColor || '#1e1e1e';
+      ctx.fillStyle = el.strokeColor || '#1e1e1e';
+      ctx.lineWidth = baseWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = (el.opacity ?? 100) / 100;
 
-      if (el.simulatePressure !== false && pressures.length >= 2) {
-        // Variable-width stroke using pressure data
-        ctx.save();
-        ctx.fillStyle = el.strokeColor || '#1e1e1e';
-        ctx.globalAlpha = (el.opacity ?? 100) / 100;
-
-        for (let i = 0; i < smoothPts.length - 1; i++) {
-          const [ax, ay, mx, my] = smoothPts[i];
-          const [bx, by] = smoothPts[i + 1];
-
-          // Simulate tapering: pressure peaks at 30% and tapers at ends
-          const t = i / Math.max(1, smoothPts.length - 1);
-          const taper = Math.sin(Math.PI * Math.min(t * 3, 1)) * 0.5 + 0.5;
-          const p = pressures[i] ?? 0.5;
-          const w = Math.max(0.5, baseWidth * (p * 0.8 + 0.2) * taper);
-
-          // Direction vector for perpendicular offsets
-          const dx = bx - ax, dy = by - ay;
-          const len = Math.sqrt(dx * dx + dy * dy) || 1;
-          const nx = (-dy / len) * w, ny = (dx / len) * w;
-
-          ctx.beginPath();
-          ctx.moveTo(ax + nx, ay + ny);
-          ctx.quadraticCurveTo(mx + nx, my + ny, bx + nx, by + ny);
-          ctx.quadraticCurveTo(mx - nx, my - ny, ax - nx, ay - ny);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.restore();
+      if (el.strokeStyle === 'dashed') {
+        ctx.setLineDash([baseWidth * 4, baseWidth * 3]);
+      } else if (el.strokeStyle === 'dotted') {
+        ctx.setLineDash([baseWidth, baseWidth * 2]);
       } else {
-        // Simple smooth stroke without pressure variation
-        ctx.beginPath();
-        ctx.moveTo(x + pts[0][0], y + pts[0][1]);
-        for (let i = 1; i < pts.length; i++) {
-          const prevX = x + pts[i - 1][0];
-          const prevY = y + pts[i - 1][1];
-          const currX = x + pts[i][0];
-          const currY = y + pts[i][1];
-          const mx = (prevX + currX) / 2;
-          const my = (prevY + currY) / 2;
-          ctx.quadraticCurveTo(prevX, prevY, mx, my);
-        }
-        ctx.lineTo(x + lastPt[0], y + lastPt[1]);
-        ctx.stroke();
+        ctx.setLineDash([]);
       }
+
+      renderSmoothFreedraw(ctx, x, y, pts, baseWidth);
+      ctx.restore();
       break;
     }
 
@@ -423,6 +450,40 @@ export function renderElement(ctx, el, imageCache = {}) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(el.link || 'Web Frame', x + w / 2, y + h / 2);
+      break;
+    }
+
+    case ELEMENT_TYPES.BOARD_PORTAL: {
+      const radius = Math.min(12, Math.abs(w) / 8, Math.abs(h) / 8);
+      ctx.save();
+      ctx.fillStyle = el.backgroundColor && el.backgroundColor !== 'transparent'
+        ? el.backgroundColor
+        : (el.portalTheme === 'dark' ? '#18181b' : '#ffffff');
+      ctx.strokeStyle = el.strokeColor || '#6366f1';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, radius);
+      else ctx.rect(x, y, w, h);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = el.portalTheme === 'dark' ? '#a5b4fc' : '#4f46e5';
+      ctx.font = '600 11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('BOARD PORTAL', x + 14, y + 13);
+      ctx.fillStyle = el.portalTheme === 'dark' ? '#f4f4f5' : '#18181b';
+      ctx.font = '600 16px sans-serif';
+      ctx.fillText(el.portalFileName || 'Untitled board', x + 14, y + 34, Math.max(0, w - 28));
+      ctx.fillStyle = el.portalTheme === 'dark' ? '#a1a1aa' : '#71717a';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(el.portalWorkspaceName || 'Workspace', x + 14, y + 58, Math.max(0, w - 28));
+      ctx.fillStyle = el.portalTheme === 'dark' ? '#27272a' : '#f4f4f5';
+      ctx.fillRect(x + 14, y + 82, Math.max(0, w - 28), Math.max(0, h - 96));
+      ctx.fillStyle = el.portalTheme === 'dark' ? '#52525b' : '#d4d4d8';
+      ctx.fillRect(x + 24, y + 92, Math.max(0, w * 0.36), 5);
+      ctx.fillRect(x + 24, y + 103, Math.max(0, w * 0.62), 5);
+      ctx.fillRect(x + 24, y + 114, Math.max(0, w * 0.48), 5);
+      ctx.restore();
       break;
     }
 
@@ -627,7 +688,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
       if (el.points?.length >= 2) {
         const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
         const handleBg = isLight ? '#ffffff' : '#232329';
-        const primaryColor = '#6965db';
+        const primaryColor = 'rgba(80,80,80,0.7)';
         const strokeW = 1.8 / zoom;
         const pts = el.points;
         const startX = el.x + pts[0][0];
@@ -686,7 +747,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
     }
 
     // Selection box for shapes, text, frames, freedraw
-    ctx.strokeStyle = '#6965db';
+    ctx.strokeStyle = 'rgba(80,80,80,0.7)';
     ctx.lineWidth = 1.5 / zoom;
     ctx.setLineDash([]);
     ctx.strokeRect(rx, ry, rw, rh);
@@ -696,7 +757,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
     const corners = [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]];
 
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#6965db';
+    ctx.strokeStyle = 'rgba(80,80,80,0.7)';
     ctx.lineWidth = 1.5 / zoom;
     for (const [hx, hy] of corners) {
       ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
@@ -707,7 +768,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
     if (el.type !== ELEMENT_TYPES.FRAME) {
       const rotHandleX = rx + rw / 2;
       const rotHandleY = ry - 20 / zoom;
-      ctx.strokeStyle = '#6965db';
+      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
       ctx.lineWidth = 1 / zoom;
       ctx.setLineDash([]);
       ctx.beginPath();
@@ -716,7 +777,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
       ctx.stroke();
 
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#6965db';
+      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
       ctx.beginPath();
       ctx.arc(rotHandleX, rotHandleY, 5 / zoom, 0, Math.PI * 2);
       ctx.fill();
@@ -732,7 +793,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
       const pillHeight = 22;
       const pillX = localBounds.x;
       const pillY = localBounds.y - pillHeight - 4;
-      ctx.strokeStyle = '#6965db';
+      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
       ctx.lineWidth = 1.5 / zoom;
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 5);

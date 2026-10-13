@@ -9,7 +9,7 @@ import {
   Tv,
 } from 'lucide-react';
 
-export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI }) {
+export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI, standalone = true }) {
   doodleAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isLaserActive, setIsLaserActive] = useState(false);
@@ -41,18 +41,18 @@ export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI }) {
     return [];
   }, [doodleAPI, isActive]);
 
-  // Navigate to slide
+  // Navigate to slide with cinematic smooth easing
   const goToSlide = useCallback((index) => {
     if (!doodleAPI || slides.length === 0) return;
     const clampedIndex = Math.max(0, Math.min(index, slides.length - 1));
     setCurrentSlideIndex(clampedIndex);
 
     const slide = slides[clampedIndex];
-    if (slide) {
+    if (slide && doodleAPI?.scrollToContent) {
       if (slide.isSynthetic) {
-        doodleAPI.scrollToContent(undefined, { fitToContent: true, animate: true });
+        doodleAPI.scrollToContent(undefined, { fitToContent: true, animate: true, duration: 420 });
       } else {
-        doodleAPI.scrollToContent([slide], { fitToContent: true, animate: true });
+        doodleAPI.scrollToContent([slide], { fitToContent: true, animate: true, duration: 420 });
       }
     }
   }, [doodleAPI, slides]);
@@ -78,6 +78,14 @@ export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI }) {
       goToSlide(0);
     }
   }, [isActive, goToSlide]);
+
+  // Toggle Laser Pointer
+  const toggleLaser = useCallback(() => {
+    if (!doodleAPI) return;
+    const nextLaser = !isLaserActive;
+    setIsLaserActive(nextLaser);
+    doodleAPI.setActiveTool({ type: nextLaser ? 'laser' : 'selection' });
+  }, [doodleAPI, isLaserActive]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -109,15 +117,7 @@ export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI }) {
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [isActive, nextSlide, prevSlide, onClose]);
-
-  // Toggle Laser Pointer
-  const toggleLaser = () => {
-    if (!doodleAPI) return;
-    const nextLaser = !isLaserActive;
-    setIsLaserActive(nextLaser);
-    doodleAPI.setActiveTool({ type: nextLaser ? 'laser' : 'selection' });
-  };
+  }, [isActive, nextSlide, prevSlide, onClose, toggleLaser]);
 
   // Toggle Browser Fullscreen
   const toggleFullscreen = () => {
@@ -135,66 +135,84 @@ export function PresentationMode({ isActive, onClose, doodleAPI, canvasAPI }) {
   const currentSlide = slides[currentSlideIndex];
   const slideTitle = currentSlide?.name || `Slide ${currentSlideIndex + 1}`;
 
+  const deck = (
+    <div className="presentation-deck">
+      <div className="presentation-badge">
+        <Tv size={14} />
+        <span>Present: <strong>{slideTitle}</strong></span>
+      </div>
+
+      <div className="presentation-deck-divider" />
+
+      <button
+        className="presentation-btn"
+        onClick={prevSlide}
+        disabled={currentSlideIndex === 0}
+        title="Previous Slide (← / Backspace)"
+        aria-label="Previous slide"
+      >
+        <ChevronLeft size={17} />
+      </button>
+
+      <div className="presentation-counter">
+        <span>{currentSlideIndex + 1} / {Math.max(slides.length, 1)}</span>
+      </div>
+
+      <button
+        className="presentation-btn"
+        onClick={nextSlide}
+        disabled={currentSlideIndex >= slides.length - 1}
+        title="Next Slide (→ / Space)"
+        aria-label="Next slide"
+      >
+        <ChevronRight size={17} />
+      </button>
+
+      <div className="presentation-deck-divider" />
+
+      {/* Laser Pointer Tool */}
+      <button
+        className={`presentation-btn ${isLaserActive ? 'active' : ''}`}
+        onClick={toggleLaser}
+        title="Laser Pointer (K)"
+        aria-label="Laser pointer"
+      >
+        <Sparkles size={15} />
+      </button>
+
+      {/* Fullscreen Toggle */}
+      <button
+        className="presentation-btn"
+        onClick={toggleFullscreen}
+        title="Toggle Fullscreen"
+        aria-label="Toggle fullscreen"
+      >
+        {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+      </button>
+
+      <div className="presentation-deck-divider" />
+
+      {/* Exit */}
+      <button
+        className="presentation-exit-btn"
+        onClick={onClose}
+        title="Exit Presentation (Esc)"
+        aria-label="Exit presentation"
+      >
+        <X size={14} />
+        <span>Exit</span>
+        <kbd>Esc</kbd>
+      </button>
+    </div>
+  );
+
+  if (!standalone) {
+    return deck;
+  }
+
   return (
     <div className="presentation-overlay">
-      {/* Top Banner Indicator */}
-      <div className="presentation-top-bar">
-        <div className="presentation-badge">
-          <Tv size={14} />
-          <span>Presenting: <strong>{slideTitle}</strong></span>
-        </div>
-        <button className="presentation-exit-btn" onClick={onClose} title="Exit Presentation (Esc)">
-          <X size={15} />
-          <span>Exit Presentation</span>
-          <kbd>Esc</kbd>
-        </button>
-      </div>
-
-      {/* Floating Bottom Presenter Deck */}
-      <div className="presentation-deck">
-        <button
-          className="presentation-btn"
-          onClick={prevSlide}
-          disabled={currentSlideIndex === 0}
-          title="Previous Slide (← / Backspace)"
-        >
-          <ChevronLeft size={18} />
-        </button>
-
-        <div className="presentation-counter">
-          <span>{currentSlideIndex + 1}</span>
-          <span className="presentation-counter-total">/ {Math.max(slides.length, 1)}</span>
-        </div>
-
-        <button
-          className="presentation-btn"
-          onClick={nextSlide}
-          disabled={currentSlideIndex >= slides.length - 1}
-          title="Next Slide (→ / Space)"
-        >
-          <ChevronRight size={18} />
-        </button>
-
-        <div className="presentation-deck-divider" />
-
-        {/* Laser Pointer Tool */}
-        <button
-          className={`presentation-btn ${isLaserActive ? 'active' : ''}`}
-          onClick={toggleLaser}
-          title="Laser Pointer (K)"
-        >
-          <Sparkles size={16} />
-        </button>
-
-        {/* Fullscreen Toggle */}
-        <button
-          className="presentation-btn"
-          onClick={toggleFullscreen}
-          title="Toggle Fullscreen"
-        >
-          {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-        </button>
-      </div>
+      {deck}
     </div>
   );
 }

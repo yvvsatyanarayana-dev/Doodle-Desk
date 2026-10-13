@@ -6,6 +6,7 @@ import {
   FileText,
   Copy,
   Check,
+  Globe,
 } from 'lucide-react';
 
 export default function ExportDropdown({
@@ -193,6 +194,21 @@ export default function ExportDropdown({
             <span>Export PDF Document...</span>
           </div>
           <span style={badgeStyle}>PDF</span>
+        </button>
+
+        <button
+          type="button"
+          style={itemBtnStyle}
+          onClick={() => handleExportFile(() => onExport?.('html'))}
+          onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title="Export as a self-contained web player that works in any browser"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Globe size={14} style={{ color: '#888888' }} />
+            <span>Interactive HTML Player...</span>
+          </div>
+          <span style={{ ...badgeStyle, color: '#888888', borderColor: 'rgba(129, 140, 248, 0.3)' }}>HTML</span>
         </button>
 
         {/* Divider */}

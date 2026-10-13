@@ -3,6 +3,7 @@ import {
   Search,
   Sparkles,
   GitFork,
+  GitBranch,
   Cpu,
   Network,
   Kanban,
@@ -28,6 +29,9 @@ import {
   Radio,
   Users,
   BookOpen,
+  Boxes,
+  Globe,
+  Tv,
 } from 'lucide-react';
 import {
   generateFlowchart,
@@ -60,6 +64,11 @@ export function CommandPalette({
   onOpenWorkspaces,
   onOpenLiveCollab,
   onOpenMermaid,
+  onOpenSmartDiagram,
+  onOpenIconLibrary,
+  onOpenAutoLayout,
+  onOpenTimeMachine,
+  onToggleFocusMode,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [query, setQuery] = useState('');
@@ -134,6 +143,17 @@ export function CommandPalette({
       shortcut: 'Alt+L',
       action: () => {
         onToggleLibrary?.();
+        onClose();
+      },
+    },
+    {
+      id: 'icon_library',
+      title: 'Tech & Architecture Icon Library (100+ Cloud, Dev & System Icons)',
+      category: 'Tools & Sidebar',
+      icon: <Boxes size={14} />,
+      shortcut: 'Ctrl+Shift+I',
+      action: () => {
+        onOpenIconLibrary?.();
         onClose();
       },
     },
@@ -382,6 +402,93 @@ export function CommandPalette({
       },
     },
 
+    // AI & Advanced Mind Mapping
+    {
+      id: 'ai_smart_diagram',
+      title: 'AI Text-to-Diagram Assistant...',
+      category: 'AI & Generation',
+      icon: <Sparkles size={14} />,
+      shortcut: 'Ctrl+Shift+A',
+      action: () => {
+        onOpenSmartDiagram?.();
+        onClose();
+      },
+    },
+    {
+      id: 'ai_smart_auto_layout',
+      title: 'AI Smart Auto-Layout Diagrams & Shapes...',
+      category: 'AI & Generation',
+      icon: <Layers size={14} />,
+      shortcut: 'Shift+A',
+      action: () => {
+        onOpenAutoLayout?.();
+        onClose();
+      },
+    },
+    {
+      id: 'canvas_time_machine',
+      title: 'Canvas Time Machine (History Scrubber & Timelapse Replay)...',
+      category: 'View & Navigation',
+      icon: <Sliders size={14} />,
+      shortcut: 'Shift+T',
+      action: () => {
+        onOpenTimeMachine?.();
+        onClose();
+      },
+    },
+    {
+      id: 'spotlight_focus_mode',
+      title: 'Spotlight Focus Mode (Distraction-Free Spotlight)...',
+      category: 'View & Navigation',
+      icon: <Eye size={14} />,
+      shortcut: 'Shift+F',
+      action: () => {
+        onToggleFocusMode?.();
+        onClose();
+      },
+    },
+    {
+      id: 'mindmap_branch_right',
+      title: 'Mind Map: Branch Child Node (Right)',
+      category: 'Mind Map & Flow',
+      icon: <GitBranch size={14} />,
+      shortcut: 'Tab',
+      action: () => {
+        activeAPI?.branchChildNode?.('right');
+        onClose();
+      },
+    },
+    {
+      id: 'mindmap_branch_down',
+      title: 'Mind Map: Branch Child Node (Down)',
+      category: 'Mind Map & Flow',
+      icon: <GitBranch size={14} />,
+      shortcut: 'Shift+Tab',
+      action: () => {
+        activeAPI?.branchChildNode?.('down');
+        onClose();
+      },
+    },
+    {
+      id: 'mindmap_auto_arrange',
+      title: 'Auto-Arrange Tree Hierarchy (Left-to-Right)',
+      category: 'Mind Map & Flow',
+      icon: <Layers size={14} />,
+      action: () => {
+        activeAPI?.autoArrangeTreeLayout?.('LR');
+        onClose();
+      },
+    },
+    {
+      id: 'presentation_add_frame',
+      title: 'Create Presentation Slide Frame (16:9)',
+      category: 'Presentation',
+      icon: <Tv size={14} />,
+      action: () => {
+        activeAPI?.createPresentationFrame?.('16:9');
+        onClose();
+      },
+    },
     // Export & Sharing
     {
       id: 'export_png',
@@ -411,6 +518,16 @@ export function CommandPalette({
       icon: <FileText size={14} />,
       action: () => {
         onExportPdf();
+        onClose();
+      },
+    },
+    {
+      id: 'export_html',
+      title: 'Export Interactive HTML Web Player (Zero-Dependency Standalone)...',
+      category: 'Export',
+      icon: <Globe size={14} />,
+      action: () => {
+        onExport('html');
         onClose();
       },
     },

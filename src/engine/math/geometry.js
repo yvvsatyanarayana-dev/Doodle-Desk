@@ -93,6 +93,17 @@ export function getElementBounds(el) {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
+export function boundsIntersectViewport(bounds, viewport, padding = 0) {
+  const left = Math.min(bounds.x, bounds.x + bounds.width) - padding;
+  const top = Math.min(bounds.y, bounds.y + bounds.height) - padding;
+  const right = Math.max(bounds.x, bounds.x + bounds.width) + padding;
+  const bottom = Math.max(bounds.y, bounds.y + bounds.height) + padding;
+  return right >= viewport.x &&
+    bottom >= viewport.y &&
+    left <= viewport.x + viewport.width &&
+    top <= viewport.y + viewport.height;
+}
+
 // Get tight bounding box for a list of elements
 export function getCommonBounds(elements) {
   if (!elements || elements.length === 0) return null;

@@ -31,6 +31,8 @@ import {
   Trash2,
   Sparkles,
   LogOut,
+  History,
+  Focus,
 } from 'lucide-react';
 import { WorkspaceIconBadge } from './WorkspaceIcons';
 import WorkspaceDropdown from './WorkspaceDropdown';
@@ -54,6 +56,10 @@ function StudioTopBarComponent({
   onCopyToClipboard,
   onPrint,
   onOpenCommandPalette,
+  onOpenSmartDiagram,
+  onOpenTimeMachine,
+  onToggleFocusMode,
+  isFocusModeActive,
   onOpenTemplates,
   onTogglePresentation,
   onToggleMiniMap,
@@ -106,6 +112,7 @@ function StudioTopBarComponent({
   const [isQuickFileSwitcherOpen, setIsQuickFileSwitcherOpen] = useState(false);
   const [confirmDeleteFile, setConfirmDeleteFile] = useState(null);
   const [titleDraft, setTitleDraft] = useState(currentFileName || 'Untitled');
+  const isLight = theme === 'light';
 
   useEffect(() => {
     setTitleDraft(currentFileName || 'Untitled');
@@ -329,7 +336,7 @@ function StudioTopBarComponent({
           >
             <WorkspaceIconBadge
               icon={activeWorkspace?.icon}
-              color={activeWorkspace?.color || '#6366f1'}
+              color={activeWorkspace?.color || '#888888'}
               size={12}
               style={{ width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0 }}
             />
@@ -466,7 +473,7 @@ function StudioTopBarComponent({
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.12)';
-              e.currentTarget.style.color = isDark ? '#fff' : '#4f46e5';
+              e.currentTarget.style.color = isDark ? '#fff' : '#111111';
               e.currentTarget.style.borderColor = 'rgba(99,102,241,0.45)';
             }}
             onMouseLeave={(e) => {
@@ -525,7 +532,7 @@ function StudioTopBarComponent({
                     background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
                     border: '1px solid ' + (isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.25)'),
                     borderRadius: '5px',
-                    color: isDark ? '#c7d2fe' : '#4f46e5',
+                    color: isDark ? '#e4e4e7' : '#111111',
                     fontSize: '10px',
                     fontWeight: 600,
                     padding: '2px 6px',
@@ -577,7 +584,7 @@ function StudioTopBarComponent({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         color: isSelected
-                          ? (isDark ? '#fff' : '#4f46e5')
+                          ? (isDark ? '#fff' : '#111111')
                           : (isDark ? '#d4d4d8' : '#0f172a'),
                         fontSize: '12px',
                         cursor: 'pointer',
@@ -592,7 +599,7 @@ function StudioTopBarComponent({
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', flex: 1 }}>
-                        <FileText size={12} style={{ color: isSelected ? (isDark ? '#818cf8' : '#4f46e5') : (isDark ? '#71717a' : '#94a3b8'), flexShrink: 0 }} />
+                        <FileText size={12} style={{ color: isSelected ? (isDark ? '#ffffff' : '#111111') : (isDark ? '#71717a' : '#94a3b8'), flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {file.name}
                         </span>
@@ -673,8 +680,29 @@ function StudioTopBarComponent({
             <kbd className="studio-search-kbd">Ctrl+K</kbd>
           </button>
 
+          <button
+            className="studio-capsule-btn"
+            onClick={onOpenSmartDiagram}
+            title="AI Text-to-Diagram Assistant (Ctrl+Shift+A)"
+          >
+            <Sparkles size={13} />
+          </button>
 
+          <button
+            className="studio-capsule-btn"
+            onClick={onOpenTimeMachine}
+            title="Canvas Time Machine & Drawing Replay (Shift+T)"
+          >
+            <History size={13} />
+          </button>
 
+          <button
+            className={`studio-capsule-btn ${isFocusModeActive ? 'active' : ''}`}
+            onClick={onToggleFocusMode}
+            title="Spotlight Focus Mode (Shift+F)"
+          >
+            <Focus size={13} />
+          </button>
 
           <button
             className="studio-capsule-btn"
@@ -905,4 +933,3 @@ function StudioTopBarComponent({
 }
 
 export const StudioTopBar = memo(StudioTopBarComponent);
-

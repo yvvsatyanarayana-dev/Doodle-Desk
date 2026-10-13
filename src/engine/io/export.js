@@ -14,7 +14,7 @@ export async function exportToCanvas(elements, appState = {}, files = {}, option
     exportScale = 2,
   } = options;
 
-  const active = elements.filter(el => !el.isDeleted);
+  const active = elements.filter(el => !el.isDeleted && !el.isHidden);
   if (active.length === 0) return null;
 
   const bounds = getCommonBounds(active);
@@ -60,9 +60,10 @@ export async function exportToSvg(elements, appState = {}, files = {}, options =
     exportBackground = true,
     viewBackgroundColor = '#ffffff',
     exportPadding = EXPORT_PADDING,
+    adaptiveInk = false,
   } = options;
 
-  const active = elements.filter(el => !el.isDeleted);
+  const active = elements.filter(el => !el.isDeleted && !el.isHidden);
   const bounds = getCommonBounds(active) || { x: 0, y: 0, width: 800, height: 600 };
 
   const svgW = bounds.width + exportPadding * 2;
@@ -81,14 +82,14 @@ export async function exportToSvg(elements, appState = {}, files = {}, options =
   parts.push(`<g transform="translate(${ox},${oy})">`);
 
   for (const el of active) {
-    parts.push(elementToSvg(el, files));
+    parts.push(elementToSvg(el, files, { adaptiveInk }));
   }
 
   parts.push('</g></svg>');
   return parts.join('\n');
 }
 
-function elementToSvg(el, files = {}) {
+function elementToSvg(el, files = {}, { adaptiveInk = false } = {}) {
   const opacity = (el.opacity ?? 100) / 100;
   const stroke = el.strokeColor || '#1e1e1e';
   const fill = el.backgroundColor && el.backgroundColor !== 'transparent' ? el.backgroundColor : 'none';
@@ -96,7 +97,11 @@ function elementToSvg(el, files = {}) {
   const { x, y, width: w, height: h, angle = 0 } = el;
   const cx = x + w / 2, cy = y + h / 2;
   const transform = angle ? ` transform="rotate(${(angle * 180 / Math.PI).toFixed(2)} ${cx} ${cy})"` : '';
-  const attrs = `stroke="${stroke}" fill="${fill}" stroke-width="${sw}" opacity="${opacity}"${transform}`;
+  const adaptiveInkTheme = adaptiveInk ? getAdaptiveInkTheme(stroke) : null;
+  const adaptiveStroke = adaptiveInkTheme && el.type !== ELEMENT_TYPES.TEXT
+    ? ` data-theme-stroke="${adaptiveInkTheme}"`
+    : '';
+  const attrs = `stroke="${stroke}" fill="${fill}" stroke-width="${sw}" opacity="${opacity}"${adaptiveStroke}${transform}`;
 
   switch (el.type) {
     case ELEMENT_TYPES.RECTANGLE: {
@@ -111,6 +116,14 @@ function elementToSvg(el, files = {}) {
       const isSharp = edgeMode === 'sharp' || edgeMode === null || edgeMode === false || edgeMode === 0;
       const rxAttr = !isSharp ? ' rx="8"' : '';
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}"${rxAttr} ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.BOARD_PORTAL: {
+      const background = el.backgroundColor && el.backgroundColor !== 'transparent'
+        ? el.backgroundColor
+        : (el.portalTheme === 'dark' ? '#18181b' : '#ffffff');
+      const foreground = el.portalTheme === 'dark' ? '#f4f4f5' : '#18181b';
+      return `<g${transform}><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${background}" stroke="${stroke}" stroke-width="${sw}" opacity="${opacity}"/><text x="${x + 14}" y="${y + 26}" font-size="11" font-family="sans-serif" fill="#4f46e5">BOARD PORTAL</text><text x="${x + 14}" y="${y + 52}" font-size="16" font-family="sans-serif" font-weight="600" fill="${foreground}">${escapeXml(el.portalFileName || 'Untitled board')}</text><text x="${x + 14}" y="${y + 72}" font-size="12" font-family="sans-serif" fill="#71717a">${escapeXml(el.portalWorkspaceName || 'Workspace')}</text></g>`;
     }
 
     case ELEMENT_TYPES.ELLIPSE:
@@ -157,7 +170,10 @@ function elementToSvg(el, files = {}) {
       const textParts = lines.map((line, i) =>
         `<tspan x="${x}" dy="${i === 0 ? 0 : lineH}">${escapeXml(line)}</tspan>`
       ).join('');
-      return `<text x="${x}" y="${y + fontSize}" font-size="${fontSize}" font-family="${fontStack}" fill="${stroke}" opacity="${opacity}"${transform}>${textParts}</text>`;
+      const adaptiveText = adaptiveInkTheme
+        ? ` data-theme-text="${adaptiveInkTheme}"`
+        : '';
+      return `<text x="${x}" y="${y + fontSize}" font-size="${fontSize}" font-family="${fontStack}" fill="${stroke}" opacity="${opacity}"${adaptiveText}${transform}>${textParts}</text>`;
     }
 
     case ELEMENT_TYPES.IMAGE: {
@@ -171,6 +187,28 @@ function elementToSvg(el, files = {}) {
     default:
       return '';
   }
+}
+
+function getAdaptiveInkTheme(color) {
+  const normalized = String(color).trim().toLowerCase();
+  let channels;
+  if (/^#[0-9a-f]{3}$/.test(normalized)) {
+    channels = normalized.slice(1).split('').map((channel) => parseInt(channel + channel, 16));
+  } else if (/^#[0-9a-f]{6}$/.test(normalized)) {
+    channels = [
+      parseInt(normalized.slice(1, 3), 16),
+      parseInt(normalized.slice(3, 5), 16),
+      parseInt(normalized.slice(5, 7), 16),
+    ];
+  } else {
+    return null;
+  }
+  const [red, green, blue] = channels;
+  const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
+  if (spread > 8) return null;
+  if (Math.min(red, green, blue) >= 240) return 'light';
+  if (Math.max(red, green, blue) <= 32) return 'dark';
+  return null;
 }
 
 function escapeXml(str) {

@@ -66,6 +66,7 @@ export const ELEMENT_TYPES = {
   IMAGE: 'image',
   FRAME: 'frame',
   IFRAME: 'iframe',
+  BOARD_PORTAL: 'boardPortal',
 };
 
 // Default element properties

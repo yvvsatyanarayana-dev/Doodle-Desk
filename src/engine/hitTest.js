@@ -13,7 +13,7 @@ function getStrokeWidth(el) {
 
 // Test if a point hits a specific element
 export function hitTestElement(el, px, py) {
-  if (el.isDeleted) return false;
+  if (el.isDeleted || el.isHidden || el.locked) return false;
 
   const tol = HIT_TOLERANCE + getStrokeWidth(el) / 2;
   const [lx, ly] = toLocalPoint(px, py, el);
@@ -92,6 +92,8 @@ export function hitTestElement(el, px, py) {
     case ELEMENT_TYPES.IFRAME: {
       return isPointInRect(lx, ly, x, y, w, h, tol);
     }
+    case ELEMENT_TYPES.BOARD_PORTAL:
+      return isPointInRect(lx, ly, x, y, w, h, tol);
 
     case ELEMENT_TYPES.FRAME: {
       const rx = w < 0 ? x + w : x;
@@ -137,7 +139,7 @@ export function getElementsInRect(elements, rx, ry, rw, rh) {
   const maxY = Math.max(ry, ry + rh);
 
   return elements.filter(el => {
-    if (el.isDeleted) return false;
+    if (el.isDeleted || el.isHidden || el.locked) return false;
     const b = getElementBounds(el);
     return b.x >= minX && b.y >= minY && b.x + b.width <= maxX && b.y + b.height <= maxY;
   });

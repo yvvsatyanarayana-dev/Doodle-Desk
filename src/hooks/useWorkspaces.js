@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { updateSmartComponentInstances } from '../engine/components/smartComponents.js';
 
 const STORAGE_KEY = 'doodle_desk_workspaces_v1';
 const ACTIVE_ID_KEY = 'doodle_desk_active_workspace_id_v1';
@@ -485,6 +486,55 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
     [workspaces, activeAPI, switchFile]
   );
 
+  const updateComponentInstancesOnBoards = useCallback((component) => {
+    if (!component?.id || !Array.isArray(component.elements) || component.elements.length === 0) {
+      throw new Error('A saved component with at least one object is required.');
+    }
+    const activeWorkspaceId = activeWorkspaceIdRef.current;
+    const activeFileId = activeFileIdRef.current;
+    const liveElements = activeAPI?.getSceneElementsIncludingDeleted?.();
+    let activeResult = null;
+    let updatedInstanceCount = 0;
+
+    const nextWorkspaces = workspaces.map((workspace) => {
+      const files = (workspace.files || []).map((file) => {
+        const isActiveFile = workspace.id === activeWorkspaceId && file.id === activeFileId;
+        const sourceElements = isActiveFile && Array.isArray(liveElements)
+          ? liveElements
+          : (file.elements || []);
+        const result = updateSmartComponentInstances(sourceElements, component);
+        if (result.instanceCount === 0) return file;
+        updatedInstanceCount += result.instanceCount;
+        const updatedFile = {
+          ...file,
+          elements: result.elements,
+          binaryFiles: { ...(file.binaryFiles || {}), ...result.files },
+          updatedAt: Date.now(),
+        };
+        if (isActiveFile) activeResult = result;
+        return updatedFile;
+      });
+      const activeFile = files.find(file => file.id === workspace.activeFileId);
+      return {
+        ...workspace,
+        files,
+        ...(activeFile ? { elements: activeFile.elements || [], appState: activeFile.appState || workspace.appState } : {}),
+        updatedAt: Date.now(),
+      };
+    });
+
+    if (updatedInstanceCount === 0) return 0;
+    setWorkspaces(nextWorkspaces);
+    if (activeResult && activeAPI) {
+      activeAPI.updateScene({
+        elements: activeResult.elements,
+        files: activeResult.files,
+        commitToHistory: true,
+      });
+    }
+    return updatedInstanceCount;
+  }, [activeAPI, workspaces]);
+
   // Create a brand new workspace
   const createWorkspace = useCallback(
     ({ name = 'New Workspace', icon = '📝', color = '#10b981', initialElements = [] } = {}) => {
@@ -692,6 +742,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
     renameFile,
     duplicateFile,
     deleteFile,
+    updateComponentInstancesOnBoards,
   };
 }
 

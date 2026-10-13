@@ -5,6 +5,39 @@ import { PropertiesPanel } from '../src/engine/components/PropertiesPanel.jsx';
 import { measureText } from '../src/engine/renderer/render.js';
 
 describe('Text size and font controls', () => {
+  it('collapses and reopens the properties sidebar without losing its toggle', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <PropertiesPanel
+          selectedElements={[{ id: 'shape-1', type: 'rectangle' }]}
+          appState={{ activeTool: { type: 'selection' } }}
+          onUpdateProperty={vi.fn()}
+          onAction={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.App-menu__left')).not.toBeNull();
+    expect(container.querySelector('.doodle-properties-sidebar-toggle').textContent).toBe('');
+    act(() => {
+      container.querySelector('[aria-label="Hide properties sidebar"]').click();
+    });
+    expect(container.querySelector('.App-menu__left')).toBeNull();
+    expect(container.querySelector('[aria-label="Show properties sidebar"]')).not.toBeNull();
+
+    act(() => {
+      container.querySelector('[aria-label="Show properties sidebar"]').click();
+    });
+    expect(container.querySelector('.App-menu__left')).not.toBeNull();
+
+    act(() => root.unmount());
+    document.body.removeChild(container);
+  });
+
   it('renders font size presets, current size label, and stepper buttons for text elements', () => {
     const handleUpdate = vi.fn();
     const selectedTextElement = {

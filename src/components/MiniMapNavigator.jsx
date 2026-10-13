@@ -105,12 +105,31 @@ function MiniMapNavigatorComponent({ isOpen, onToggle, doodleAPI, canvasAPI }) {
     const targetSceneY = sceneBounds.minY + (clickY - mapOffsetY) / scale;
     const zoom = appState.zoom?.value || 1;
 
-    doodleAPI.updateScene({
-      appState: {
-        scrollX: viewportSize.width / 2 - targetSceneX * zoom,
-        scrollY: viewportSize.height / 2 - targetSceneY * zoom,
-      },
-    });
+    const targetScrollX = viewportSize.width / 2 - targetSceneX * zoom;
+    const targetScrollY = viewportSize.height / 2 - targetSceneY * zoom;
+
+    // Smooth cinematic animated teleporter pan
+    const startScrollX = appState.scrollX || 0;
+    const startScrollY = appState.scrollY || 0;
+    const startTime = performance.now();
+    const duration = 280;
+
+    const animateTeleport = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      // Smooth cubic ease out
+      const ease = 1 - Math.pow(1 - progress, 3);
+      doodleAPI.updateScene({
+        appState: {
+          scrollX: startScrollX + (targetScrollX - startScrollX) * ease,
+          scrollY: startScrollY + (targetScrollY - startScrollY) * ease,
+        },
+      });
+      if (progress < 1) {
+        requestAnimationFrame(animateTeleport);
+      }
+    };
+    requestAnimationFrame(animateTeleport);
   };
 
   if (!isOpen) {
@@ -193,7 +212,7 @@ function MiniMapNavigatorComponent({ isOpen, onToggle, doodleAPI, canvasAPI }) {
             width={viewportRect.width}
             height={viewportRect.height}
             fill="rgba(56, 189, 248, 0.18)"
-            stroke="#38bdf8"
+            stroke="currentColor"
             strokeWidth={1.5}
             rx={2}
           />

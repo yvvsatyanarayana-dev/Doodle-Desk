@@ -16,7 +16,15 @@ import {
   Smartphone,
   FolderPlus,
   Check,
+  Boxes,
 } from 'lucide-react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  ICONS_CATALOG,
+  ICON_CATEGORIES,
+  ICON_COLOR_SWATCHES,
+  ICON_SIZES,
+} from './iconCatalog';
 import {
   generateFlowchart,
   generateArchitecture,
@@ -515,12 +523,18 @@ export function LibrarySidebar({
   const isDark = activeTheme === 'dark';
 
   // State: Tab Defaults to 'templates' (Smart Template Library)
-  const [activeTab, setActiveTab] = useState(initialTab || 'templates'); // 'templates' | 'library' | 'search'
+  const [activeTab, setActiveTab] = useState(initialTab || 'templates'); // 'templates' | 'library' | 'icons' | 'search'
   const [templateSubTab, setTemplateSubTab] = useState('presets'); // 'presets' | 'my'
   const [isPinned, setIsPinned] = useState(false);
   const [canvasSearchQuery, setCanvasSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
+
+  // Tech & Architecture Icons state
+  const [iconSearchQuery, setIconSearchQuery] = useState('');
+  const [iconCategory, setIconCategory] = useState('all');
+  const [iconColor, setIconColor] = useState(ICON_COLOR_SWATCHES[0]);
+  const [iconSize, setIconSize] = useState(ICON_SIZES[1]); // 48px
 
   // User Custom Templates
   const [customTemplates, setCustomTemplates] = useState(() => {
@@ -559,10 +573,21 @@ export function LibrarySidebar({
       setActiveTab('templates');
       setTemplateSubTab('presets');
     };
+    window.__doodleOpenLibraryIcons = () => {
+      setActiveTab('icons');
+    };
     return () => {
       delete window.__doodleOpenLibraryTemplates;
+      delete window.__doodleOpenLibraryIcons;
     };
   }, []);
+
+  // Sync initialTab when changed
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
 
   // Track canvas selection count
   useEffect(() => {
@@ -934,6 +959,53 @@ export function LibrarySidebar({
     showToast(`Added "${item.name}"`);
   };
 
+  // Filtered Tech & Architecture icons
+  const filteredCatalogIcons = useMemo(() => {
+    const q = iconSearchQuery.toLowerCase().trim();
+    return ICONS_CATALOG.filter((item) => {
+      const matchCat = iconCategory === 'all' || item.category === iconCategory;
+      if (!matchCat) return false;
+      if (!q) return true;
+      return item.name.toLowerCase().includes(q) || item.tag.toLowerCase().includes(q);
+    });
+  }, [iconSearchQuery, iconCategory]);
+
+  // Stamp Tech & Architecture SVG icon onto canvas
+  const handleStampSvgIcon = useCallback((item) => {
+    if (!doodleAPI) return;
+    const stroke = iconColor.id === 'current'
+      ? (doodleAPI.getAppState?.()?.currentItemStrokeColor || (isDark ? '#ffffff' : '#111111'))
+      : iconColor.color;
+    const size = iconSize.size;
+    const IconComp = item.icon;
+
+    const svgContent = renderToStaticMarkup(
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={stroke}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <IconComp size={24} color={stroke} strokeWidth={2} />
+      </svg>
+    );
+
+    if (doodleAPI.insertSvgIcon) {
+      doodleAPI.insertSvgIcon({
+        svgString: svgContent,
+        name: item.name,
+        width: size,
+        height: size,
+      });
+    }
+    showToast(`Added "${item.name}"`);
+  }, [doodleAPI, iconColor, iconSize, isDark]);
+
   // Combine user items and built-in shapes/frames
   const allShapes = useMemo(() => {
     return [...userItems, ...BUILTIN_SHAPES_AND_FRAMES];
@@ -1053,19 +1125,22 @@ export function LibrarySidebar({
           transition: 'background 0.2s ease, border-color 0.2s ease',
         }}
       >
-        {/* TOP BAR: Search & BookOpen Pills + Pin & Close (Neutral Black/Gray) */}
+        {/* TOP BAR: Tab Pills + Pin & Close */}
         <div
           style={{
-            padding: '10px 14px',
+            padding: '0 10px 0 12px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBottom: `1px solid ${themeStyles.headerBorder}`,
-            minHeight: '48px',
+            height: '46px',
+            flexShrink: 0,
+            overflow: 'hidden',
+            gap: '4px',
           }}
         >
-          {/* Left Segment: Templates, Shapes, Search */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {/* Left Segment: Templates, Shapes, Icons, Search */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <button
               type="button"
               onClick={() => setActiveTab('templates')}
@@ -1074,18 +1149,20 @@ export function LibrarySidebar({
                 background: activeTab === 'templates' ? themeStyles.pillActiveBg : 'transparent',
                 color: activeTab === 'templates' ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
                 border: 'none',
-                borderRadius: '8px',
-                padding: '6px 10px',
+                borderRadius: '7px',
+                padding: '5px 8px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
+                gap: '4px',
                 fontSize: '12px',
                 fontWeight: activeTab === 'templates' ? 600 : 500,
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
-              <Layers size={15} strokeWidth={activeTab === 'templates' ? 2.4 : 1.8} />
+              <Layers size={14} strokeWidth={activeTab === 'templates' ? 2.4 : 1.8} />
               <span>Templates</span>
             </button>
 
@@ -1097,19 +1174,46 @@ export function LibrarySidebar({
                 background: activeTab === 'library' ? themeStyles.pillActiveBg : 'transparent',
                 color: activeTab === 'library' ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
                 border: 'none',
-                borderRadius: '8px',
-                padding: '6px 10px',
+                borderRadius: '7px',
+                padding: '5px 8px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
+                gap: '4px',
                 fontSize: '12px',
                 fontWeight: activeTab === 'library' ? 600 : 500,
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
-              <BookOpen size={15} strokeWidth={activeTab === 'library' ? 2.4 : 1.8} />
+              <BookOpen size={14} strokeWidth={activeTab === 'library' ? 2.4 : 1.8} />
               <span>Shapes</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('icons')}
+              title="Tech & Architecture Icons"
+              style={{
+                background: activeTab === 'icons' ? themeStyles.pillActiveBg : 'transparent',
+                color: activeTab === 'icons' ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
+                border: 'none',
+                borderRadius: '7px',
+                padding: '5px 8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: activeTab === 'icons' ? 600 : 500,
+                transition: 'all 0.15s ease',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Boxes size={14} strokeWidth={activeTab === 'icons' ? 2.4 : 1.8} />
+              <span>Icons</span>
             </button>
 
             <button
@@ -1120,21 +1224,24 @@ export function LibrarySidebar({
                 background: activeTab === 'search' ? themeStyles.pillActiveBg : 'transparent',
                 color: activeTab === 'search' ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
                 border: 'none',
-                borderRadius: '8px',
-                padding: '6px 9px',
+                borderRadius: '7px',
+                padding: '0',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                flexShrink: 0,
                 transition: 'all 0.15s ease',
               }}
             >
-              <Search size={15} strokeWidth={activeTab === 'search' ? 2.4 : 1.8} />
+              <Search size={14} strokeWidth={activeTab === 'search' ? 2.4 : 1.8} />
             </button>
           </div>
 
-          {/* Right Segment: Pin & Close */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {/* Right Segment: Pin & Close — always visible, never shrink */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
             <button
               type="button"
               onClick={() => setIsPinned(prev => !prev)}
@@ -1143,16 +1250,19 @@ export function LibrarySidebar({
                 background: isPinned ? themeStyles.pillActiveBg : 'transparent',
                 color: isPinned ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
                 border: 'none',
-                padding: '6px',
+                padding: '0',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.15s ease',
+                width: '28px',
+                height: '28px',
+                flexShrink: 0,
+                transition: 'background 0.15s ease, color 0.15s ease',
               }}
             >
-              <Pin size={16} />
+              <Pin size={14} strokeWidth={2} />
             </button>
             <button
               type="button"
@@ -1162,18 +1272,27 @@ export function LibrarySidebar({
                 background: 'transparent',
                 color: themeStyles.inactiveIconColor,
                 border: 'none',
-                padding: '6px',
+                padding: '0',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.15s ease',
+                width: '28px',
+                height: '28px',
+                flexShrink: 0,
+                transition: 'background 0.15s ease, color 0.15s ease',
               }}
-              onMouseEnter={e => e.currentTarget.style.color = themeStyles.textColor}
-              onMouseLeave={e => e.currentTarget.style.color = themeStyles.inactiveIconColor}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+                e.currentTarget.style.color = themeStyles.textColor;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = themeStyles.inactiveIconColor;
+              }}
             >
-              <X size={17} />
+              <X size={15} strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -1401,7 +1520,7 @@ export function LibrarySidebar({
                     type="submit"
                     style={{
                       flex: 1,
-                      background: '#4f46e5',
+                      background: '#111111',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '6px',
@@ -1475,7 +1594,7 @@ export function LibrarySidebar({
                           height: '32px',
                           borderRadius: '7px',
                           background: isDark ? 'rgba(99, 102, 241, 0.16)' : 'rgba(99, 102, 241, 0.1)',
-                          color: isDark ? '#a5b4fc' : '#4f46e5',
+                          color: isDark ? '#d4d4d8' : '#111111',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -2006,6 +2125,270 @@ export function LibrarySidebar({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: Tech & Architecture Icons */}
+        {activeTab === 'icons' && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Search Input Bar */}
+            <div
+              style={{
+                padding: '12px 14px 8px 14px',
+                borderBottom: `1px solid ${themeStyles.headerBorder}`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div
+                style={{
+                  background: themeStyles.inputBg,
+                  border: `1px solid ${themeStyles.inputBorder}`,
+                  borderRadius: '8px',
+                  padding: '7px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Search size={15} color={themeStyles.inactiveIconColor} />
+                <input
+                  type="text"
+                  placeholder="Search 100+ architecture icons..."
+                  value={iconSearchQuery}
+                  onChange={(e) => setIconSearchQuery(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: themeStyles.textColor,
+                    fontSize: '12.5px',
+                  }}
+                />
+                {iconSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setIconSearchQuery('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: themeStyles.inactiveIconColor,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Category Pills Filter */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '4px',
+                  overflowX: 'auto',
+                  paddingBottom: '2px',
+                  scrollbarWidth: 'none',
+                }}
+              >
+                {ICON_CATEGORIES.map((cat) => {
+                  const isActive = iconCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setIconCategory(cat.id)}
+                      style={{
+                        background: isActive ? themeStyles.pillActiveBg : themeStyles.cardBg,
+                        color: isActive ? themeStyles.pillActiveColor : themeStyles.subtextColor,
+                        border: `1px solid ${isActive ? themeStyles.btnPrimaryBorder : themeStyles.cardBorder}`,
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        fontWeight: isActive ? 600 : 500,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.12s ease',
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Color & Size Customization Bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: '2px',
+                }}
+              >
+                {/* Color Swatches */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {ICON_COLOR_SWATCHES.map((swatch) => {
+                    const isSelected = iconColor.id === swatch.id;
+                    const dotBg = swatch.id === 'current'
+                      ? (isDark ? '#ffffff' : '#111111')
+                      : swatch.color;
+                    return (
+                      <button
+                        key={swatch.id}
+                        type="button"
+                        onClick={() => setIconColor(swatch)}
+                        title={`Color: ${swatch.label}`}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          background: dotBg,
+                          border: isSelected
+                            ? `2px solid ${isDark ? '#ffffff' : '#000000'}`
+                            : `1px solid ${themeStyles.cardBorder}`,
+                          cursor: 'pointer',
+                          padding: 0,
+                          outline: isSelected ? `2px solid ${dotBg}` : 'none',
+                          outlineOffset: '1px',
+                          transition: 'transform 0.1s ease',
+                          transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Size Selector */}
+                <div
+                  style={{
+                    display: 'flex',
+                    background: themeStyles.cardBg,
+                    padding: '2px',
+                    borderRadius: '6px',
+                    border: `1px solid ${themeStyles.cardBorder}`,
+                  }}
+                >
+                  {ICON_SIZES.map((sz) => {
+                    const isSelected = iconSize.size === sz.size;
+                    return (
+                      <button
+                        key={sz.size}
+                        type="button"
+                        onClick={() => setIconSize(sz)}
+                        style={{
+                          background: isSelected ? themeStyles.pillActiveBg : 'transparent',
+                          color: isSelected ? themeStyles.pillActiveColor : themeStyles.subtextColor,
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          fontSize: '10.5px',
+                          fontWeight: isSelected ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.12s ease',
+                        }}
+                      >
+                        {sz.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Icons 3-Column Grid */}
+            <div
+              className="library-items-container"
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '10px 14px 20px 14px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
+                alignContent: 'start',
+              }}
+            >
+              {filteredCatalogIcons.length === 0 ? (
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    textAlign: 'center',
+                    padding: '36px 16px',
+                    color: themeStyles.subtextColor,
+                    fontSize: '12px',
+                  }}
+                >
+                  No icons matched "{iconSearchQuery}". Try cloud, db, docker, or auth.
+                </div>
+              ) : (
+                filteredCatalogIcons.map((item) => {
+                  const IconComp = item.icon;
+                  const previewColor = iconColor.id === 'current'
+                    ? (isDark ? '#ffffff' : '#111111')
+                    : iconColor.color;
+                  return (
+                    <div
+                      key={item.name}
+                      onClick={() => handleStampSvgIcon(item)}
+                      title={`Click to stamp ${item.name} onto canvas`}
+                      style={{
+                        background: themeStyles.cardBg,
+                        border: `1px solid ${themeStyles.cardBorder}`,
+                        borderRadius: '9px',
+                        padding: '10px 4px 8px 4px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxSizing: 'border-box',
+                        minHeight: '74px',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = themeStyles.cardHoverBorder;
+                        e.currentTarget.style.background = themeStyles.cardHoverBg;
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = isDark
+                          ? '0 6px 14px rgba(0, 0, 0, 0.45)'
+                          : '0 4px 10px rgba(0, 0, 0, 0.06)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = themeStyles.cardBorder;
+                        e.currentTarget.style.background = themeStyles.cardBg;
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <IconComp size={22} color={previewColor} strokeWidth={2} />
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 500,
+                          color: themeStyles.textColor,
+                          lineHeight: 1.2,
+                          textAlign: 'center',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          width: '100%',
+                          padding: '0 2px',
+                        }}
+                      >
+                        {item.name}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

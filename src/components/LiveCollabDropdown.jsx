@@ -30,26 +30,26 @@ function PrimaryBtn({ onClick, children, style = {}, disabled = false, type = 'b
         gap: 7,
         background: disabled
           ? (isLightTheme ? '#e2e8f0' : 'rgba(255, 255, 255, 0.03)')
-          : (isLightTheme ? '#6366f1' : 'rgba(255, 255, 255, 0.1)'),
+          : (isLightTheme ? '#111111' : 'rgba(255, 255, 255, 0.1)'),
         color: disabled ? (isLightTheme ? '#94a3b8' : '#52525b') : '#ffffff',
-        border: '1px solid ' + (disabled ? 'transparent' : (isLightTheme ? '#4f46e5' : 'rgba(255, 255, 255, 0.18)')),
+        border: '1px solid ' + (disabled ? 'transparent' : (isLightTheme ? '#333333' : 'rgba(255, 255, 255, 0.18)')),
         borderRadius: '8px',
         padding: '8px 14px',
         fontSize: '12px',
         fontWeight: 600,
         cursor: disabled ? 'not-allowed' : 'pointer',
-        boxShadow: disabled ? 'none' : (isLightTheme ? '0 2px 6px rgba(99, 102, 241, 0.25)' : '0 2px 8px rgba(0, 0, 0, 0.35)'),
+        boxShadow: disabled ? 'none' : (isLightTheme ? '0 2px 6px rgba(0, 0, 0, 0.2)' : '0 2px 8px rgba(0, 0, 0, 0.35)'),
         transition: 'all 0.15s ease',
         ...style,
       }}
       onMouseEnter={(e) => {
         if (!disabled) {
-          e.currentTarget.style.background = isLightTheme ? '#4f46e5' : 'rgba(255, 255, 255, 0.18)';
+          e.currentTarget.style.background = isLightTheme ? '#333333' : 'rgba(255, 255, 255, 0.18)';
         }
       }}
       onMouseLeave={(e) => {
         if (!disabled) {
-          e.currentTarget.style.background = isLightTheme ? '#6366f1' : 'rgba(255, 255, 255, 0.1)';
+          e.currentTarget.style.background = isLightTheme ? '#111111' : 'rgba(255, 255, 255, 0.1)';
         }
       }}
     >

@@ -113,6 +113,14 @@ export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
     { label: 'Frame tool', shortcut: <kbd className="doodle-help-kbd">F</kbd> },
     { label: 'Laser pointer', shortcut: <kbd className="doodle-help-kbd">K</kbd> },
     {
+      label: 'Tech & Architecture Icon Library',
+      shortcut: (
+        <>
+          <kbd className="doodle-help-kbd">Ctrl</kbd> <kbd className="doodle-help-kbd">Shift</kbd> <kbd className="doodle-help-kbd">I</kbd>
+        </>
+      ),
+    },
+    {
       label: 'Pick color from canvas',
       shortcut: (
         <>
@@ -135,6 +143,29 @@ export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
   ];
 
   const editorShortcuts = [
+    {
+      label: 'Open layers (visibility, locking & order)',
+      shortcut: (
+        <>
+          <kbd className="doodle-help-kbd">Shift</kbd>
+          <kbd className="doodle-help-kbd">L</kbd>
+        </>
+      ),
+    },
+    {
+      label: 'Customize keyboard shortcuts',
+      shortcut: <span>Preferences</span>,
+    },
+    {
+      label: 'Group / ungroup selection',
+      shortcut: (
+        <>
+          <kbd className="doodle-help-kbd">Ctrl</kbd> <kbd className="doodle-help-kbd">G</kbd>
+          <span className="doodle-help-connector">/</span>
+          <kbd className="doodle-help-kbd">Ctrl</kbd> <kbd className="doodle-help-kbd">Shift</kbd> <kbd className="doodle-help-kbd">G</kbd>
+        </>
+      ),
+    },
     {
       label: 'Create a flowchart from a generic element',
       shortcut: (
@@ -442,6 +473,13 @@ export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
             >
               EDITOR
             </div>
+            <p style={{
+              margin: '0 0 8px',
+              fontSize: '11px',
+              color: isDark ? '#a1a1aa' : '#71717a',
+            }}>
+              Shortcuts can be reassigned in Preferences. Locked objects cannot be edited on the canvas.
+            </p>
             <div style={{ paddingRight: '4px' }}>
               {editorShortcuts.map((s) => (
                 <div

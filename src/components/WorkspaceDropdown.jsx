@@ -69,7 +69,7 @@ export default function WorkspaceDropdown({
   const [isCreatingWs, setIsCreatingWs] = useState(false);
   const [newWsName, setNewWsName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('palette');
-  const [selectedColor, setSelectedColor] = useState('#6366f1');
+  const [selectedColor, setSelectedColor] = useState('#888888');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   // Workspace inline edit
@@ -192,7 +192,7 @@ export default function WorkspaceDropdown({
         textDim: '#94a3b8',
         inputBg: '#f1f5f9',
         inputBorder: 'rgba(0, 0, 0, 0.12)',
-        accent: '#6366f1',
+        accent: '#888888',
         accentFaint: 'rgba(99, 102, 241, 0.1)',
         accentBorder: 'rgba(99, 102, 241, 0.35)',
         btnBg: '#f1f5f9',
@@ -218,7 +218,7 @@ export default function WorkspaceDropdown({
         textDim: '#52525b',
         inputBg: 'rgba(255, 255, 255, 0.05)',
         inputBorder: 'rgba(255, 255, 255, 0.12)',
-        accent: '#6366f1',
+        accent: '#888888',
         accentFaint: 'rgba(99, 102, 241, 0.15)',
         accentBorder: 'rgba(99, 102, 241, 0.35)',
         btnBg: 'rgba(255, 255, 255, 0.08)',
@@ -287,7 +287,7 @@ export default function WorkspaceDropdown({
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             background: isLightTheme ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.18)',
-            color: isLightTheme ? '#4f46e5' : '#a5b4fc',
+            color: isLightTheme ? '#111111' : '#d4d4d8',
             border: '1px solid ' + (isLightTheme ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.35)'),
             borderRadius: '8px',
             padding: '5px 8px',
@@ -369,8 +369,8 @@ export default function WorkspaceDropdown({
             <button
               onClick={handleConfirmCreateWs}
               style={{
-                background: isLightTheme ? '#6366f1' : 'rgba(255,255,255,0.12)',
-                color: '#fff', border: '1px solid ' + (isLightTheme ? '#4f46e5' : 'rgba(255,255,255,0.2)'),
+                background: isLightTheme ? '#111111' : 'rgba(255,255,255,0.12)',
+                color: '#fff', border: '1px solid ' + (isLightTheme ? '#333333' : 'rgba(255,255,255,0.2)'),
                 borderRadius: '7px', padding: '0 14px',
                 fontSize: '13px', fontWeight: 600, cursor: 'pointer',
               }}
@@ -514,7 +514,7 @@ export default function WorkspaceDropdown({
                             fontSize: '9px', fontWeight: 700, padding: '1px 6px',
                             borderRadius: '999px',
                             background: isLightTheme ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.2)',
-                            color: isLightTheme ? '#4f46e5' : '#a5b4fc',
+                            color: isLightTheme ? '#111111' : '#d4d4d8',
                             border: '1px solid ' + (isLightTheme ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.3)'),
                             letterSpacing: '0.05em', flexShrink: 0,
                           }}>
@@ -741,7 +741,7 @@ export default function WorkspaceDropdown({
                                 <span style={{
                                   fontSize: '12px',
                                   fontWeight: isFileActive ? 600 : 400,
-                                  color: isFileActive ? (isLightTheme ? '#4f46e5' : '#fff') : T.text,
+                                  color: isFileActive ? (isLightTheme ? '#111111' : '#fff') : T.text,
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
@@ -755,7 +755,7 @@ export default function WorkspaceDropdown({
                                     padding: '0 4px',
                                     borderRadius: '4px',
                                     background: isLightTheme ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.25)',
-                                    color: isLightTheme ? '#4f46e5' : '#c7d2fe',
+                                    color: isLightTheme ? '#111111' : '#d4d4d8',
                                     letterSpacing: '0.04em',
                                     flexShrink: 0,
                                   }}>

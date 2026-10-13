@@ -360,4 +360,3 @@ function CanvasExtraToolsDropdownComponent({
 }
 
 export const CanvasExtraToolsDropdown = memo(CanvasExtraToolsDropdownComponent);
-

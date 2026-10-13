@@ -13,14 +13,43 @@ import {
 } from './elements.js';
 import { HistoryManager } from './history.js';
 import {
-  getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
+  boundsIntersectViewport, getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
   getElementCenter, snapToGrid, distance
 } from './math/geometry.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
 import { exportToBlob, exportToSvg } from './io/export.js';
-import { BookOpen, HelpCircle } from 'lucide-react';
+import { BookOpen, Box, CirclePlay, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop, Smartphone } from 'lucide-react';
+import { LayersPanel } from './components/LayersPanel.jsx';
+import { SmartComponentsPanel } from './components/SmartComponentsPanel.jsx';
+import { BoardPortalPanel } from './components/BoardPortalPanel.jsx';
+import { SimulationPanel } from './components/SimulationPanel.jsx';
+import { ChangeTrackingPanel } from './components/ChangeTrackingPanel.jsx';
+import { ResponsiveLayoutPanel } from './components/ResponsiveLayoutPanel.jsx';
+import { findShortcutAction, getShortcutBindings } from './keyboardShortcuts.js';
+import { buildSimulationGraph, getSimulationChoices } from './simulation.js';
+import {
+  applyResponsiveLayout,
+  captureResponsiveLayout,
+  countResponsiveOverrides,
+  initializeResponsiveBase,
+  RESPONSIVE_BREAKPOINTS,
+} from './responsiveLayouts.js';
+import {
+  clearChangeSnapshot,
+  compareSceneToSnapshot,
+  createChangeSnapshot,
+  readChangeSnapshot,
+  writeChangeSnapshot,
+} from './changeTracking.js';
+import {
+  createSmartComponent,
+  instantiateSmartComponent,
+  readSmartComponents,
+  updateSmartComponentInstances,
+  writeSmartComponents,
+} from './components/smartComponents.js';
 
 // ──────────────────────────────────────────────
 //  Tool → cursor mapping
@@ -67,6 +96,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     isCollaborating = false,
     collaborators,
     onOpenColorPalette,
+    onNavigateBoardPortal,
+    workspaces = [],
+    workspaceId,
+    fileId,
     children,
   } = props;
 
@@ -76,6 +109,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const containerRef = useRef(null);
   const animRef = useRef(null);
   const imageCache = useRef({});
+  const elementBoundsCacheRef = useRef(new WeakMap());
+  const canvasDprRef = useRef(0);
 
   const [elements, setElementsState] = useState(() => initialData?.elements || []);
   const [appState, setAppStateRaw] = useState(() => ({
@@ -112,6 +147,17 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         : { value: 1 }),
   }));
   const [files, setFiles] = useState(initialData?.files || {});
+  const [isLayersPanelOpen, setIsLayersPanelOpen] = useState(false);
+  const [isComponentsPanelOpen, setIsComponentsPanelOpen] = useState(false);
+  const [smartComponents, setSmartComponents] = useState([]);
+  const [isPortalPanelOpen, setIsPortalPanelOpen] = useState(false);
+  const [isResponsivePanelOpen, setIsResponsivePanelOpen] = useState(false);
+  const [responsiveBreakpoint, setResponsiveBreakpoint] = useState(null);
+  const [isSimulationActive, setIsSimulationActive] = useState(false);
+  const [simulationCurrentId, setSimulationCurrentId] = useState(null);
+  const [simulationPath, setSimulationPath] = useState([]);
+  const [changeSnapshot, setChangeSnapshot] = useState(null);
+  const [isChangeTrackingOpen, setIsChangeTrackingOpen] = useState(false);
   const [isToolLocked, setIsToolLocked] = useState(false);
   const isToolLockedRef = useRef(false);
   isToolLockedRef.current = isToolLocked;
@@ -127,6 +173,24 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const collaboratorsRef = useRef(new Map());
 
   const historyRef = useRef(new HistoryManager());
+  const timeMachineOriginalRef = useRef(null);
+
+  useEffect(() => {
+    setIsSimulationActive(false);
+    setSimulationCurrentId(null);
+    setSimulationPath([]);
+    setIsPortalPanelOpen(false);
+    setIsResponsivePanelOpen(false);
+    setResponsiveBreakpoint(null);
+    setIsChangeTrackingOpen(false);
+    try {
+      setChangeSnapshot(readChangeSnapshot(workspaceId, fileId));
+    } catch (error) {
+      console.error('Unable to load board change tracking baseline', error);
+      setChangeSnapshot(null);
+      window.alert(`Could not load this board's change baseline: ${error.message}`);
+    }
+  }, [workspaceId, fileId]);
 
   // Interaction state (NOT React state for perf — updated via refs)
   const interaction = useRef({
@@ -176,7 +240,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   // ── Derived helpers ──
   const getSelectedElements = useCallback(() => {
     const ids = appStateRef.current?.selectedElementIds || {};
-    return elementsRef.current.filter(el => ids[el.id] && !el.isDeleted);
+    return elementsRef.current.filter(el => ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked);
   }, []);
 
   const commitHistory = useCallback(() => {
@@ -412,25 +476,50 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     ctx.translate(scrollX, scrollY);
     ctx.scale(z, z);
 
-    // Render all elements
+    const viewport = {
+      x: -scrollX / z,
+      y: -scrollY / z,
+      width: cssW / z,
+      height: cssH / z,
+    };
+    const viewportPadding = 32 + 48 / z;
+    const selectedEls = [];
+
+    // Skip off-screen elements before drawing their paths or fills.
     for (const el of elementsRef.current) {
-      if (el.isDeleted) continue;
+      if (el.isDeleted || el.isHidden) continue;
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
       if (el.id === interaction.current.editingElementId) continue;
+      const isFreedraw = el.type === ELEMENT_TYPES.FREEDRAW;
+      let bounds = isFreedraw ? null : elementBoundsCacheRef.current.get(el);
+      if (!bounds ||
+          bounds.sourceX !== el.x || bounds.sourceY !== el.y ||
+          bounds.sourceWidth !== el.width || bounds.sourceHeight !== el.height ||
+          bounds.sourceAngle !== el.angle) {
+        bounds = {
+          geometry: getElementBounds(el),
+          sourceX: el.x,
+          sourceY: el.y,
+          sourceWidth: el.width,
+          sourceHeight: el.height,
+          sourceAngle: el.angle,
+        };
+        if (!isFreedraw) elementBoundsCacheRef.current.set(el, bounds);
+      }
+      if (!boundsIntersectViewport(bounds.geometry, viewport, viewportPadding)) continue;
       renderElement(ctx, el, imageCache.current);
+      if (selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
     }
 
     // Render in-progress drawing element
     const drawing = interaction.current.drawingElement;
-    if (drawing) {
-      renderElement(ctx, drawing, imageCache.current);
-    }
+    if (drawing) renderElement(ctx, drawing, imageCache.current);
 
     // Selection rect
     const selRect = interaction.current.selectionRect;
     if (selRect) {
-      ctx.strokeStyle = '#6965db';
+      ctx.strokeStyle = '#111111';
       ctx.fillStyle = 'rgba(105,101,219,0.08)';
       ctx.lineWidth = 1 / z;
       ctx.setLineDash([4 / z, 3 / z]);
@@ -440,12 +529,39 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     // Selection overlays
-    const selectedEls = elementsRef.current.filter(el =>
-      selectedElementIds && selectedElementIds[el.id] && !el.isDeleted &&
-      el.id !== interaction.current.editingElementId
-    );
     if (selectedEls.length > 0) {
       renderSelectionOverlay(ctx, selectedEls, z);
+    }
+
+    // Smart Magnetic Alignment Guides
+    const guides = interaction.current.alignmentGuides;
+    if (guides && guides.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 1 / z;
+      ctx.setLineDash([4 / z, 3 / z]);
+      for (const g of guides) {
+        ctx.beginPath();
+        if (g.type === 'vertical') {
+          ctx.moveTo(g.x, g.y1);
+          ctx.lineTo(g.x, g.y2);
+        } else {
+          ctx.moveTo(g.x1, g.y);
+          ctx.lineTo(g.x2, g.y);
+        }
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#f43f5e';
+        const ms = 3 / z;
+        if (g.type === 'vertical') {
+          ctx.fillRect(g.x - ms, (g.y1 + g.y2) / 2 - ms, ms * 2, ms * 2);
+        } else {
+          ctx.fillRect((g.x1 + g.x2) / 2 - ms, g.y - ms, ms * 2, ms * 2);
+        }
+        ctx.setLineDash([4 / z, 3 / z]);
+      }
+      ctx.restore();
     }
 
     // Collaborator cursors & live badges
@@ -463,7 +579,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const cx = collab.pointer.x;
         const cy = collab.pointer.y;
         if (typeof cx !== 'number' || typeof cy !== 'number') return;
-        const color = collab.color || '#6965db';
+        const color = collab.color || '#111111';
 
         ctx.save();
 
@@ -536,10 +652,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const dpr = window.devicePixelRatio || 1;
     const w = container.clientWidth;
     const h = container.clientHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
+    const pixelWidth = Math.round(w * dpr);
+    const pixelHeight = Math.round(h * dpr);
+    const cssWidth = `${w}px`;
+    const cssHeight = `${h}px`;
+    const dimensionsChanged = canvas.width !== pixelWidth || canvas.height !== pixelHeight;
+    if (!dimensionsChanged && canvas.style.width === cssWidth &&
+        canvas.style.height === cssHeight && canvasDprRef.current === dpr) {
+      return;
+    }
+    if (dimensionsChanged) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    canvas.style.width = cssWidth;
+    canvas.style.height = cssHeight;
+    canvasDprRef.current = dpr;
     scheduleRender();
   }, [scheduleRender]);
 
@@ -580,6 +708,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
   // ── Pointer events ──
   const onPointerDown = useCallback((e) => {
+    if (isSimulationActive) return;
     // Capture pointer to ensure smooth drag gestures across the whole window
     canvasRef.current?.setPointerCapture?.(e.pointerId);
 
@@ -667,9 +796,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const isAlreadySelected = selectedIds[hit.id];
 
         // If hit belongs to a group, gather all sibling elements in the topmost group
-        const groupMembers = (hit.groupIds?.length)
-          ? elementsRef.current.filter(e => !e.isDeleted && e.groupIds?.includes(hit.groupIds[hit.groupIds.length - 1]))
-          : [hit];
+        const groupMembers = hit.componentInstanceId
+          ? elementsRef.current.filter(e => !e.isDeleted && e.componentInstanceId === hit.componentInstanceId)
+          : (hit.groupIds?.length)
+            ? elementsRef.current.filter(e => !e.isDeleted && e.groupIds?.includes(hit.groupIds[hit.groupIds.length - 1]))
+            : [hit];
 
         let nextSelectedIds = { ...selectedIds };
         if (e.shiftKey) {
@@ -691,7 +822,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         // Snapshot original states for Alt-drag duplication
         const startPositions = {};
         for (const el of elementsRef.current) {
-          if ((nextSelectedIds[el.id] || el.id === hit.id) && !el.isDeleted) {
+          if ((nextSelectedIds[el.id] || el.id === hit.id) && !el.isDeleted && !el.isHidden && !el.locked) {
             startPositions[el.id] = cloneElement(el);
           }
         }
@@ -751,14 +882,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     if (tool === 'freedraw') {
       const el = {
-        ...createElement(ELEMENT_TYPES.FREEDRAW, ix, iy, 0, 0, {
+        ...createElement(ELEMENT_TYPES.FREEDRAW, sx, sy, 0, 0, {
           strokeColor,
           strokeWidth,
           opacity,
           roughness: 0, // Freedraw never sketchy
         }),
         points: [[0, 0]],
-        pressures: [e.pressure || 0.5],
       };
       interaction.current.isDrawing = true;
       interaction.current.drawingElement = el;
@@ -1020,7 +1150,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const clones = [];
         const newSelectedIds = {};
         for (const el of currentElements) {
-          if (ids[el.id] && !el.isDeleted) {
+          if (ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked) {
             const startState = ia.dragStartPositions?.[el.id];
             const baseEl = startState || el;
             const clone = cloneElement(baseEl);
@@ -1084,10 +1214,17 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
               }
             }
           }
+          if (el.componentInstanceId) {
+            for (const other of currentElements) {
+              if (other.componentInstanceId === el.componentInstanceId) allIdsToMove.add(other.id);
+            }
+          }
         }
       }
 
-      const selectedFrames = currentElements.filter(el => allIdsToMove.has(el.id) && el.type === ELEMENT_TYPES.FRAME && !el.isDeleted);
+      const selectedFrames = currentElements.filter(el =>
+        allIdsToMove.has(el.id) && el.type === ELEMENT_TYPES.FRAME && !el.isDeleted && !el.isHidden && !el.locked
+      );
       if (selectedFrames.length > 0) {
         for (const frame of selectedFrames) {
           const fx1 = Math.min(frame.x, frame.x + (frame.width || 0));
@@ -1106,8 +1243,106 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         }
       }
 
+      // Smart Magnetic Alignment & Guide Snapping
+      const activeGuides = [];
+      if (!e.altKey && allIdsToMove.size > 0) {
+        let movingMinX = Infinity, movingMinY = Infinity, movingMaxX = -Infinity, movingMaxY = -Infinity;
+        for (const el of currentElements) {
+          if (allIdsToMove.has(el.id) && !el.isDeleted) {
+            movingMinX = Math.min(movingMinX, el.x);
+            movingMinY = Math.min(movingMinY, el.y);
+            movingMaxX = Math.max(movingMaxX, el.x + (el.width || 0));
+            movingMaxY = Math.max(movingMaxY, el.y + (el.height || 0));
+          }
+        }
+
+        if (movingMinX !== Infinity) {
+          const newMinX = movingMinX + sdx;
+          const newMaxX = movingMaxX + sdx;
+          const newMidX = (newMinX + newMaxX) / 2;
+          const newMinY = movingMinY + sdy;
+          const newMaxY = movingMaxY + sdy;
+          const newMidY = (newMinY + newMaxY) / 2;
+
+          const SNAP_THRESHOLD = 6 / z;
+          let bestSnapX = null;
+          let minDiffX = SNAP_THRESHOLD;
+          let bestSnapY = null;
+          let minDiffY = SNAP_THRESHOLD;
+
+          for (const target of currentElements) {
+            if (allIdsToMove.has(target.id) || target.isDeleted || target.type === ELEMENT_TYPES.FRAME) continue;
+            const tMinX = target.x;
+            const tMaxX = target.x + (target.width || 0);
+            const tMidX = (tMinX + tMaxX) / 2;
+            const tMinY = target.y;
+            const tMaxY = target.y + (target.height || 0);
+            const tMidY = (tMinY + tMaxY) / 2;
+
+            const xTests = [
+              { diff: tMidX - newMidX, lineX: tMidX },
+              { diff: tMinX - newMinX, lineX: tMinX },
+              { diff: tMaxX - newMaxX, lineX: tMaxX },
+              { diff: tMaxX - newMinX, lineX: tMaxX },
+              { diff: tMinX - newMaxX, lineX: tMinX },
+            ];
+            for (const t of xTests) {
+              if (Math.abs(t.diff) < minDiffX) {
+                minDiffX = Math.abs(t.diff);
+                bestSnapX = {
+                  delta: t.diff,
+                  lineX: t.lineX,
+                  y1: Math.min(newMinY, tMinY) - 30,
+                  y2: Math.max(newMaxY, tMaxY) + 30,
+                };
+              }
+            }
+
+            const yTests = [
+              { diff: tMidY - newMidY, lineY: tMidY },
+              { diff: tMinY - newMinY, lineY: tMinY },
+              { diff: tMaxY - newMaxY, lineY: tMaxY },
+              { diff: tMaxY - newMinY, lineY: tMaxY },
+              { diff: tMinY - newMaxY, lineY: tMinY },
+            ];
+            for (const t of yTests) {
+              if (Math.abs(t.diff) < minDiffY) {
+                minDiffY = Math.abs(t.diff);
+                bestSnapY = {
+                  delta: t.diff,
+                  lineY: t.lineY,
+                  x1: Math.min(newMinX, tMinX) - 30,
+                  x2: Math.max(newMaxX, tMaxX) + 30,
+                };
+              }
+            }
+          }
+
+          if (bestSnapX) {
+            sdx += bestSnapX.delta;
+            activeGuides.push({
+              type: 'vertical',
+              x: bestSnapX.lineX,
+              y1: bestSnapX.y1,
+              y2: bestSnapX.y2,
+            });
+          }
+
+          if (bestSnapY) {
+            sdy += bestSnapY.delta;
+            activeGuides.push({
+              type: 'horizontal',
+              y: bestSnapY.lineY,
+              x1: bestSnapY.x1,
+              x2: bestSnapY.x2,
+            });
+          }
+        }
+      }
+      ia.alignmentGuides = activeGuides;
+
       setElements(prev => prev.map(el =>
-        allIdsToMove.has(el.id) && !el.isDeleted
+        allIdsToMove.has(el.id) && !el.isDeleted && !el.isHidden && !el.locked
           ? { ...el, x: el.x + sdx, y: el.y + sdy, version: (el.version || 1) + 1, versionNonce: versionNonce() }
           : el
       ));
@@ -1131,29 +1366,24 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       if (!drawing) return;
 
       if (drawing.type === ELEMENT_TYPES.FREEDRAW) {
-        const newPt = [ix - drawing.x, iy - drawing.y];
-        // Compute speed-based simulated pressure when hardware pressure not available.
-        // Slower strokes = higher pressure (thicker), faster strokes = lower pressure (thinner).
-        let pressure = e.pressure;
-        if (!pressure || pressure <= 0 || pressure === 0) {
-          const prevPt = drawing.points[drawing.points.length - 1];
-          if (prevPt) {
-            const dx = newPt[0] - prevPt[0];
-            const dy = newPt[1] - prevPt[1];
-            const speed = Math.sqrt(dx * dx + dy * dy);
-            // Map speed 0→10 to pressure 0.8→0.3 (slower = more pressure)
-            pressure = Math.max(0.2, Math.min(0.85, 0.85 - speed * 0.04));
-          } else {
-            pressure = 0.5;
+        const rawPt = [sx - drawing.x, sy - drawing.y];
+        const pts = drawing.points;
+        const prevPt = pts[pts.length - 1];
+        if (prevPt) {
+          const dx = rawPt[0] - prevPt[0];
+          const dy = rawPt[1] - prevPt[1];
+          if (dx * dx + dy * dy < 1.44) {
+            return;
           }
         }
         ia.drawingElement = {
           ...drawing,
-          width: Math.max(drawing.width, Math.abs(newPt[0])),
-          height: Math.max(drawing.height, Math.abs(newPt[1])),
-          points: [...drawing.points, newPt],
-          pressures: [...(drawing.pressures || []), pressure],
+          width: Math.max(drawing.width, Math.abs(rawPt[0])),
+          height: Math.max(drawing.height, Math.abs(rawPt[1])),
+          points: [...pts, rawPt],
         };
+        scheduleRender();
+        return;
 
       } else if ([ELEMENT_TYPES.ARROW, ELEMENT_TYPES.LINE].includes(drawing.type)) {
         const startX = drawing.x + drawing.points[0][0];
@@ -1201,7 +1431,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const hit = getElementAtPoint(elementsRef.current, sx, sy);
       canvasRef.current.style.cursor = hit ? 'move' : 'default';
     }
-  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, onPointerUpdate]);
+  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, onPointerUpdate, isSimulationActive]);
 
   const onPointerUp = useCallback((e) => {
     try {
@@ -1231,6 +1461,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.isDragging = false;
       ia.hasAltDuplicated = false;
       ia.dragStartPositions = null;
+      ia.alignmentGuides = null;
       commitHistory();
       notifyChange();
       return;
@@ -1285,7 +1516,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           return;
         }
       } else if (norm.type === ELEMENT_TYPES.FREEDRAW) {
-        if (norm.points.length < 3) {
+        if (!norm.points || norm.points.length === 0) {
           scheduleRender();
           return;
         }
@@ -1331,18 +1562,24 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       } else {
         setElements(prev => [...prev, norm]);
       }
-      const keepFreedrawForShapeMode = norm.type === ELEMENT_TYPES.FREEDRAW && isDrawToShapeActive;
+      const isFreedraw = norm.type === ELEMENT_TYPES.FREEDRAW;
+      const keepFreedrawForShapeMode = isFreedraw && isDrawToShapeActive;
+      const keepActiveTool = isToolLockedRef.current || isFreedraw;
+
       setAppState(prev => ({
-        selectedElementIds: keepFreedrawForShapeMode ? {} : { [norm.id]: true },
-        activeTool: isToolLockedRef.current || keepFreedrawForShapeMode
+        selectedElementIds: isFreedraw ? {} : (keepFreedrawForShapeMode ? {} : { [norm.id]: true }),
+        activeTool: keepActiveTool
           ? prev.activeTool
           : { type: 'selection' },
         showWelcomeScreen: false,
       }));
-      if (keepFreedrawForShapeMode && canvasRef.current) {
-        canvasRef.current.style.cursor = 'crosshair';
-      } else if (!isToolLockedRef.current && canvasRef.current) {
-        canvasRef.current.style.cursor = 'default';
+      if (canvasRef.current) {
+        if (keepActiveTool) {
+          const activeType = appStateRef.current?.activeTool?.type || (isFreedraw ? 'freedraw' : 'selection');
+          canvasRef.current.style.cursor = TOOL_CURSORS[activeType] || (isFreedraw ? 'crosshair' : 'default');
+        } else {
+          canvasRef.current.style.cursor = 'default';
+        }
       }
       commitHistory();
       notifyChange();
@@ -1373,6 +1610,258 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }));
     }
   }, [getCanvasPoint, setAppState]);
+  // Mind Mapping: Branch child node with connecting arrow
+  const branchChildNode = useCallback((direction = 'right') => {
+    const as = appStateRef.current;
+    const selectedIds = Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]);
+    if (selectedIds.length === 0) return;
+    const parent = elementsRef.current.find(el => el.id === selectedIds[0] && !el.isDeleted && !el.isHidden && !el.locked);
+    if (!parent) return;
+
+    const isLR = direction === 'right' || direction === 'left';
+    const isUp = direction === 'up';
+    const isLeft = direction === 'left';
+
+    const parentW = parent.width || 180;
+    const parentH = parent.height || 64;
+    const gapX = 130;
+    const gapY = 85;
+
+    const childX = isLR ? (isLeft ? parent.x - parentW - gapX : parent.x + parentW + gapX) : parent.x;
+    const childY = isLR ? parent.y : (isUp ? parent.y - parentH - gapY : parent.y + parentH + gapY);
+
+    const childId = 'node_' + generateId();
+    const textId = 'text_' + generateId();
+    const arrowId = 'arrow_' + generateId();
+
+    const childShape = {
+      ...parent,
+      id: childId,
+      x: childX,
+      y: childY,
+      width: parentW,
+      height: parentH,
+      boundElements: [{ id: textId, type: 'text' }],
+      groupIds: [],
+      frameId: parent.frameId || null,
+      seed: Math.floor(Math.random() * 100000),
+      version: 1,
+      versionNonce: versionNonce(),
+    };
+
+    const font = parent.fontFamily || (FONT_FAMILY?.Doodlefont ?? 5);
+    const childText = {
+      id: textId,
+      type: 'text',
+      x: childX + 10,
+      y: childY + (parentH / 2) - 12,
+      width: Math.max(20, parentW - 20),
+      height: 24,
+      strokeColor: '#f3f4f6',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      fontFamily: font,
+      fontSize: 15,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      text: 'New Topic',
+      originalText: 'New Topic',
+      containerId: childId,
+      version: 1,
+      versionNonce: versionNonce(),
+    };
+
+    const pCenterX = parent.x + parentW / 2;
+    const pCenterY = parent.y + parentH / 2;
+    const cCenterX = childX + parentW / 2;
+    const cCenterY = childY + parentH / 2;
+
+    let startX, startY, endX, endY;
+    if (direction === 'right') {
+      startX = parent.x + parentW;
+      startY = pCenterY;
+      endX = childX;
+      endY = cCenterY;
+    } else if (direction === 'down') {
+      startX = pCenterX;
+      startY = parent.y + parentH;
+      endX = cCenterX;
+      endY = childY;
+    } else if (direction === 'left') {
+      startX = parent.x;
+      startY = pCenterY;
+      endX = childX + parentW;
+      endY = cCenterY;
+    } else {
+      startX = pCenterX;
+      startY = parent.y;
+      endX = cCenterX;
+      endY = childY + parentH;
+    }
+
+    const dx = endX - startX;
+    const dy = endY - startY;
+
+    const arrowEl = {
+      id: arrowId,
+      type: ELEMENT_TYPES.ARROW,
+      x: startX,
+      y: startY,
+      width: Math.abs(dx),
+      height: Math.abs(dy),
+      strokeColor: '#94a3b8',
+      backgroundColor: 'transparent',
+      strokeWidth: 2,
+      roughness: 1,
+      opacity: 100,
+      points: [[0, 0], [dx, dy]],
+      startBinding: { elementId: parent.id, focus: 0, gap: 1 },
+      endBinding: { elementId: childId, focus: 0, gap: 1 },
+      endArrowhead: 'arrow',
+      version: 1,
+      versionNonce: versionNonce(),
+    };
+
+    setElements(prev => [...prev, childShape, childText, arrowEl]);
+    setAppState({ selectedElementIds: { [childId]: true } });
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
+
+  // Auto-arrange tree layout for connected nodes
+  const autoArrangeTreeLayout = useCallback((direction = 'LR') => {
+    const currentEls = elementsRef.current.filter(el => !el.isDeleted);
+    const arrows = currentEls.filter(el => (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) && el.startBinding?.elementId && el.endBinding?.elementId);
+    if (arrows.length === 0) return;
+
+    const parentMap = new Map();
+    const childrenMap = new Map();
+    const nodeMap = new Map();
+
+    for (const el of currentEls) {
+      if (el.type !== ELEMENT_TYPES.ARROW && el.type !== ELEMENT_TYPES.LINE && el.type !== 'text') {
+        nodeMap.set(el.id, el);
+      }
+    }
+
+    for (const arrow of arrows) {
+      const pId = arrow.startBinding.elementId;
+      const cId = arrow.endBinding.elementId;
+      if (nodeMap.has(pId) && nodeMap.has(cId)) {
+        parentMap.set(cId, pId);
+        if (!childrenMap.has(pId)) childrenMap.set(pId, []);
+        childrenMap.get(pId).push(cId);
+      }
+    }
+
+    const roots = [];
+    for (const [id] of nodeMap) {
+      if (!parentMap.has(id) && childrenMap.has(id)) {
+        roots.push(id);
+      }
+    }
+    if (roots.length === 0) return;
+
+    const isLR = direction === 'LR';
+    const gapX = isLR ? 150 : 90;
+    const gapY = isLR ? 60 : 120;
+    const arrangedPositions = new Map();
+
+    for (const rootId of roots) {
+      const rootNode = nodeMap.get(rootId);
+      const startX = rootNode.x;
+      const startY = rootNode.y;
+
+      const positionNode = (nodeId, level, secondaryPos) => {
+        const node = nodeMap.get(nodeId);
+        const nw = node.width || 180;
+        const nh = node.height || 60;
+
+        const posX = isLR ? startX + level * (nw + gapX) : secondaryPos;
+        const posY = isLR ? secondaryPos : startY + level * (nh + gapY);
+
+        arrangedPositions.set(nodeId, { x: posX, y: posY });
+
+        const children = childrenMap.get(nodeId) || [];
+        if (children.length === 0) return;
+
+        let childSec = secondaryPos - ((children.length - 1) * (isLR ? nh + gapY : nw + gapX)) / 2;
+        for (const cId of children) {
+          positionNode(cId, level + 1, childSec);
+          childSec += isLR ? nh + gapY : nw + gapX;
+        }
+      };
+
+      positionNode(rootId, 0, isLR ? startY : startX);
+    }
+
+    setElements(prev => prev.map(el => {
+      if (arrangedPositions.has(el.id)) {
+        const pos = arrangedPositions.get(el.id);
+        return { ...el, x: pos.x, y: pos.y, version: (el.version || 1) + 1 };
+      }
+      if (el.containerId && arrangedPositions.has(el.containerId)) {
+        const pos = arrangedPositions.get(el.containerId);
+        const container = nodeMap.get(el.containerId);
+        const origX = container.x;
+        const origY = container.y;
+        return { ...el, x: el.x + (pos.x - origX), y: el.y + (pos.y - origY), version: (el.version || 1) + 1 };
+      }
+      return el;
+    }));
+
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+  }, [commitHistory, notifyChange, scheduleRender, setElements]);
+
+  // Create standardized presentation frame
+  const createPresentationFrame = useCallback((aspectRatio = '16:9') => {
+    const frameCount = elementsRef.current.filter(el => el.type === ELEMENT_TYPES.FRAME && !el.isDeleted).length + 1;
+    const as = appStateRef.current;
+    const cw = canvasRef.current?.width || window.innerWidth;
+    const ch = canvasRef.current?.height || window.innerHeight;
+    const z = as.zoom?.value || 1;
+    const centerX = -as.scrollX + cw / (2 * z);
+    const centerY = -as.scrollY + ch / (2 * z);
+
+    const frameW = 960;
+    const frameH = aspectRatio === '4:3' ? 720 : 540;
+    const frameId = 'frame_' + generateId();
+
+    const frameEl = {
+      id: frameId,
+      type: ELEMENT_TYPES.FRAME,
+      name: `Slide ${frameCount}`,
+      x: Math.round(centerX - frameW / 2),
+      y: Math.round(centerY - frameH / 2),
+      width: frameW,
+      height: frameH,
+      strokeColor: '#444444',
+      backgroundColor: 'rgba(255, 255, 255, 0.02)',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: { type: 2 },
+      seed: Math.floor(Math.random() * 100000),
+      version: 1,
+      versionNonce: versionNonce(),
+      isDeleted: false,
+    };
+
+    setElements(prev => [...prev, frameEl]);
+    setAppState({ selectedElementIds: { [frameId]: true } });
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
+
+
 
   // ── Action Handlers (usable in shortcuts and components) ──
   const handleAction = useCallback((action) => {
@@ -1382,8 +1871,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
     const selectedIds = appStateRef.current.selectedElementIds || {};
     if (action === 'delete') {
+      const deletableIds = new Set(
+        elementsRef.current
+          .filter(el => selectedIds[el.id] && !el.isDeleted && !el.locked)
+          .map(el => el.id)
+      );
+      if (deletableIds.size === 0) return;
+      commitHistory();
       setElements(prev => {
-        const next = prev.map(el => (selectedIds[el.id] ? { ...el, isDeleted: true } : el));
+        const next = prev.map(el => (deletableIds.has(el.id) ? { ...el, isDeleted: true } : el));
         if (next.filter(el => !el.isDeleted).length === 0) {
           setAppState(as => ({ ...as, showWelcomeScreen: true }));
         }
@@ -1394,8 +1890,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       notifyChange();
       scheduleRender();
     } else if (action === 'duplicate') {
-      const toDuplicate = elementsRef.current.filter(el => selectedIds[el.id] && !el.isDeleted);
+      const toDuplicate = elementsRef.current.filter(el => selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked);
       if (toDuplicate.length === 0) return;
+      commitHistory();
       const newSelected = {};
       const newEls = toDuplicate.map(el => {
         const cloned = cloneElement(el, { x: el.x + 20, y: el.y + 20 });
@@ -1404,7 +1901,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       });
       setElements(prev => [...prev, ...newEls]);
       setAppState({ selectedElementIds: newSelected });
-      commitHistory();
       notifyChange();
       scheduleRender();
     } else if (action === 'bringToFront') {
@@ -1414,8 +1910,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         if (selectedIds[el.id]) selected.push(el);
         else unselected.push(el);
       });
-      setElements([...unselected, ...selected]);
       commitHistory();
+      setElements([...unselected, ...selected]);
       notifyChange();
       scheduleRender();
     } else if (action === 'sendToBack') {
@@ -1425,12 +1921,87 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         if (selectedIds[el.id]) selected.push(el);
         else unselected.push(el);
       });
-      setElements([...selected, ...unselected]);
       commitHistory();
+      setElements([...selected, ...unselected]);
       notifyChange();
       scheduleRender();
+    } else if (action === 'group' || action === 'ungroup') {
+      const selectedElements = elementsRef.current.filter(el =>
+        selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked
+      );
+      if (action === 'group' && selectedElements.length < 2) return;
+      if (action === 'ungroup' && !selectedElements.some(el => el.groupIds?.length)) return;
+      const groupId = generateId();
+      commitHistory();
+      setElements(prev => prev.map(el => {
+        if (!selectedIds[el.id] || el.isDeleted || el.isHidden || el.locked) return el;
+        const groupIds = action === 'group'
+          ? [...(el.groupIds || []), groupId]
+          : (el.groupIds || []).slice(0, -1);
+        return { ...el, groupIds, version: (el.version || 1) + 1, versionNonce: versionNonce() };
+      }));
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'branchChildRight') {
+      branchChildNode('right');
+    } else if (action === 'branchChildDown') {
+      branchChildNode('down');
+    } else if (action === 'autoArrangeTree') {
+      autoArrangeTreeLayout('LR');
+    } else if (action === 'createPresentationFrame') {
+      createPresentationFrame('16:9');
     }
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, autoArrangeTreeLayout, createPresentationFrame]);
+
+  const selectLayer = useCallback((elementId, extendSelection) => {
+    const target = elementsRef.current.find(el => el.id === elementId && !el.isDeleted);
+    if (!target) return;
+    const groupId = target.groupIds?.at(-1);
+    const groupMembers = groupId
+      ? elementsRef.current.filter(el => !el.isDeleted && el.groupIds?.includes(groupId))
+      : [target];
+    const next = extendSelection ? { ...(appStateRef.current.selectedElementIds || {}) } : {};
+    const shouldSelect = !extendSelection || !next[elementId];
+    for (const element of groupMembers) {
+      if (shouldSelect) next[element.id] = true;
+      else delete next[element.id];
+    }
+    setAppState({ selectedElementIds: next });
+    scheduleRender();
+  }, [scheduleRender, setAppState]);
+
+  const updateLayerProperty = useCallback((elementId, property, value) => {
+    const element = elementsRef.current.find(el => el.id === elementId && !el.isDeleted);
+    if (!element || element[property] === value) return;
+    commitHistory();
+    setElements(prev => prev.map(el => el.id === elementId
+      ? { ...el, [property]: value, version: (el.version || 1) + 1, versionNonce: versionNonce(), updated: Date.now() }
+      : el));
+    if (property === 'locked' && value) {
+      const nextSelection = { ...(appStateRef.current.selectedElementIds || {}) };
+      delete nextSelection[elementId];
+      setAppState({ selectedElementIds: nextSelection });
+    }
+    notifyChange();
+    scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
+
+  const moveLayer = useCallback((elementId, direction) => {
+    const current = elementsRef.current;
+    const index = current.findIndex(el => el.id === elementId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+    commitHistory();
+    const reordered = [...current];
+    const now = Date.now();
+    const oldElement = reordered[index];
+    const newElement = reordered[nextIndex];
+    reordered[index] = { ...newElement, version: (newElement.version || 1) + 1, versionNonce: versionNonce(), updated: now };
+    reordered[nextIndex] = { ...oldElement, version: (oldElement.version || 1) + 1, versionNonce: versionNonce(), updated: now };
+    setElements(reordered);
+    notifyChange();
+    scheduleRender();
+  }, [commitHistory, notifyChange, scheduleRender, setElements]);
 
   const handleZoomIn = useCallback(() => {
     setAppState(prev => ({ zoom: { value: Math.min(30, Number((prev.zoom.value * 1.15).toFixed(2))) } }));
@@ -1448,92 +2019,130 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const onKeyDown = useCallback((e) => {
     if (e.code === 'Space') interaction.current.spaceDown = true;
     const target = e.target;
+    if (target?.closest?.('.settings-sidebar-panel')) return;
+
+    // Tab key: Mind Map quick branch child node
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !interaction.current.editingElementId) {
+      const ids = appStateRef.current?.selectedElementIds || {};
+      const hasSelected = Object.values(ids).some(Boolean);
+      if (hasSelected) {
+        e.preventDefault();
+        branchChildNode(e.shiftKey ? 'down' : 'right');
+        return;
+      }
+    }
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
 
-    const isCtrl = e.ctrlKey || e.metaKey;
-
-    if (isCtrl && e.key === 'z' && !e.shiftKey) {
+    const shortcutAction = findShortcutAction(e, getShortcutBindings());
+    if (shortcutAction) {
       e.preventDefault();
-      const prev = historyRef.current.undo(elementsRef.current);
-      if (prev) { setElements(prev); notifyChange(); }
+      switch (shortcutAction) {
+        case 'undo': {
+          const previous = historyRef.current.undo(elementsRef.current);
+          if (previous) { setElements(previous); notifyChange(); scheduleRender(); }
+          return;
+        }
+        case 'redo': {
+          const next = historyRef.current.redo(elementsRef.current);
+          if (next) { setElements(next); notifyChange(); scheduleRender(); }
+          return;
+        }
+        case 'selectAll': {
+          const ids = {};
+          for (const el of elementsRef.current) {
+            if (!el.isDeleted && !el.isHidden && !el.locked) ids[el.id] = true;
+          }
+          setAppState({ selectedElementIds: ids });
+          scheduleRender();
+          return;
+        }
+        case 'copy':
+          window.__doodleClipboard = getSelectedElements().map(el => ({ ...el }));
+          return;
+        case 'paste': {
+          if (window.__doodleClipboard?.length) {
+            commitHistory();
+            const pasted = window.__doodleClipboard.map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
+            setElements(prev => [...prev, ...pasted]);
+            setAppState({ selectedElementIds: Object.fromEntries(pasted.map(el => [el.id, true])) });
+            notifyChange();
+          }
+          return;
+        }
+        case 'duplicate':
+          handleAction('duplicate');
+          return;
+        case 'delete':
+          handleAction('delete');
+          return;
+        case 'group':
+        case 'ungroup':
+        case 'bringToFront':
+        case 'sendToBack':
+          handleAction(shortcutAction);
+          return;
+        case 'zoomIn':
+          handleZoomIn();
+          return;
+        case 'zoomOut':
+          handleZoomOut();
+          return;
+        case 'zoomReset':
+          handleZoomReset();
+          return;
+        case 'toggleLayers':
+          setIsLayersPanelOpen(prev => !prev);
+          return;
+        case 'toggleToolLock':
+          setIsToolLocked(prev => !prev);
+          return;
+        default: {
+          const tool = {
+            toolSelection: 'selection',
+            toolRectangle: 'rectangle',
+            toolDiamond: 'diamond',
+            toolEllipse: 'ellipse',
+            toolArrow: 'arrow',
+            toolLine: 'line',
+            toolFreedraw: 'freedraw',
+            toolText: 'text',
+            toolEraser: 'eraser',
+            toolHand: 'hand',
+            toolFrame: 'frame',
+          }[shortcutAction];
+          if (!tool) return;
+          setAppState({ activeTool: { type: tool } });
+          if (canvasRef.current) canvasRef.current.style.cursor = TOOL_CURSORS[tool] || 'default';
+          return;
+        }
+      }
+    }
+
+    if (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      handleAction('delete');
       return;
     }
-    if (isCtrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       const next = historyRef.current.redo(elementsRef.current);
-      if (next) { setElements(next); notifyChange(); }
-      return;
-    }
-
-    if (isCtrl && e.key === 'a') {
-      e.preventDefault();
-      const ids = {};
-      for (const el of elementsRef.current) if (!el.isDeleted) ids[el.id] = true;
-      setAppState({ selectedElementIds: ids });
-      return;
-    }
-
-    if (isCtrl && e.key === 'c') {
-      window.__doodleClipboard = getSelectedElements().map(el => ({ ...el }));
-      return;
-    }
-
-    if (isCtrl && e.key === 'v') {
-      if (window.__doodleClipboard?.length) {
-        const pasted = window.__doodleClipboard.map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
-        setElements(prev => [...prev, ...pasted]);
-        const ids = {};
-        pasted.forEach(el => { ids[el.id] = true; });
-        setAppState({ selectedElementIds: ids });
-        commitHistory();
-        notifyChange();
-      }
-      return;
-    }
-
-    if (isCtrl && e.key === 'd') {
-      e.preventDefault();
-      const duped = getSelectedElements().map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
-      if (duped.length) {
-        setElements(prev => [...prev, ...duped]);
-        const ids = {};
-        duped.forEach(el => { ids[el.id] = true; });
-        setAppState({ selectedElementIds: ids });
-        commitHistory();
-        notifyChange();
-      }
-      return;
-    }
-
-    // Delete / Backspace
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      const ids = appStateRef.current?.selectedElementIds || {};
-      if (Object.keys(ids).length > 0) {
-        setElements(prev => {
-          const next = prev.map(el => ids[el.id] ? { ...el, isDeleted: true } : el);
-          if (next.filter(el => !el.isDeleted).length === 0) {
-            setAppState(as => ({ ...as, showWelcomeScreen: true }));
-          }
-          return next;
-        });
-        setAppState({ selectedElementIds: {} });
-        commitHistory();
-        notifyChange();
-        scheduleRender();
-      }
+      if (next) { setElements(next); notifyChange(); scheduleRender(); }
       return;
     }
 
     // Font size increase/decrease shortcut for selected text elements (Ctrl+Shift+> / Ctrl+Shift+<)
+    const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && (e.key === '>' || e.key === '<' || (e.shiftKey && (e.key === '.' || e.key === ',')))) {
       const selectedIds = appStateRef.current?.selectedElementIds || {};
-      const selectedTextEls = elementsRef.current.filter(el => selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT);
+      const selectedTextEls = elementsRef.current.filter(el =>
+        selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT && !el.isDeleted && !el.isHidden && !el.locked
+      );
       if (selectedTextEls.length > 0) {
         e.preventDefault();
         const delta = (e.key === '>' || e.key === '.') ? 4 : -4;
         setElements(prev =>
           prev.map(el => {
-            if (selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT) {
+            if (selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT && !el.isDeleted && !el.isHidden && !el.locked) {
               const currentSize = el.fontSize || FONT_SIZE_DEFAULT;
               const newSize = Math.max(8, Math.min(180, currentSize + delta));
               const metrics = measureText(el.text || ' ', newSize, el.fontFamily);
@@ -1556,113 +2165,70 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
     }
 
-    // Ctrl+] / Ctrl+[: Bring to front / Send to back
-    if (isCtrl && (e.key === ']' || e.key === '[')) {
-      e.preventDefault();
-      handleAction(e.key === ']' ? 'bringToFront' : 'sendToBack');
-      return;
-    }
-
-    // Ctrl++ / Ctrl+= (Zoom in), Ctrl+- (Zoom out), Ctrl+0 (Reset zoom)
-    if (isCtrl && (e.key === '=' || e.key === '+')) {
+    if (isCtrl && e.key === '+') {
       e.preventDefault();
       handleZoomIn();
       return;
     }
-    if (isCtrl && (e.key === '-' || e.key === '_')) {
+    if (isCtrl && e.key === '_') {
       e.preventDefault();
       handleZoomOut();
       return;
     }
-    if (isCtrl && e.key === '0') {
-      e.preventDefault();
-      handleZoomReset();
-      return;
-    }
-
-    // Ctrl+G: Group, Ctrl+Shift+G: Ungroup
-    if (isCtrl && (e.key === 'g' || e.key === 'G')) {
-      e.preventDefault();
-      const selectedIds = appStateRef.current?.selectedElementIds || {};
-      const activeIds = Object.keys(selectedIds).filter(id => selectedIds[id]);
-      if (activeIds.length > 0) {
-        if (e.shiftKey) {
-          setElements(prev =>
-            prev.map(el => {
-              if (selectedIds[el.id] && el.groupIds?.length) {
-                return {
-                  ...el,
-                  groupIds: el.groupIds.slice(0, -1),
-                  version: (el.version || 1) + 1,
-                  versionNonce: versionNonce(),
-                };
-              }
-              return el;
-            })
-          );
-        } else {
-          const newGroupId = generateId();
-          setElements(prev =>
-            prev.map(el => {
-              if (selectedIds[el.id]) {
-                return {
-                  ...el,
-                  groupIds: [...(el.groupIds || []), newGroupId],
-                  version: (el.version || 1) + 1,
-                  versionNonce: versionNonce(),
-                };
-              }
-              return el;
-            })
-          );
-        }
-        commitHistory();
-        notifyChange();
-        scheduleRender();
-        return;
-      }
-    }
 
     // Escape
     if (e.key === 'Escape') {
+      if (isLayersPanelOpen) {
+        setIsLayersPanelOpen(false);
+        return;
+      }
+      if (isComponentsPanelOpen) {
+        setIsComponentsPanelOpen(false);
+        return;
+      }
+      if (isPortalPanelOpen || isChangeTrackingOpen || isSimulationActive ||
+          isResponsivePanelOpen) {
+        if (responsiveBreakpoint) {
+          const savedElements = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
+          commitHistory();
+          setElements(applyResponsiveLayout(savedElements, 'desktop'));
+          notifyChange();
+          scheduleRender();
+        }
+        setIsPortalPanelOpen(false);
+        setIsChangeTrackingOpen(false);
+        setIsSimulationActive(false);
+        setIsResponsivePanelOpen(false);
+        setResponsiveBreakpoint(null);
+        setSimulationCurrentId(null);
+        setSimulationPath([]);
+        return;
+      }
       finishTextEdit();
       setAppState({ selectedElementIds: {}, activeTool: { type: 'selection' } });
       return;
     }
 
-    // Tool shortcuts
-    if (!isCtrl && !e.shiftKey && !e.altKey) {
-      if (e.key === 'q' || e.key === 'Q') {
-        setIsToolLocked(prev => !prev);
-        return;
-      }
-
-      const keyToolMap = {
-        '1': 'selection', 'v': 'selection',
-        '2': 'rectangle', 'r': 'rectangle',
-        '3': 'diamond', 'd': 'diamond',
-        '4': 'ellipse', 'o': 'ellipse', 'c': 'ellipse',
-        '5': 'arrow', 'a': 'arrow',
-        '6': 'line', 'l': 'line',
-        '7': 'freedraw', 'p': 'freedraw',
-        '8': 'text', 't': 'text',
-        '0': 'eraser', 'e': 'eraser',
-        'h': 'hand',
-        'f': 'frame',
-      };
-      if (e.key === '9') {
-        e.preventDefault();
-        document.querySelector('.App-toolbar input[type="file"]')?.click();
-        return;
-      }
-      const tool = keyToolMap[e.key.toLowerCase()];
-      if (tool) {
-        setAppState({ activeTool: { type: tool } });
-        if (canvasRef.current) {
-          canvasRef.current.style.cursor = TOOL_CURSORS[tool] || 'default';
-        }
-        return;
-      }
+    // Number-row shortcuts remain as convenient alternate tool selectors.
+    const numericTools = {
+      '1': 'selection', '2': 'rectangle', '3': 'diamond', '4': 'ellipse',
+      '5': 'arrow', '6': 'line', '7': 'freedraw', '8': 'text', '0': 'eraser',
+    };
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key === '9') {
+      e.preventDefault();
+      document.querySelector('.App-toolbar input[type="file"]')?.click();
+      return;
+    }
+    const numericTool = numericTools[e.key];
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && numericTool) {
+      setAppState({ activeTool: { type: numericTool } });
+      if (canvasRef.current) canvasRef.current.style.cursor = TOOL_CURSORS[numericTool] || 'default';
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'c') {
+      setAppState({ activeTool: { type: 'ellipse' } });
+      if (canvasRef.current) canvasRef.current.style.cursor = TOOL_CURSORS.ellipse;
+      return;
     }
 
     // Arrow keys to nudge selected elements
@@ -1672,12 +2238,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const [ndx, ndy] = nudge.map(v => v * (e.shiftKey ? 10 : 1));
       const ids = appStateRef.current?.selectedElementIds || {};
       setElements(prev => prev.map(el =>
-        ids[el.id] ? { ...el, x: el.x + ndx, y: el.y + ndy } : el
+        ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked
+          ? { ...el, x: el.x + ndx, y: el.y + ndy }
+          : el
       ));
       commitHistory();
       notifyChange();
     }
-  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange]);
+  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange, scheduleRender, handleAction, handleZoomIn, handleZoomOut, handleZoomReset, isLayersPanelOpen, isComponentsPanelOpen, isPortalPanelOpen, isChangeTrackingOpen, isSimulationActive, isResponsivePanelOpen, responsiveBreakpoint]);
 
   const onKeyUp = useCallback((e) => {
     if (e.code === 'Space') interaction.current.spaceDown = false;
@@ -1688,7 +2256,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const [sx, sy] = getScenePoint(e);
     const hit = getElementAtPoint(elementsRef.current, sx, sy);
 
-    if (hit?.type === ELEMENT_TYPES.TEXT) {
+    if (hit?.type === ELEMENT_TYPES.BOARD_PORTAL) {
+      onNavigateBoardPortal?.(hit.portalWorkspaceId, hit.portalFileId);
+    } else if (hit?.type === ELEMENT_TYPES.TEXT) {
       startTextEditOnElement(hit);
     } else if (hit?.boundElements?.length) {
       // Direct double-click editing on sticky notes and containers
@@ -1713,7 +2283,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     } else {
       startTextEdit(sx, sy);
     }
-  }, [getScenePoint, setElements, commitHistory, scheduleRender]);
+  }, [getScenePoint, setElements, commitHistory, scheduleRender, onNavigateBoardPortal]);
 
   // ── Text editing ──
   function startTextEdit(sx, sy) {
@@ -1888,8 +2458,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       // Scene mutation
       updateScene: (sceneData) => {
         if (sceneData.elements !== undefined) {
-          setElements(sceneData.elements);
           if (sceneData.commitToHistory !== false) commitHistory();
+          setElements(sceneData.elements);
         }
         if (sceneData.appState !== undefined) {
           setAppState(prev => ({ ...prev, ...sceneData.appState }));
@@ -1930,7 +2500,39 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         scheduleRender();
       },
 
-      // Viewport
+      // ── Canvas Time Machine API ──
+      getTimeMachineTimeline: () => {
+        return historyRef.current.getTimeline(elementsRef.current);
+      },
+      previewTimeMachineStep: (index) => {
+        if (!timeMachineOriginalRef.current) {
+          timeMachineOriginalRef.current = elementsRef.current;
+        }
+        const snapshot = historyRef.current.peekSnapshot(index, timeMachineOriginalRef.current);
+        if (snapshot) {
+          setElements(snapshot);
+          scheduleRender();
+        }
+      },
+      exitTimeMachinePreview: () => {
+        if (timeMachineOriginalRef.current) {
+          setElements(timeMachineOriginalRef.current);
+          timeMachineOriginalRef.current = null;
+          scheduleRender();
+        }
+      },
+      restoreTimeMachineStep: (index) => {
+        const base = timeMachineOriginalRef.current || elementsRef.current;
+        const restored = historyRef.current.restoreTo(index, base);
+        timeMachineOriginalRef.current = null;
+        if (restored) {
+          setElements(restored);
+          notifyChange();
+          scheduleRender();
+        }
+      },
+
+      // Viewport with Cinematic Smooth Animated Camera Easing
       scrollToContent: (elementsOrPoints, opts = {}) => {
         const els = elementsOrPoints || elementsRef.current.filter(el => !el.isDeleted);
         if (!els || els.length === 0) return;
@@ -1941,15 +2543,297 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const dpr = window.devicePixelRatio || 1;
         const cw = canvas.width / dpr;
         const ch = canvas.height / dpr;
-        const padding = 80;
+        const padding = opts.padding || 80;
         const zx = (cw - padding * 2) / (bounds.width || 1);
         const zy = (ch - padding * 2) / (bounds.height || 1);
-        const z = Math.min(1, zx, zy);
-        setAppState({
-          zoom: { value: z },
-          scrollX: cw / 2 - (bounds.x + bounds.width / 2) * z,
-          scrollY: ch / 2 - (bounds.y + bounds.height / 2) * z,
-        });
+        const targetZ = Math.min(1.5, Math.max(0.1, Math.min(zx, zy)));
+        const targetScrollX = cw / 2 - (bounds.x + bounds.width / 2) * targetZ;
+        const targetScrollY = ch / 2 - (bounds.y + bounds.height / 2) * targetZ;
+
+        if (opts.animate) {
+          const startScrollX = appStateRef.current.scrollX || 0;
+          const startScrollY = appStateRef.current.scrollY || 0;
+          const startZ = appStateRef.current.zoom?.value || 1;
+          const startTime = performance.now();
+          const duration = opts.duration || 420;
+
+          const step = (now) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(1, elapsed / duration);
+            // Smooth easeInOutCubic
+            const ease = progress < 0.5
+              ? 4 * progress * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+            setAppState({
+              zoom: { value: startZ + (targetZ - startZ) * ease },
+              scrollX: startScrollX + (targetScrollX - startScrollX) * ease,
+              scrollY: startScrollY + (targetScrollY - startScrollY) * ease,
+            });
+
+            if (progress < 1) {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        } else {
+          setAppState({
+            zoom: { value: targetZ },
+            scrollX: targetScrollX,
+            scrollY: targetScrollY,
+          });
+        }
+      },
+
+      // Mind Mapping: Branch child node with connecting arrow
+      branchChildNode: (direction = 'right') => {
+        const as = appStateRef.current;
+        const selectedIds = Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]);
+        if (selectedIds.length === 0) return;
+        const parent = elementsRef.current.find(el => el.id === selectedIds[0] && !el.isDeleted);
+        if (!parent) return;
+
+        const isLR = direction === 'right' || direction === 'left';
+        const isUp = direction === 'up';
+        const isLeft = direction === 'left';
+
+        const parentW = parent.width || 180;
+        const parentH = parent.height || 64;
+        const gapX = 130;
+        const gapY = 85;
+
+        const childX = isLR ? (isLeft ? parent.x - parentW - gapX : parent.x + parentW + gapX) : parent.x;
+        const childY = isLR ? parent.y : (isUp ? parent.y - parentH - gapY : parent.y + parentH + gapY);
+
+        const childId = 'node_' + generateId();
+        const textId = 'text_' + generateId();
+        const arrowId = 'arrow_' + generateId();
+
+        const childShape = {
+          ...parent,
+          id: childId,
+          x: childX,
+          y: childY,
+          width: parentW,
+          height: parentH,
+          boundElements: [{ id: textId, type: 'text' }],
+          groupIds: [],
+          frameId: parent.frameId || null,
+          seed: Math.floor(Math.random() * 100000),
+          version: 1,
+          versionNonce: versionNonce(),
+        };
+
+        const font = parent.fontFamily || (FONT_FAMILY?.Doodlefont ?? 5);
+        const childText = {
+          id: textId,
+          type: 'text',
+          x: childX + 10,
+          y: childY + (parentH / 2) - 12,
+          width: Math.max(20, parentW - 20),
+          height: 24,
+          strokeColor: '#f3f4f6',
+          backgroundColor: 'transparent',
+          fillStyle: 'solid',
+          strokeWidth: 1,
+          fontFamily: font,
+          fontSize: 15,
+          textAlign: 'center',
+          verticalAlign: 'middle',
+          text: 'New Topic',
+          originalText: 'New Topic',
+          containerId: childId,
+          version: 1,
+          versionNonce: versionNonce(),
+        };
+
+        const pCenterX = parent.x + parentW / 2;
+        const pCenterY = parent.y + parentH / 2;
+        const cCenterX = childX + parentW / 2;
+        const cCenterY = childY + parentH / 2;
+
+        let startX, startY, endX, endY;
+        if (direction === 'right') {
+          startX = parent.x + parentW;
+          startY = pCenterY;
+          endX = childX;
+          endY = cCenterY;
+        } else if (direction === 'down') {
+          startX = pCenterX;
+          startY = parent.y + parentH;
+          endX = cCenterX;
+          endY = childY;
+        } else if (direction === 'left') {
+          startX = parent.x;
+          startY = pCenterY;
+          endX = childX + parentW;
+          endY = cCenterY;
+        } else {
+          startX = pCenterX;
+          startY = parent.y;
+          endX = cCenterX;
+          endY = childY + parentH;
+        }
+
+        const dx = endX - startX;
+        const dy = endY - startY;
+
+        const arrowEl = {
+          id: arrowId,
+          type: ELEMENT_TYPES.ARROW,
+          x: startX,
+          y: startY,
+          width: Math.abs(dx),
+          height: Math.abs(dy),
+          strokeColor: '#94a3b8',
+          backgroundColor: 'transparent',
+          strokeWidth: 2,
+          roughness: 1,
+          opacity: 100,
+          points: [[0, 0], [dx, dy]],
+          startBinding: { elementId: parent.id, focus: 0, gap: 1 },
+          endBinding: { elementId: childId, focus: 0, gap: 1 },
+          endArrowhead: 'arrow',
+          version: 1,
+          versionNonce: versionNonce(),
+        };
+
+        setElements(prev => [...prev, childShape, childText, arrowEl]);
+        setAppState({ selectedElementIds: { [childId]: true } });
+        commitHistory();
+        notifyChange();
+        scheduleRender();
+      },
+
+      // Auto-arrange tree layout for connected nodes
+      autoArrangeTreeLayout: (direction = 'LR') => {
+        const currentEls = elementsRef.current.filter(el => !el.isDeleted);
+        const arrows = currentEls.filter(el => (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) && el.startBinding?.elementId && el.endBinding?.elementId);
+        if (arrows.length === 0) return;
+
+        const parentMap = new Map();
+        const childrenMap = new Map();
+        const nodeMap = new Map();
+
+        for (const el of currentEls) {
+          if (el.type !== ELEMENT_TYPES.ARROW && el.type !== ELEMENT_TYPES.LINE && el.type !== 'text') {
+            nodeMap.set(el.id, el);
+          }
+        }
+
+        for (const arrow of arrows) {
+          const pId = arrow.startBinding.elementId;
+          const cId = arrow.endBinding.elementId;
+          if (nodeMap.has(pId) && nodeMap.has(cId)) {
+            parentMap.set(cId, pId);
+            if (!childrenMap.has(pId)) childrenMap.set(pId, []);
+            childrenMap.get(pId).push(cId);
+          }
+        }
+
+        const roots = [];
+        for (const [id] of nodeMap) {
+          if (!parentMap.has(id) && childrenMap.has(id)) {
+            roots.push(id);
+          }
+        }
+        if (roots.length === 0) return;
+
+        const isLR = direction === 'LR';
+        const gapX = isLR ? 150 : 90;
+        const gapY = isLR ? 60 : 120;
+        const arrangedPositions = new Map();
+
+        for (const rootId of roots) {
+          const rootNode = nodeMap.get(rootId);
+          const startX = rootNode.x;
+          const startY = rootNode.y;
+
+          const positionNode = (nodeId, level, secondaryPos) => {
+            const node = nodeMap.get(nodeId);
+            const nw = node.width || 180;
+            const nh = node.height || 60;
+
+            const posX = isLR ? startX + level * (nw + gapX) : secondaryPos;
+            const posY = isLR ? secondaryPos : startY + level * (nh + gapY);
+
+            arrangedPositions.set(nodeId, { x: posX, y: posY });
+
+            const children = childrenMap.get(nodeId) || [];
+            if (children.length === 0) return;
+
+            let childSec = secondaryPos - ((children.length - 1) * (isLR ? nh + gapY : nw + gapX)) / 2;
+            for (const cId of children) {
+              positionNode(cId, level + 1, childSec);
+              childSec += isLR ? nh + gapY : nw + gapX;
+            }
+          };
+
+          positionNode(rootId, 0, isLR ? startY : startX);
+        }
+
+        setElements(prev => prev.map(el => {
+          if (arrangedPositions.has(el.id)) {
+            const pos = arrangedPositions.get(el.id);
+            return { ...el, x: pos.x, y: pos.y, version: (el.version || 1) + 1 };
+          }
+          if (el.containerId && arrangedPositions.has(el.containerId)) {
+            const pos = arrangedPositions.get(el.containerId);
+            const container = nodeMap.get(el.containerId);
+            const origX = container.x;
+            const origY = container.y;
+            return { ...el, x: el.x + (pos.x - origX), y: el.y + (pos.y - origY), version: (el.version || 1) + 1 };
+          }
+          return el;
+        }));
+
+        commitHistory();
+        notifyChange();
+        scheduleRender();
+      },
+
+      // Create standardized presentation frame
+      createPresentationFrame: (aspectRatio = '16:9') => {
+        const frameCount = elementsRef.current.filter(el => el.type === ELEMENT_TYPES.FRAME && !el.isDeleted).length + 1;
+        const as = appStateRef.current;
+        const cw = canvasRef.current?.width || window.innerWidth;
+        const ch = canvasRef.current?.height || window.innerHeight;
+        const z = as.zoom?.value || 1;
+        const centerX = -as.scrollX + cw / (2 * z);
+        const centerY = -as.scrollY + ch / (2 * z);
+
+        const frameW = 960;
+        const frameH = aspectRatio === '4:3' ? 720 : 540;
+        const frameId = 'frame_' + generateId();
+
+        const frameEl = {
+          id: frameId,
+          type: ELEMENT_TYPES.FRAME,
+          name: `Slide ${frameCount}`,
+          x: Math.round(centerX - frameW / 2),
+          y: Math.round(centerY - frameH / 2),
+          width: frameW,
+          height: frameH,
+          strokeColor: '#444444',
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          fillStyle: 'solid',
+          strokeWidth: 2,
+          roughness: 0,
+          opacity: 100,
+          groupIds: [],
+          frameId: null,
+          roundness: { type: 2 },
+          seed: Math.floor(Math.random() * 100000),
+          version: 1,
+          versionNonce: versionNonce(),
+          isDeleted: false,
+        };
+
+        setElements(prev => [...prev, frameEl]);
+        setAppState({ selectedElementIds: { [frameId]: true } });
+        commitHistory();
+        notifyChange();
+        scheduleRender();
       },
 
       // Library (stub for compatibility)
@@ -1982,6 +2866,18 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       canvasToScene: (cx, cy) => canvasToScene(cx, cy),
       getSelectedElements: () => getSelectedElements(),
       setSelectedElements: (ids) => setAppState({ selectedElementIds: ids || {} }),
+      toggleLayerVisibility: (id) => {
+        const element = elementsRef.current.find(item => item.id === id && !item.isDeleted);
+        if (element) updateLayerProperty(id, 'isHidden', !element.isHidden);
+      },
+      toggleLayerLock: (id) => {
+        const element = elementsRef.current.find(item => item.id === id && !item.isDeleted);
+        if (element) updateLayerProperty(id, 'locked', !element.locked);
+      },
+      moveLayer,
+      groupSelected: () => handleAction('group'),
+      ungroupSelected: () => handleAction('ungroup'),
+      toggleLayersPanel: () => setIsLayersPanelOpen(prev => !prev),
 
       // Zoom
       zoomIn: () => {
@@ -1996,13 +2892,52 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       setBackgroundColor: (color) => setAppState({ viewBackgroundColor: color }),
       focus: () => canvasRef.current?.focus(),
       selectAll: () => {
-        const all = elementsRef.current.filter(el => !el.isDeleted);
+        const all = elementsRef.current.filter(el => !el.isDeleted && !el.isHidden && !el.locked);
         setAppState({ selectedElementIds: Object.fromEntries(all.map(el => [el.id, true])) });
       },
       clearSelection: () => setAppState({ selectedElementIds: {} }),
       getElementById: (id) => elementsRef.current.find(el => el.id === id),
       restyleElement: (id, patch) => {
         setElements(prev => prev.map(el => el.id === id ? { ...el, ...patch } : el));
+      },
+      insertSvgIcon: ({ svgString, name = 'Icon', width = 48, height = 48, x, y }) => {
+        const fileId = generateId();
+        const dataURL = `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+        const img = new window.Image();
+        img.onload = () => {
+          imageCache.current[fileId] = img;
+          const fileObj = {
+            id: fileId,
+            dataURL,
+            mimeType: 'image/svg+xml',
+            created: Date.now(),
+          };
+          setFiles(prev => ({ ...prev, [fileId]: fileObj }));
+
+          let sceneX = x;
+          let sceneY = y;
+          if (sceneX === undefined || sceneY === undefined) {
+            const canvas = canvasRef.current;
+            const dpr = window.devicePixelRatio || 1;
+            const cw = (canvas?.width || 800) / dpr;
+            const ch = (canvas?.height || 600) / dpr;
+            [sceneX, sceneY] = canvasToScene(cw / 2 - width / 2, ch / 2 - height / 2);
+          }
+
+          const el = createElement(ELEMENT_TYPES.IMAGE, Math.round(sceneX), Math.round(sceneY), width, height, {
+            fileId,
+            strokeColor: 'transparent',
+            backgroundColor: 'transparent',
+            name: name,
+          });
+
+          setElements(prev => [...prev, el]);
+          commitHistory();
+          setAppState({ selectedElementIds: { [el.id]: true }, activeTool: { type: 'selection' }, showWelcomeScreen: false });
+          notifyChange();
+          scheduleRender();
+        };
+        img.src = dataURL;
       },
       toBlob: () => exportToBlob(),
     };
@@ -2021,6 +2956,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     setAppState,
     setElements,
     setFiles,
+    updateLayerProperty,
+    moveLayer,
+    handleAction,
   ]);
 
   // Theme change - update background and shape drawing default color
@@ -2116,7 +3054,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
   const handleUpdateProperty = useCallback((key, value) => {
     const selectedIds = appStateRef.current.selectedElementIds || {};
-    const hasSelection = Object.values(selectedIds).some(Boolean);
+    const hasSelection = elementsRef.current.some(el =>
+      selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked
+    );
     const normalizedValue = key === 'roundness'
       ? value  // keep as 'sharp' or 'round' string — renderer checks these directly
       : value;
@@ -2124,7 +3064,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (hasSelection) {
       setElements(prev =>
         prev.map(el => {
-          if (selectedIds[el.id]) {
+          if (selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked) {
             if (el.type === ELEMENT_TYPES.TEXT && (key === 'fontSize' || key === 'fontFamily' || key === 'text')) {
               const newFontSize = key === 'fontSize' ? normalizedValue : (el.fontSize || FONT_SIZE_DEFAULT);
               const newFontFamily = key === 'fontFamily' ? normalizedValue : (el.fontFamily || 5);
@@ -2173,6 +3113,240 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
 
+  const selectedElementsForComponent = getSelectedElements();
+  const selectedComponentIds = [...new Set(selectedElementsForComponent
+    .map(element => element.componentId)
+    .filter(Boolean))];
+  const selectedComponentId = selectedComponentIds.length === 1 &&
+    selectedElementsForComponent.every(element => element.componentId === selectedComponentIds[0])
+    ? selectedComponentIds[0]
+    : null;
+  const simulationGraph = buildSimulationGraph(elements);
+  const simulationChoices = simulationCurrentId
+    ? getSimulationChoices(simulationGraph, simulationCurrentId)
+    : [];
+  const changeRows = changeSnapshot
+    ? compareSceneToSnapshot(elements, changeSnapshot)
+    : [];
+  const responsiveViewport = responsiveBreakpoint
+    ? (() => {
+      const target = RESPONSIVE_BREAKPOINTS[responsiveBreakpoint];
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const scale = Math.min(
+        1,
+        (canvasRect?.width || target.width) / target.width,
+        (canvasRect?.height || target.height) / target.height
+      );
+      return {
+        ...target,
+        displayWidth: Math.round(target.width * scale),
+        displayHeight: Math.round(target.height * scale),
+      };
+    })()
+    : null;
+
+  const createComponentFromSelection = (name) => {
+    const component = createSmartComponent(selectedElementsForComponent, name, filesRef.current);
+    const nextComponents = writeSmartComponents([...readSmartComponents(), component]);
+    setSmartComponents(nextComponents);
+  };
+
+  const insertComponent = (component) => {
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    if (!rect) throw new Error('The canvas is not ready for component insertion.');
+    const [centerX, centerY] = canvasToScene(rect.width / 2, rect.height / 2);
+    const instance = instantiateSmartComponent(
+      component,
+      centerX - component.width / 2,
+      centerY - component.height / 2
+    );
+    commitHistory();
+    setElements([...elementsRef.current, ...instance.elements]);
+    if (Object.keys(instance.files).length) setFiles(prev => ({ ...prev, ...instance.files }));
+    setAppState(prev => ({
+      ...prev,
+      selectedElementIds: Object.fromEntries(instance.elements.map(element => [element.id, true])),
+    }));
+    notifyChange();
+    scheduleRender();
+  };
+
+  const updateComponentMaster = (componentId) => {
+    const selectedInstanceIds = [...new Set(selectedElementsForComponent
+      .filter(element => element.componentId === componentId && element.componentInstanceId)
+      .map(element => element.componentInstanceId))];
+    if (selectedInstanceIds.length !== 1) {
+      throw new Error('Select exactly one component instance to update its master.');
+    }
+    const selectedInstance = elementsRef.current.filter(
+      element => !element.isDeleted &&
+        element.componentId === componentId &&
+        element.componentInstanceId === selectedInstanceIds[0]
+    );
+    if (selectedInstance.length === 0) {
+      throw new Error('The selected component instance is empty.');
+    }
+    const current = readSmartComponents();
+    const existing = current.find(component => component.id === componentId);
+    if (!existing) throw new Error('This component is no longer in the saved library.');
+    const updated = createSmartComponent(selectedInstance, existing.name, filesRef.current, componentId);
+    const nextComponents = writeSmartComponents(current.map(component =>
+      component.id === componentId ? updated : component
+    ));
+    setSmartComponents(nextComponents);
+    const updatedInstances = props.onUpdateComponentInstances?.(updated) || 0;
+    if (!props.onUpdateComponentInstances) {
+      const result = updateSmartComponentInstances(elementsRef.current, updated);
+      if (result.instanceCount) {
+        commitHistory();
+        setElements(result.elements);
+        if (Object.keys(result.files).length) setFiles(prev => ({ ...prev, ...result.files }));
+        notifyChange();
+        scheduleRender();
+      }
+    }
+    if (!updatedInstances && props.onUpdateComponentInstances) {
+      throw new Error('No linked instances were found on any board.');
+    }
+  };
+
+  const deleteSmartComponent = (componentId) => {
+    const nextComponents = writeSmartComponents(
+      readSmartComponents().filter(component => component.id !== componentId)
+    );
+    setSmartComponents(nextComponents);
+  };
+
+  const createBoardPortal = (workspace, file) => {
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    if (!rect) throw new Error('The canvas is not ready for portal insertion.');
+    const [centerX, centerY] = canvasToScene(rect.width / 2, rect.height / 2);
+    const portal = createElement(ELEMENT_TYPES.BOARD_PORTAL, centerX - 140, centerY - 75, 280, 150, {
+      portalWorkspaceId: workspace.id,
+      portalFileId: file.id,
+      portalWorkspaceName: workspace.name,
+      portalFileName: file.name,
+      portalTheme: theme,
+      backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff',
+      strokeColor: '#6366f1',
+      roughness: 0,
+    });
+    commitHistory();
+    setElements([...elementsRef.current, portal]);
+    setAppState(prev => ({
+      ...prev,
+      selectedElementIds: { [portal.id]: true },
+      showWelcomeScreen: false,
+    }));
+    setIsPortalPanelOpen(false);
+    notifyChange();
+    scheduleRender();
+  };
+
+  const saveChangeBaseline = () => {
+    try {
+      const nextSnapshot = createChangeSnapshot(elementsRef.current);
+      writeChangeSnapshot(workspaceId, fileId, nextSnapshot);
+      setChangeSnapshot(nextSnapshot);
+    } catch (error) {
+      console.error('Unable to save board change tracking baseline', error);
+      window.alert(`Could not save this board's change baseline: ${error.message}`);
+    }
+  };
+
+  const removeChangeBaseline = () => {
+    try {
+      clearChangeSnapshot(workspaceId, fileId);
+      setChangeSnapshot(null);
+    } catch (error) {
+      console.error('Unable to remove board change tracking baseline', error);
+      window.alert(`Could not remove this board's change baseline: ${error.message}`);
+    }
+  };
+
+  const focusTrackedChange = (change) => {
+    const currentElement = elementsRef.current.find(element => element.id === change.id && !element.isDeleted);
+    const target = currentElement || change.element;
+    if (!target) return;
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    if (!rect) return;
+    const zoom = appStateRef.current.zoom?.value || 1;
+    const x = target.x + (target.width || 0) / 2;
+    const y = target.y + (target.height || 0) / 2;
+    setAppState({
+      scrollX: rect.width / 2 - x * zoom,
+      scrollY: rect.height / 2 - y * zoom,
+      ...(currentElement ? { selectedElementIds: { [currentElement.id]: true } } : { selectedElementIds: {} }),
+    });
+  };
+
+  const startSimulationAt = (nodeId) => {
+    setSimulationCurrentId(nodeId);
+    setSimulationPath([nodeId]);
+  };
+
+  const startSimulation = () => {
+    closeResponsivePreview();
+    setIsLayersPanelOpen(false);
+    setIsComponentsPanelOpen(false);
+    setIsPortalPanelOpen(false);
+    setIsChangeTrackingOpen(false);
+    setIsSimulationActive(true);
+    const selected = getSelectedElements().find(element =>
+      simulationGraph.nodes.some(node => node.id === element.id)
+    );
+    if (selected) startSimulationAt(selected.id);
+    else if (simulationGraph.starts.length === 1) startSimulationAt(simulationGraph.starts[0].id);
+    else {
+      setSimulationCurrentId(null);
+      setSimulationPath([]);
+    }
+  };
+
+  const chooseSimulationBranch = (choice) => {
+    setSimulationCurrentId(choice.to);
+    setSimulationPath(path => [...path, choice.to]);
+  };
+
+  const selectResponsiveBreakpoint = (breakpoint) => {
+    let source = elementsRef.current;
+    if (responsiveBreakpoint) {
+      source = captureResponsiveLayout(source, responsiveBreakpoint);
+    } else {
+      source = initializeResponsiveBase(source);
+    }
+    const next = applyResponsiveLayout(source, breakpoint);
+    commitHistory();
+    setElements(next);
+    setResponsiveBreakpoint(breakpoint);
+    notifyChange();
+    scheduleRender();
+  };
+
+  const saveCurrentResponsiveLayout = () => {
+    if (!responsiveBreakpoint) return;
+    const next = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
+    commitHistory();
+    setElements(next);
+    notifyChange();
+    scheduleRender();
+  };
+
+  const closeResponsivePreview = () => {
+    if (responsiveBreakpoint) {
+      const source = captureResponsiveLayout(elementsRef.current, responsiveBreakpoint);
+      commitHistory();
+      setElements(applyResponsiveLayout(source, 'desktop'));
+      notifyChange();
+      scheduleRender();
+    }
+    setResponsiveBreakpoint(null);
+    setIsResponsivePanelOpen(false);
+  };
+
   // ── Welcome screen ──
   const nonDeletedElements = elements.filter(e => !e.isDeleted);
   const showWelcome = nonDeletedElements.length === 0 &&
@@ -2196,8 +3370,91 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         onContextMenu={onContextMenu}
       />
 
+      {responsiveViewport && (
+        <div
+          className="doodle-responsive-preview-frame"
+          style={{
+            width: responsiveViewport.displayWidth,
+            height: responsiveViewport.displayHeight,
+          }}
+          aria-label={`${responsiveViewport.label} preview, ${responsiveViewport.width} by ${responsiveViewport.height}`}
+        >
+          <span>{responsiveViewport.label} · {responsiveViewport.width} × {responsiveViewport.height}</span>
+        </div>
+      )}
+
+      {changeRows.map(change => {
+        const bounds = getElementBounds(change.element);
+        const [left, top] = sceneBoundsToCanvas(bounds.x, bounds.y);
+        const zoom = appState.zoom?.value || 1;
+        return (
+          <div
+            key={`change-marker:${change.status}:${change.id}`}
+            className={`doodle-change-marker is-${change.status}`}
+            style={{
+              left,
+              top,
+              width: Math.max(8, bounds.width * zoom),
+              height: Math.max(8, bounds.height * zoom),
+              transform: change.element.angle ? `rotate(${change.element.angle}rad)` : undefined,
+            }}
+            aria-hidden="true"
+          />
+        );
+      })}
+
+      {isSimulationActive && simulationCurrentId && (() => {
+        const currentNode = simulationGraph.nodes.find(node => node.id === simulationCurrentId);
+        if (!currentNode) return null;
+        const bounds = getElementBounds(currentNode);
+        const [left, top] = sceneBoundsToCanvas(bounds.x, bounds.y);
+        const zoom = appState.zoom?.value || 1;
+        return (
+          <div
+            className="doodle-simulation-focus"
+            style={{
+              left,
+              top,
+              width: Math.max(8, bounds.width * zoom),
+              height: Math.max(8, bounds.height * zoom),
+              transform: currentNode.angle ? `rotate(${currentNode.angle}rad)` : undefined,
+            }}
+            aria-hidden="true"
+          />
+        );
+      })()}
+
+      {elements.filter(element =>
+        element.type === ELEMENT_TYPES.BOARD_PORTAL && !element.isDeleted && !element.isHidden
+      ).map(element => {
+        const [left, top] = sceneBoundsToCanvas(element.x, element.y);
+        const zoom = appState.zoom?.value || 1;
+        return (
+          <div
+            key={`portal-open:${element.id}`}
+            className="doodle-portal-overlay"
+            style={{
+              left,
+              top,
+              width: Math.max(0, Math.abs(element.width) * zoom),
+              height: Math.max(0, Math.abs(element.height) * zoom),
+              transform: element.angle ? `rotate(${element.angle}rad)` : undefined,
+            }}
+          >
+            <button
+              type="button"
+              title={`Open ${element.portalFileName || 'linked board'}`}
+              aria-label={`Open linked board ${element.portalFileName || ''}`}
+              onClick={() => onNavigateBoardPortal?.(element.portalWorkspaceId, element.portalFileId)}
+            >
+              Open board <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        );
+      })}
+
       {/* Web content is rendered as a DOM overlay */}
-      {renderEmbeddable && elements.filter((el) => (el.type === ELEMENT_TYPES.IFRAME || el.type === 'embeddable' || el.type === 'iframe') && !el.isDeleted).map((el) => {
+      {renderEmbeddable && elements.filter((el) => (el.type === ELEMENT_TYPES.IFRAME || el.type === 'embeddable' || el.type === 'iframe') && !el.isDeleted && !el.isHidden).map((el) => {
         const [left, top] = sceneBoundsToCanvas(el.x, el.y);
         const z = appState.zoom?.value || 1;
         const inset = 4 / z;
@@ -2261,8 +3518,123 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         }}
       />
 
+      <div className="doodle-feature-tools-left" aria-label="Diagram features">
+        <button
+          type="button"
+          className={`doodle-feature-tool-button${isResponsivePanelOpen ? ' is-active' : ''}`}
+          onClick={() => {
+            if (isResponsivePanelOpen) {
+              closeResponsivePreview();
+              return;
+            }
+            setIsLayersPanelOpen(false);
+            setIsComponentsPanelOpen(false);
+            setIsPortalPanelOpen(false);
+            setIsChangeTrackingOpen(false);
+            setIsSimulationActive(false);
+            setIsResponsivePanelOpen(true);
+          }}
+          title="Responsive layouts"
+          aria-label="Toggle responsive layouts"
+          aria-expanded={isResponsivePanelOpen}
+        >
+          <Smartphone size={18} strokeWidth={1.8} />
+        </button>
+        <button
+          type="button"
+          className={`doodle-feature-tool-button${isSimulationActive ? ' is-active' : ''}`}
+          onClick={() => {
+            if (isSimulationActive) {
+              setIsSimulationActive(false);
+              setSimulationCurrentId(null);
+              setSimulationPath([]);
+            } else {
+              startSimulation();
+            }
+          }}
+          title={isSimulationActive ? 'Exit diagram simulation' : 'Simulate connected flow'}
+          aria-label={isSimulationActive ? 'Exit diagram simulation' : 'Start diagram simulation'}
+          aria-pressed={isSimulationActive}
+        >
+          <CirclePlay size={20} strokeWidth={1.8} />
+        </button>
+        <button
+          type="button"
+          className={`doodle-feature-tool-button${isChangeTrackingOpen ? ' is-active' : ''}`}
+          onClick={() => {
+            setIsLayersPanelOpen(false);
+            setIsComponentsPanelOpen(false);
+            setIsPortalPanelOpen(false);
+            setIsSimulationActive(false);
+            setIsChangeTrackingOpen(value => !value);
+          }}
+          title="Visual change tracking"
+          aria-label="Toggle visual change tracking"
+          aria-expanded={isChangeTrackingOpen}
+        >
+          <GitCompareArrows size={20} strokeWidth={1.8} />
+        </button>
+        <button
+          type="button"
+          className={`doodle-feature-tool-button${isPortalPanelOpen ? ' is-active' : ''}`}
+          onClick={() => {
+            setIsLayersPanelOpen(false);
+            setIsComponentsPanelOpen(false);
+            setIsChangeTrackingOpen(false);
+            setIsSimulationActive(false);
+            setIsPortalPanelOpen(value => !value);
+          }}
+          title="Create a board portal"
+          aria-label="Toggle board portal panel"
+          aria-expanded={isPortalPanelOpen}
+        >
+          <PanelTop size={20} strokeWidth={1.8} />
+        </button>
+      </div>
+
       {/* Top-Right Stack: Library Button (Settings button portals in below this) */}
       <div className="layer-ui__wrapper__top-right">
+        <button
+          type="button"
+          className={`ToolIcon ToolIcon_type_button sidebar-trigger${isComponentsPanelOpen ? ' is-active' : ''}`}
+          onClick={() => {
+            try {
+              setSmartComponents(readSmartComponents());
+              setIsLayersPanelOpen(false);
+              setIsPortalPanelOpen(false);
+              setIsChangeTrackingOpen(false);
+              setIsSimulationActive(false);
+              setIsComponentsPanelOpen(prev => !prev);
+            } catch (error) {
+              window.alert(`Could not open the component library: ${error.message}`);
+            }
+          }}
+          title="Smart components"
+          aria-label="Toggle smart components panel"
+          aria-expanded={isComponentsPanelOpen}
+        >
+          <div className="ToolIcon__icon">
+            <Box size={18} strokeWidth={1.8} />
+          </div>
+        </button>
+        <button
+          type="button"
+          className={`ToolIcon ToolIcon_type_button sidebar-trigger${isLayersPanelOpen ? ' is-active' : ''}`}
+          onClick={() => {
+            setIsComponentsPanelOpen(false);
+            setIsPortalPanelOpen(false);
+            setIsChangeTrackingOpen(false);
+            setIsSimulationActive(false);
+            setIsLayersPanelOpen(prev => !prev);
+          }}
+          title="Layers (Shift+L)"
+          aria-label="Toggle layers panel"
+          aria-expanded={isLayersPanelOpen}
+        >
+          <div className="ToolIcon__icon">
+            <LayersIcon size={18} strokeWidth={1.8} />
+          </div>
+        </button>
         <button
           type="button"
           className="ToolIcon ToolIcon_type_button sidebar-trigger"
@@ -2278,6 +3650,93 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           </div>
         </button>
       </div>
+
+      {isLayersPanelOpen && (
+        <LayersPanel
+          elements={elements}
+          selectedIds={appState.selectedElementIds || {}}
+          onClose={() => setIsLayersPanelOpen(false)}
+          onSelect={selectLayer}
+          onToggleVisibility={(id) => {
+            const element = elementsRef.current.find(item => item.id === id);
+            if (element) updateLayerProperty(id, 'isHidden', !element.isHidden);
+          }}
+          onToggleLock={(id) => {
+            const element = elementsRef.current.find(item => item.id === id);
+            if (element) updateLayerProperty(id, 'locked', !element.locked);
+          }}
+          onMove={moveLayer}
+          onGroup={() => handleAction('group')}
+          onUngroup={() => handleAction('ungroup')}
+        />
+      )}
+      {isComponentsPanelOpen && (
+        <SmartComponentsPanel
+          components={smartComponents}
+          selectedCount={selectedElementsForComponent.length}
+          selectedComponentId={selectedComponentId}
+          onClose={() => setIsComponentsPanelOpen(false)}
+          onCreate={createComponentFromSelection}
+          onInsert={insertComponent}
+          onUpdate={updateComponentMaster}
+          onDelete={deleteSmartComponent}
+        />
+      )}
+      {isResponsivePanelOpen && (
+        <ResponsiveLayoutPanel
+          activeBreakpoint={responsiveBreakpoint}
+          overrideCounts={Object.fromEntries(
+            ['phone', 'tablet', 'desktop'].map(key => [key, countResponsiveOverrides(elements, key)])
+          )}
+          onSelect={selectResponsiveBreakpoint}
+          onSave={saveCurrentResponsiveLayout}
+          onClose={closeResponsivePreview}
+        />
+      )}
+      {isPortalPanelOpen && (
+        <BoardPortalPanel
+          workspaces={workspaces}
+          activeWorkspaceId={workspaceId}
+          activeFileId={fileId}
+          onCreate={createBoardPortal}
+          onClose={() => setIsPortalPanelOpen(false)}
+        />
+      )}
+      {isChangeTrackingOpen && (
+        <ChangeTrackingPanel
+          hasBaseline={Boolean(changeSnapshot)}
+          changes={changeRows}
+          onSetBaseline={saveChangeBaseline}
+          onClearBaseline={removeChangeBaseline}
+          onFocus={focusTrackedChange}
+          onClose={() => setIsChangeTrackingOpen(false)}
+        />
+      )}
+      {isSimulationActive && (
+        <SimulationPanel
+          nodes={simulationCurrentId ? simulationGraph.nodes : simulationGraph.starts.length ? simulationGraph.starts : simulationGraph.nodes}
+          currentId={simulationCurrentId}
+          path={simulationPath}
+          choices={simulationChoices}
+          onStart={startSimulationAt}
+          onChoose={chooseSimulationBranch}
+          onBack={() => {
+            const previousPath = simulationPath.slice(0, -1);
+            setSimulationPath(previousPath);
+            setSimulationCurrentId(previousPath[previousPath.length - 1] || null);
+          }}
+          onReset={() => {
+            const firstId = simulationPath[0];
+            setSimulationCurrentId(firstId || null);
+            setSimulationPath(firstId ? [firstId] : []);
+          }}
+          onClose={() => {
+            setIsSimulationActive(false);
+            setSimulationCurrentId(null);
+            setSimulationPath([]);
+          }}
+        />
+      )}
 
       {/* Bottom-Right: Help (?) button pill */}
       <div className="layer-ui__wrapper__footer-right">

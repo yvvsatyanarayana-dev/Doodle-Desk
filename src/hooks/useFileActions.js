@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { serializeAsJSON } from '../engine/elements.js';
 import { loadFromBlob, exportToBlob, exportToSvg } from '../engine/io/export.js';
+import { generateInteractiveHtml } from '../engine/io/exportInteractiveHtml.js';
 
 export function useFileActions({ doodleAPI, canvasAPI }) {
   const activeAPI = doodleAPI || canvasAPI;
@@ -371,20 +372,26 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
         return;
       }
 
-      const defaultExt = format === 'svg' ? 'svg' : (embedScene ? 'doodle.png' : 'png');
-      const defaultName = `drawing.${defaultExt}`;
+      const baseDocName = (appState.name || 'drawing').replace(/[\\/:*?"<>|]/g, '_');
+      const defaultExt = format === 'html' ? 'html' : (format === 'svg' ? 'svg' : (embedScene ? 'doodle.png' : 'png'));
+      const defaultName = `${baseDocName}.${defaultExt}`;
 
       if (window.electronAPI) {
         const savePath = await window.electronAPI.showSaveDialog({
           defaultPath: defaultName,
-          filters: format === 'svg'
-            ? [{ name: 'SVG Vector Image (*.svg)', extensions: ['svg'] }]
-            : [{ name: 'PNG Image (*.png)', extensions: ['png', 'doodle.png'] }],
+          filters: format === 'html'
+            ? [{ name: 'Interactive HTML Web Player (*.html)', extensions: ['html'] }]
+            : (format === 'svg'
+              ? [{ name: 'SVG Vector Image (*.svg)', extensions: ['svg'] }]
+              : [{ name: 'PNG Image (*.png)', extensions: ['png', 'doodle.png'] }]),
         });
 
         if (!savePath) return;
 
-        if (format === 'svg') {
+        if (format === 'html') {
+          const htmlContent = await generateInteractiveHtml(elements, appState, files);
+          await window.electronAPI.writeFile(savePath, htmlContent, false);
+        } else if (format === 'svg') {
           const svgXml = await exportToSvg(elements, appState, files, {
             exportBackground: background,
             viewBackgroundColor: appState.viewBackgroundColor,
@@ -412,7 +419,16 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
         window.electronAPI.showNotification('Export Complete', `Saved to ${savePath.split(/[\\/]/).pop()}`);
       } else {
         // Web fallback (Browser direct download)
-        if (format === 'svg') {
+        if (format === 'html') {
+          const htmlContent = await generateInteractiveHtml(elements, appState, files);
+          const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = defaultName;
+          a.click();
+          URL.revokeObjectURL(url);
+        } else if (format === 'svg') {
           const svgXml = await exportToSvg(elements, appState, files, {
             exportBackground: background,
             viewBackgroundColor: appState.viewBackgroundColor,

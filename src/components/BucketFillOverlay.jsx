@@ -85,7 +85,7 @@ function BucketFillOverlayComponent({ isActive, doodleAPI, canvasAPI }) {
       // Determine new background fill color
       let fillColor = appState.currentItemBackgroundColor;
       if (!fillColor || fillColor === 'transparent') {
-        fillColor = appState.currentItemStrokeColor || '#6965db';
+        fillColor = appState.currentItemStrokeColor || '#555555';
       }
 
       const updatedElements = elements.map((el) => {
@@ -138,7 +138,7 @@ function BucketFillOverlayComponent({ isActive, doodleAPI, canvasAPI }) {
             width: 40,
             height: 40,
             borderRadius: '50%',
-            border: `3px solid ${ripple.color || '#6965db'}`,
+            border: `3px solid ${ripple.color || '#555555'}`,
             backgroundColor: ripple.color ? `${ripple.color}33` : 'rgba(105, 101, 219, 0.2)',
             animation: 'scaleIn 0.35s ease-out forwards',
             pointerEvents: 'none',

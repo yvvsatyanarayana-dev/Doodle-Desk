@@ -146,7 +146,7 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
           y1={0}
           x2={x}
           y2={tickH}
-          stroke={isMajor ? '#38bdf8' : 'rgba(255, 255, 255, 0.45)'}
+          stroke={isMajor ? '#ffffff' : 'rgba(255, 255, 255, 0.45)'}
           strokeWidth={isMajor ? 1.5 : 1}
         />
         {isMajor && (
@@ -228,8 +228,8 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <Compass size={13} style={{ color: '#38bdf8' }} />
-          <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, color: '#38bdf8' }}>
+          <Compass size={13} style={{ color: '#ffffff' }} />
+          <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 600, color: '#ffffff' }}>
             {angle}°
           </span>
           <span style={{ color: 'rgba(255, 255, 255, 0.2)' }}>|</span>
@@ -254,7 +254,7 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
             style={{
               background: 'none',
               border: 'none',
-              color: angle === 0 ? '#38bdf8' : '#9ca3af',
+              color: angle === 0 ? '#ffffff' : '#9ca3af',
               fontSize: '10px',
               cursor: 'pointer',
               padding: '0 2px',
@@ -268,7 +268,7 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
             style={{
               background: 'none',
               border: 'none',
-              color: angle === 90 ? '#38bdf8' : '#9ca3af',
+              color: angle === 90 ? '#ffffff' : '#9ca3af',
               fontSize: '10px',
               cursor: 'pointer',
               padding: '0 2px',
@@ -281,9 +281,9 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
             onClick={() => setSnapAngle((prev) => !prev)}
             style={{
               background: snapAngle ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-              border: snapAngle ? '1px solid #38bdf8' : '1px solid transparent',
+              border: snapAngle ? '1px solid rgba(255,255,255,0.6)' : '1px solid transparent',
               borderRadius: '3px',
-              color: snapAngle ? '#38bdf8' : '#6b7280',
+              color: snapAngle ? '#ffffff' : '#6b7280',
               fontSize: '10px',
               cursor: 'pointer',
               padding: '1px 4px',
@@ -322,7 +322,7 @@ function PrecisionRulerOverlayComponent({ isActive, onClose }) {
           width: '24px',
           height: '24px',
           borderRadius: '50%',
-          background: '#38bdf8',
+          background: 'rgba(255, 255, 255, 0.8)',
           boxShadow: '0 0 14px rgba(56, 189, 248, 0.8)',
           cursor: 'grab',
           display: 'flex',

@@ -51,8 +51,8 @@ export function TopToolbar({
 
   // Signature purple active state
   const activeStyle = {
-    background: '#6965db',
-    backgroundColor: '#6965db',
+    background: '#111111',
+    backgroundColor: '#111111',
     color: '#ffffff',
     boxShadow: '0 0 0 1px rgba(105,101,219,0.4)',
   };
@@ -122,7 +122,7 @@ export function TopToolbar({
                   aria-label="Lock tool"
                   style={{
                     ...baseStyle,
-                    ...(isLocked ? { background: '#6965db', backgroundColor: '#6965db', color: '#ffffff' } : {}),
+                    ...(isLocked ? { background: '#111111', backgroundColor: '#111111', color: '#ffffff' } : {}),
                     marginRight: '2px',
                   }}
                 >

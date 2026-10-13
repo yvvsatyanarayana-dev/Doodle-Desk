@@ -57,6 +57,40 @@ Stripe Gateway -> Is Payment Approved?: Verify 3D Secure
 Is Payment Approved? -> [Approved] Order Confirmation: Issue Receipt
 Is Payment Approved? -> [Declined] Retry Screen: Prompt New Payment Method`,
   },
+  {
+    id: 'kubernetes',
+    name: 'Kubernetes Cloud Architecture',
+    description: 'Ingress controller, services, pods, and storage volumes',
+    syntax: `Internet Traffic -> Ingress NGINX: TLS Termination
+Ingress NGINX -> Frontend Service: Route /
+Ingress NGINX -> Backend API Service: Route /api/*
+Backend API Service -> Auth Pod Cluster: Verify Session
+Backend API Service -> Business Logic Pods: Execute Request
+Business Logic Pods -> Redis Cache Cluster: Check Cache Hit
+Business Logic Pods -> PostgreSQL StateSet: Read / Write DB`,
+  },
+  {
+    id: 'database',
+    name: 'High-Availability Database Cluster',
+    description: 'Primary-Replica DB with Redis cache & write replica pool',
+    syntax: `Application Query -> Cache Layer (Redis): Get Cached Record
+Cache Layer (Redis) -> Is Cache Hit?: Check TTL
+Is Cache Hit? -> [Yes] Return Cached Response: Low Latency Result
+Is Cache Hit? -> [No] Primary Database: Execute SQL Query
+Primary Database -> Read Replicas: Asynchronous WAL Replication
+Primary Database -> Cache Layer (Redis): Populate Cache Key`,
+  },
+  {
+    id: 'mindmap',
+    name: 'Product Growth Mind Map',
+    description: 'Strategy, acquisition, retention, and monetization nodes',
+    syntax: `Product Growth Strategy -> User Acquisition: SEO & Paid Channels
+Product Growth Strategy -> Activation: Seamless Onboarding
+Product Growth Strategy -> Retention: Email Digests & Streaks
+Product Growth Strategy -> Monetization: Pro Tier & Lifetime Pass
+User Acquisition -> Organic Viral Loops: Referral Links
+Activation -> Interactive Tutorial: Hands-on Sandbox`,
+  },
 ];
 
 function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
@@ -470,7 +504,7 @@ function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canva
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#38bdf8',
+                color: 'rgba(255, 255, 255, 0.9)',
               }}
             >
               <GitBranch size={18} />
@@ -532,7 +566,7 @@ function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canva
                     e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
                   }}
                 >
-                  <Sparkles size={12} style={{ color: '#38bdf8' }} />
+                  <Sparkles size={12} style={{ color: 'rgba(255, 255, 255, 0.9)' }} />
                   <span>{tmpl.name}</span>
                 </button>
               ))}
@@ -581,9 +615,9 @@ function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canva
                 style={{
                   padding: '5px 10px',
                   background: flowDirection === 'TB' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: flowDirection === 'TB' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                  border: flowDirection === 'TB' ? '1px solid rgba(255, 255, 255, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: '5px',
-                  color: flowDirection === 'TB' ? '#38bdf8' : '#9ca3af',
+                  color: flowDirection === 'TB' ? '#ffffff' : '#9ca3af',
                   fontSize: '12px',
                   cursor: 'pointer',
                 }}
@@ -595,9 +629,9 @@ function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canva
                 style={{
                   padding: '5px 10px',
                   background: flowDirection === 'LR' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: flowDirection === 'LR' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                  border: flowDirection === 'LR' ? '1px solid rgba(255, 255, 255, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: '5px',
-                  color: flowDirection === 'LR' ? '#38bdf8' : '#9ca3af',
+                  color: flowDirection === 'LR' ? '#ffffff' : '#9ca3af',
                   fontSize: '12px',
                   cursor: 'pointer',
                 }}
@@ -693,3 +727,5 @@ function SmartDiagramGeneratorModalComponent({ isOpen, onClose, doodleAPI, canva
 }
 
 export const SmartDiagramGeneratorModal = memo(SmartDiagramGeneratorModalComponent);
+
+export default SmartDiagramGeneratorModal;

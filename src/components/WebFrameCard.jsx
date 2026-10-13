@@ -199,7 +199,7 @@ function WebEmbedFrame({
                   flex: 1,
                   minWidth: '160px',
                   background: 'rgba(0, 0, 0, 0.4)',
-                  border: '1px solid #4f46e5',
+                  border: '1px solid #333333',
                   borderRadius: '5px',
                   color: '#ffffff',
                   fontSize: '12px',
@@ -210,7 +210,7 @@ function WebEmbedFrame({
               <button
                 type="submit"
                 style={{
-                  background: '#6366f1',
+                  background: '#111111',
                   border: 'none',
                   borderRadius: '5px',
                   color: '#ffffff',
@@ -291,7 +291,7 @@ function WebEmbedFrame({
                     type="button"
                     onClick={() => setIsInteractive((prev) => !prev)}
                     style={{
-                      background: isInteractive ? '#6366f1' : 'rgba(255, 255, 255, 0.08)',
+                      background: isInteractive ? '#111111' : 'rgba(255, 255, 255, 0.08)',
                       border: 'none',
                       borderRadius: '5px',
                       padding: '5px 8px',
@@ -346,7 +346,7 @@ function WebEmbedFrame({
           borderRadius: '8px',
           overflow: 'hidden',
           boxSizing: 'border-box',
-          border: '1px solid ' + (isSelected ? '#6366f1' : 'rgba(255, 255, 255, 0.15)'),
+          border: '1px solid ' + (isSelected ? '#444444' : 'rgba(255, 255, 255, 0.15)'),
           pointerEvents: 'auto',
         }}
         onDoubleClick={(e) => {
