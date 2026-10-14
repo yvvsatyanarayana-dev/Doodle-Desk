@@ -4,6 +4,8 @@
 // - Roughness 1: Artist (2 bowed overlapping passes, subtle corner overshoots)
 // - Roughness 2: Cartoonist (extra wobbly, expressive sketchy strokes with pronounced corner overshoots)
 
+const hachurePathCache = new WeakMap();
+
 function pseudoRandom(seed) {
   // Mulberry32 LCG
   let s = (seed | 0) || 12345;
@@ -21,13 +23,13 @@ function pseudoRandom(seed) {
  * Artist (1): 2 passes with subtle corner overshoots & opposite bowing.
  * Cartoonist (2): 2-3 passes with larger overshoots and expressive wobble.
  */
-export function sketchyLine(ctx, x1, y1, x2, y2, seed, roughness = 1) {
+export function sketchyLine(ctx, x1, y1, x2, y2, seed, roughness = 1, batch = false) {
   if (roughness < 0.1) {
     // Architect — perfectly straight
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
-    ctx.stroke();
+    if (!batch) ctx.stroke();
     return;
   }
 
@@ -76,10 +78,10 @@ export function sketchyLine(ctx, x1, y1, x2, y2, seed, roughness = 1) {
     const cp2x = sx + (ex - sx) * t2 + perpX * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
     const cp2y = sy + (ey - sy) * t2 + perpY * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
 
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, ex, ey);
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   }
 }
 
@@ -342,7 +344,7 @@ export function sketchyDiamond(ctx, x, y, w, h, seed, roughness = 1, isRounded =
 /**
  * Hachure fill — hand-drawn diagonal lines clipped inside the shape.
  */
-export function sketchyFill(ctx, paths, seed, roughness = 1) {
+export function sketchyFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
   if (!paths || paths.length < 3) return;
 
   ctx.save();
@@ -369,15 +371,42 @@ export function sketchyFill(ctx, paths, seed, roughness = 1) {
   const diagLen = Math.sqrt((maxX - minX) ** 2 + (maxY - minY) ** 2);
   const cx2 = (minX + maxX) / 2;
   const cy2 = (minY + maxY) / 2;
+  const cacheSignature = [minX, minY, maxX, maxY, seed, roughness, ctx.lineWidth].join(':');
+  let cachedPath = null;
+  if (cacheOwner && typeof cacheOwner === 'object' && typeof Path2D !== 'undefined') {
+    let pathsBySignature = hachurePathCache.get(cacheOwner);
+    cachedPath = pathsBySignature?.get(cacheSignature) || null;
+    if (!cachedPath) {
+      cachedPath = new Path2D();
+      if (!pathsBySignature || pathsBySignature.size >= 2) {
+        pathsBySignature = new Map();
+        hachurePathCache.set(cacheOwner, pathsBySignature);
+      }
+      pathsBySignature.set(cacheSignature, cachedPath);
+      for (let d = -diagLen; d < diagLen; d += gap) {
+        const x1 = cx2 + cos * d - sin * diagLen;
+        const y1 = cy2 + sin * d + cos * diagLen;
+        const x2 = cx2 + cos * d + sin * diagLen;
+        const y2 = cy2 + sin * d - cos * diagLen;
+        sketchyLine(cachedPath, x1, y1, x2, y2, seed + Math.round(d), Math.max(0, roughness * 0.6), true);
+      }
+    }
+  }
 
   ctx.save();
   ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.75;
-  for (let d = -diagLen; d < diagLen; d += gap) {
-    const x1 = cx2 + cos * d - sin * diagLen;
-    const y1 = cy2 + sin * d + cos * diagLen;
-    const x2 = cx2 + cos * d + sin * diagLen;
-    const y2 = cy2 + sin * d - cos * diagLen;
-    sketchyLine(ctx, x1, y1, x2, y2, seed + Math.round(d), Math.max(0, roughness * 0.6));
+  if (cachedPath) {
+    ctx.stroke(cachedPath);
+  } else {
+    ctx.beginPath();
+    for (let d = -diagLen; d < diagLen; d += gap) {
+      const x1 = cx2 + cos * d - sin * diagLen;
+      const y1 = cy2 + sin * d + cos * diagLen;
+      const x2 = cx2 + cos * d + sin * diagLen;
+      const y2 = cy2 + sin * d - cos * diagLen;
+      sketchyLine(ctx, x1, y1, x2, y2, seed + Math.round(d), Math.max(0, roughness * 0.6), true);
+    }
+    ctx.stroke();
   }
   ctx.restore();
   ctx.restore();
@@ -400,8 +429,8 @@ export function solidFill(ctx, paths) {
 /**
  * Cross-hatch fill (two perpendicular hachure passes).
  */
-export function crossHatchFill(ctx, paths, seed) {
-  sketchyFill(ctx, paths, seed, 1);
+export function crossHatchFill(ctx, paths, seed, cacheOwner = null) {
+  sketchyFill(ctx, paths, seed, 1, cacheOwner);
 
   ctx.save();
   const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
@@ -417,6 +446,6 @@ export function crossHatchFill(ctx, paths, seed) {
     const dx = px - cx, dy = py - cy;
     return [cx - dy, cy + dx];
   });
-  sketchyFill(ctx, rotated, seed + 500, 1);
+  sketchyFill(ctx, rotated, seed + 500, 1, cacheOwner);
   ctx.restore();
 }

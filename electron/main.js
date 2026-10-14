@@ -102,6 +102,14 @@ function setupTray() {
   }
 }
 
+function getDoodleVaultPath() {
+  const configuredPath = getSetting('vaultPath', '');
+  const vaultPath = configuredPath || path.join(app.getPath('documents'), 'Doodle Vault');
+  fs.mkdirSync(vaultPath, { recursive: true });
+  if (!configuredPath) setSetting('vaultPath', vaultPath);
+  return vaultPath;
+}
+
 // Second instance event handler (Windows / Linux)
 app.on('second-instance', (event, argv, workingDirectory) => {
   const files = parseFilePathFromArgv(argv);
@@ -145,6 +153,12 @@ app.on('open-url', (event, url) => {
 
 app.whenReady().then(() => {
   registerProtocol();
+  try {
+    getDoodleVaultPath();
+  } catch (err) {
+    console.error('Failed to initialize Doodle Vault:', err);
+    dialog.showErrorBox('Doodle Vault unavailable', `Doodle Desk could not create or access the vault folder.\n\n${err.message}`);
+  }
 
   // Remove X-Frame-Options and relax Content-Security-Policy frame-ancestors for canvas web embeds
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
@@ -273,8 +287,10 @@ app.on('window-all-closed', () => {
 ipcMain.handle('dialog:open-file', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const result = await dialog.showOpenDialog(win, {
+    ...options,
     title: 'Open Doodle Desk Drawing',
     properties: ['openFile'],
+    defaultPath: options.defaultPath || getDoodleVaultPath(),
     filters: [
       { name: 'Doodle Desk Files (*.doodle, *.png, *.svg)', extensions: ['doodle', 'png', 'svg', 'json', 'doodlelib'] },
       { name: 'Doodle Desk File (*.doodle)', extensions: ['doodle'] },
@@ -283,7 +299,6 @@ ipcMain.handle('dialog:open-file', async (event, options = {}) => {
       { name: 'Doodle Desk Library (*.doodlelib)', extensions: ['doodlelib'] },
       { name: 'All Files (*.*)', extensions: ['*'] },
     ],
-    ...options,
   });
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -304,10 +319,14 @@ ipcMain.handle('dialog:save-file', async (event, options = {}) => {
   ];
 
   const result = await dialog.showSaveDialog(win, {
-    title: 'Save Doodle Desk Drawing',
-    defaultPath: options.defaultPath || 'Untitled.doodle',
-    filters: options.filters || defaultFilters,
     ...options,
+    title: 'Save Doodle Desk Drawing',
+    defaultPath: options.defaultPath
+      ? (path.isAbsolute(options.defaultPath)
+        ? options.defaultPath
+        : path.join(getDoodleVaultPath(), path.basename(options.defaultPath)))
+      : path.join(getDoodleVaultPath(), 'Untitled.doodle'),
+    filters: options.filters || defaultFilters,
   });
 
   if (result.canceled || !result.filePath) {
@@ -368,7 +387,11 @@ ipcMain.handle('fs:export-pdf', async (event, options = {}) => {
   try {
     const saveResult = await dialog.showSaveDialog(win, {
       title: 'Export to PDF',
-      defaultPath: options.defaultPath || 'drawing.pdf',
+      defaultPath: options.defaultPath
+        ? (path.isAbsolute(options.defaultPath)
+          ? options.defaultPath
+          : path.join(getDoodleVaultPath(), path.basename(options.defaultPath)))
+        : path.join(getDoodleVaultPath(), 'drawing.pdf'),
       filters: [{ name: 'PDF Document (.pdf)', extensions: ['pdf'] }],
     });
 
@@ -941,6 +964,32 @@ ipcMain.handle('store:set', (event, { key, val }) => {
   }
 });
 ipcMain.handle('store:reset', () => resetSettings());
+
+ipcMain.handle('vault:get-path', () => getDoodleVaultPath());
+ipcMain.handle('vault:choose-folder', async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose Doodle Vault Folder',
+    defaultPath: getDoodleVaultPath(),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const vaultPath = path.resolve(result.filePaths[0]);
+  try {
+    await fs.promises.mkdir(vaultPath, { recursive: true });
+    setSetting('vaultPath', vaultPath);
+    return vaultPath;
+  } catch (err) {
+    console.error('Failed to set Doodle Vault folder:', err);
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'Could not set Doodle Vault',
+      message: `Doodle Desk could not use this folder.\n\n${err.message}`,
+    });
+    return null;
+  }
+});
 
 // Recents IPC
 ipcMain.handle('store:get-recents', () => getRecentFiles());

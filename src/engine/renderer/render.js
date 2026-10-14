@@ -50,14 +50,14 @@ function applyFill(ctx, el, polygon) {
     ctx.strokeStyle = el.backgroundColor;
     ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
     ctx.setLineDash([]);
-    sketchyFill(ctx, polygon, el.seed || 0, el.roughness ?? 1);
+    sketchyFill(ctx, polygon, el.seed || 0, el.roughness ?? 1, el);
     ctx.restore();
   } else if (fillStyle === 'cross-hatch') {
     ctx.save();
     ctx.strokeStyle = el.backgroundColor;
     ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
     ctx.setLineDash([]);
-    crossHatchFill(ctx, polygon, el.seed || 0);
+    crossHatchFill(ctx, polygon, el.seed || 0, el);
     ctx.restore();
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Keyboard } from 'lucide-react';
+import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Keyboard, FolderOpen } from 'lucide-react';
 import { ThemedConfirmDialog } from '../components/ThemedConfirmDialog';
 import {
   formatShortcutEvent,
@@ -23,9 +23,12 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
     openAtLogin: false,
     hardwareAcceleration: true,
     spellcheck: true,
+    vaultPath: '',
   });
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultError, setVaultError] = useState('');
   const [shortcutBindings, setShortcutBindings] = useState(() => getShortcutBindings());
   const [recordingShortcut, setRecordingShortcut] = useState(null);
   const [shortcutError, setShortcutError] = useState('');
@@ -36,13 +39,24 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
       setShortcutBindings(getShortcutBindings());
       setRecordingShortcut(null);
       setShortcutError('');
+      setVaultError('');
       if (currentTheme) {
         setSettings(prev => ({ ...prev, theme: currentTheme }));
       }
       if (window.electronAPI) {
-        window.electronAPI.getSettings().then(stored => {
-          if (stored) setSettings(prev => ({ ...prev, ...stored, ...(currentTheme ? { theme: currentTheme } : {}) }));
-        });
+        Promise.all([window.electronAPI.getSettings(), window.electronAPI.getVaultPath()])
+          .then(([stored, vaultPath]) => {
+            setSettings(prev => ({
+              ...prev,
+              ...(stored || {}),
+              vaultPath: vaultPath || stored?.vaultPath || '',
+              ...(currentTheme ? { theme: currentTheme } : {}),
+            }));
+          })
+          .catch((error) => {
+            console.error('Failed to load Doodle Vault settings:', error);
+            setVaultError(`Could not load the vault location: ${error.message}`);
+          });
       }
     }
   }, [isOpen, currentTheme]);
@@ -73,6 +87,21 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
     }
     if (key === 'theme' && onThemeChange) {
       onThemeChange(val);
+    }
+  };
+
+  const chooseVaultFolder = async () => {
+    if (!window.electronAPI || vaultBusy) return;
+    setVaultBusy(true);
+    setVaultError('');
+    try {
+      const vaultPath = await window.electronAPI.chooseVaultFolder();
+      if (vaultPath) setSettings(prev => ({ ...prev, vaultPath }));
+    } catch (error) {
+      console.error('Failed to change Doodle Vault folder:', error);
+      setVaultError(`Could not change the vault location: ${error.message}`);
+    } finally {
+      setVaultBusy(false);
     }
   };
 
@@ -204,6 +233,26 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="pref-sidebar-section">
+            <h4 className="pref-sidebar-section-title">Doodle Vault</h4>
+            <p className="pref-vault-description">New drawings and exports are saved here by default. Existing files stay where they are.</p>
+            <div className="pref-vault-location" title={settings.vaultPath}>
+              {settings.vaultPath || (window.electronAPI ? 'Loading vault location…' : 'Available in the desktop app')}
+            </div>
+            {window.electronAPI && (
+              <button
+                type="button"
+                className="pref-vault-change"
+                onClick={chooseVaultFolder}
+                disabled={vaultBusy}
+              >
+                <FolderOpen size={14} />
+                <span>{vaultBusy ? 'Choosing folder…' : 'Choose vault folder'}</span>
+              </button>
+            )}
+            {vaultError && <p className="pref-vault-error" role="alert">{vaultError}</p>}
           </div>
 
           <div className="pref-sidebar-section">

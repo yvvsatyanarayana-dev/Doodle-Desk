@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File operations
   showOpenDialog: (options) => ipcRenderer.invoke('dialog:open-file', options),
   showSaveDialog: (options) => ipcRenderer.invoke('dialog:save-file', options),
+  chooseVaultFolder: () => ipcRenderer.invoke('vault:choose-folder'),
+  getVaultPath: () => ipcRenderer.invoke('vault:get-path'),
   readFile: (filePath, asBinary = false) => ipcRenderer.invoke('fs:read-file', { filePath, asBinary }),
   writeFile: (filePath, content, asBinary = false) => ipcRenderer.invoke('fs:write-file', { filePath, content, asBinary }),
   exportPDF: (options) => ipcRenderer.invoke('fs:export-pdf', options),

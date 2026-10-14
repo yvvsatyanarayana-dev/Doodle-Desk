@@ -13,7 +13,7 @@ import {
 } from './elements.js';
 import { HistoryManager } from './history.js';
 import {
-  boundsIntersectViewport, getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
+  boundsIntersectViewport, getCachedElementBounds, getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
   getElementCenter, snapToGrid, distance
 } from './math/geometry.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
@@ -102,8 +102,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const containerRef = useRef(null);
   const animRef = useRef(null);
   const imageCache = useRef({});
-  const elementBoundsCacheRef = useRef(new WeakMap());
   const canvasDprRef = useRef(0);
+  const pendingPanRef = useRef({ x: 0, y: 0, frame: null });
+  const pendingWheelRef = useRef({
+    x: 0,
+    y: 0,
+    zoomFactor: 1,
+    anchor: null,
+    frame: null,
+  });
 
   const [elements, setElementsState] = useState(() => initialData?.elements || []);
   const [appState, setAppStateRaw] = useState(() => ({
@@ -480,23 +487,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
       if (el.id === interaction.current.editingElementId) continue;
-      const isFreedraw = el.type === ELEMENT_TYPES.FREEDRAW;
-      let bounds = isFreedraw ? null : elementBoundsCacheRef.current.get(el);
-      if (!bounds ||
-          bounds.sourceX !== el.x || bounds.sourceY !== el.y ||
-          bounds.sourceWidth !== el.width || bounds.sourceHeight !== el.height ||
-          bounds.sourceAngle !== el.angle) {
-        bounds = {
-          geometry: getElementBounds(el),
-          sourceX: el.x,
-          sourceY: el.y,
-          sourceWidth: el.width,
-          sourceHeight: el.height,
-          sourceAngle: el.angle,
-        };
-        if (!isFreedraw) elementBoundsCacheRef.current.set(el, bounds);
-      }
-      if (!boundsIntersectViewport(bounds.geometry, viewport, viewportPadding)) continue;
+      const bounds = getCachedElementBounds(el);
+      if (!boundsIntersectViewport(bounds, viewport, viewportPadding)) continue;
       renderElement(ctx, el, imageCache.current);
       if (selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
     }
@@ -633,6 +625,23 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     });
   }, [render]);
 
+  const flushPan = useCallback(() => {
+    const pending = pendingPanRef.current;
+    if (pending.frame !== null) {
+      cancelAnimationFrame(pending.frame);
+      pending.frame = null;
+    }
+    const { x, y } = pending;
+    pending.x = 0;
+    pending.y = 0;
+    if (x === 0 && y === 0) return;
+    setAppState(prev => ({
+      scrollX: prev.scrollX + x,
+      scrollY: prev.scrollY + y,
+    }));
+    scheduleRender();
+  }, [scheduleRender, setAppState]);
+
   // ── Canvas resize ──
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -670,6 +679,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   }, [resizeCanvas]);
 
   useEffect(() => { scheduleRender(); }, [elements, appState, canvasStyle, scheduleRender]);
+
+  useEffect(() => () => {
+    if (pendingPanRef.current.frame !== null) {
+      cancelAnimationFrame(pendingPanRef.current.frame);
+    }
+    if (pendingWheelRef.current.frame !== null) {
+      cancelAnimationFrame(pendingWheelRef.current.frame);
+    }
+  }, []);
 
   // Sync collaborators with collaboratorsRef and redraw
   useEffect(() => {
@@ -931,10 +949,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const dy = e.clientY - ia.dragLastY;
       ia.dragLastX = e.clientX;
       ia.dragLastY = e.clientY;
-      setAppState(prev => ({
-        scrollX: prev.scrollX + dx,
-        scrollY: prev.scrollY + dy,
-      }));
+      const pending = pendingPanRef.current;
+      pending.x += dx;
+      pending.y += dy;
+      if (pending.frame === null) {
+        pending.frame = requestAnimationFrame(() => {
+          pending.frame = null;
+          flushPan();
+        });
+      }
       return;
     }
 
@@ -1420,7 +1443,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const hit = getElementAtPoint(elementsRef.current, sx, sy);
       canvasRef.current.style.cursor = hit ? 'move' : 'default';
     }
-  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, onPointerUpdate, isSimulationActive]);
+  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, flushPan, onPointerUpdate, isSimulationActive]);
 
   const onPointerUp = useCallback((e) => {
     try {
@@ -1432,6 +1455,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     if (ia.isPanning) {
       ia.isPanning = false;
+      flushPan();
       canvasRef.current.style.cursor = TOOL_CURSORS[as.activeTool?.type] || 'default';
       return;
     }
@@ -1575,30 +1599,55 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       if (norm.type === ELEMENT_TYPES.FREEDRAW) onFreeDrawCommit?.(norm);
       return;
     }
-  }, [getSelectedElements, setAppState, setElements, scheduleRender, commitHistory, notifyChange, isDrawToShapeActive, onFreeDrawCommit]);
+  }, [getSelectedElements, setAppState, setElements, scheduleRender, flushPan, commitHistory, notifyChange, isDrawToShapeActive, onFreeDrawCommit]);
 
   // ── Zoom with mouse wheel ──
   const onWheel = useCallback((e) => {
     e.preventDefault();
-    const { zoom, scrollX, scrollY } = appStateRef.current;
-    const z = zoom.value;
-
+    const pending = pendingWheelRef.current;
     if (e.ctrlKey || e.metaKey) {
-      // Zoom
-      const delta = -e.deltaY * 0.002;
-      const newZoom = Math.max(0.05, Math.min(30, z * (1 + delta)));
-      const [cx, cy] = getCanvasPoint(e);
-      const newScrollX = cx - (cx - scrollX) * (newZoom / z);
-      const newScrollY = cy - (cy - scrollY) * (newZoom / z);
-      setAppState({ zoom: { value: newZoom }, scrollX: newScrollX, scrollY: newScrollY });
+      const factor = Math.max(0.01, 1 - e.deltaY * 0.002);
+      pending.zoomFactor *= factor;
+      pending.anchor = getCanvasPoint(e);
     } else {
-      // Pan
-      setAppState(prev => ({
-        scrollX: prev.scrollX - e.deltaX,
-        scrollY: prev.scrollY - e.deltaY,
-      }));
+      pending.x += e.deltaX;
+      pending.y += e.deltaY;
     }
-  }, [getCanvasPoint, setAppState]);
+    if (pending.frame !== null) return;
+    pending.frame = requestAnimationFrame(() => {
+      pending.frame = null;
+      const { zoomFactor, anchor, x, y } = pending;
+      pending.zoomFactor = 1;
+      pending.anchor = null;
+      pending.x = 0;
+      pending.y = 0;
+      const current = appStateRef.current;
+      const zoom = current.zoom?.value || 1;
+      let nextZoom = zoom;
+      let scrollX = current.scrollX || 0;
+      let scrollY = current.scrollY || 0;
+      if (anchor && zoomFactor !== 1) {
+        nextZoom = Math.max(0.05, Math.min(30, zoom * zoomFactor));
+        scrollX = anchor[0] - (anchor[0] - scrollX) * (nextZoom / zoom);
+        scrollY = anchor[1] - (anchor[1] - scrollY) * (nextZoom / zoom);
+      }
+      scrollX -= x;
+      scrollY -= y;
+      setAppState({
+        ...(nextZoom !== zoom ? { zoom: { value: nextZoom } } : {}),
+        scrollX,
+        scrollY,
+      });
+      scheduleRender();
+    });
+  }, [getCanvasPoint, scheduleRender, setAppState]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [onWheel]);
   // Mind Mapping: Branch child node with connecting arrow
   const branchChildNode = useCallback((direction = 'right') => {
     const as = appStateRef.current;
@@ -3296,7 +3345,6 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
-        onWheel={onWheel}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />

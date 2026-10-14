@@ -1,6 +1,6 @@
 // Hit testing — determines which element the user clicked/touched
 import {
-  getElementBounds, isPointInRect, distanceToSegment,
+  getCachedElementBounds, getElementBounds, isPointInRect, distanceToSegment,
   toLocalPoint, getElementCenter, polygonContainsPoint, distance, getBoundsFromPoints
 } from './math/geometry.js';
 import { ELEMENT_TYPES, STROKE_WIDTHS } from './elements.js';
@@ -16,6 +16,15 @@ export function hitTestElement(el, px, py) {
   if (el.isDeleted || el.isHidden || el.locked) return false;
 
   const tol = HIT_TOLERANCE + getStrokeWidth(el) / 2;
+  const bounds = getCachedElementBounds(el);
+  const left = Math.min(bounds.x, bounds.x + bounds.width);
+  const right = Math.max(bounds.x, bounds.x + bounds.width);
+  const top = Math.min(bounds.y, bounds.y + bounds.height);
+  const bottom = Math.max(bounds.y, bounds.y + bounds.height);
+  if (px < left - tol || px > right + tol ||
+      py < top - tol || py > bottom + tol) {
+    return false;
+  }
   const [lx, ly] = toLocalPoint(px, py, el);
   const { x, y, width: w, height: h } = el;
 

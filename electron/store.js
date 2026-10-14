@@ -37,6 +37,10 @@ const schema = {
     type: 'array',
     default: [],
   },
+  vaultPath: {
+    type: 'string',
+    default: '',
+  },
   trayEnabled: {
     type: 'boolean',
     default: false,

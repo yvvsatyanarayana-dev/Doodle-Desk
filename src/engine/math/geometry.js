@@ -1,6 +1,7 @@
 // Core geometry math utilities
 
 export const EPSILON = 0.0001;
+const elementBoundsCache = new WeakMap();
 
 export function distance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
@@ -91,6 +92,28 @@ export function getElementBounds(el) {
     if (py > maxY) maxY = py;
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+export function getCachedElementBounds(el) {
+  if (!el || typeof el !== 'object') return getElementBounds(el);
+  const cached = elementBoundsCache.get(el);
+  if (cached &&
+      cached.x === el.x && cached.y === el.y &&
+      cached.width === el.width && cached.height === el.height &&
+      cached.angle === el.angle && cached.points === el.points) {
+    return cached.bounds;
+  }
+  const bounds = getElementBounds(el);
+  elementBoundsCache.set(el, {
+    x: el.x,
+    y: el.y,
+    width: el.width,
+    height: el.height,
+    angle: el.angle,
+    points: el.points,
+    bounds,
+  });
+  return bounds;
 }
 
 export function boundsIntersectViewport(bounds, viewport, padding = 0) {

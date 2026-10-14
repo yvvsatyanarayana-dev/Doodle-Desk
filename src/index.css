@@ -419,6 +419,76 @@ textarea.font-mono {
   min-height: 32px;
 }
 
+.pref-vault-description {
+  margin: 8px 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pref-vault-location {
+  overflow-wrap: anywhere;
+  padding: 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.16);
+  color: #d4d4d8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.pref-vault-change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 31px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: #27272a;
+  color: #f4f4f5;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pref-vault-change:hover:not(:disabled) {
+  background: #3f3f46;
+}
+
+.pref-vault-change:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.pref-vault-error {
+  margin: 8px 0 0;
+  color: #f87171;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+[data-theme='light'] .pref-vault-description,
+.theme--light .pref-vault-description {
+  color: #71717a;
+}
+
+[data-theme='light'] .pref-vault-location,
+.theme--light .pref-vault-location {
+  border-color: #e4e4e7;
+  background: #f4f4f5;
+  color: #3f3f46;
+}
+
+[data-theme='light'] .pref-vault-change,
+.theme--light .pref-vault-change {
+  border-color: #d4d4d8;
+  background: #27272a;
+  color: #fafafa;
+}
+
 .pref-sidebar-label {
   font-size: 13px;
   font-weight: 500;

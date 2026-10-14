@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderElement } from '../src/engine/renderer/render.js';
 import { normalizeFreedrawElement } from '../src/engine/elements.js';
-import { sketchyRoundedRect } from '../src/engine/renderer/sketchy.js';
+import { sketchyFill, sketchyRoundedRect } from '../src/engine/renderer/sketchy.js';
 import { getElementBounds } from '../src/engine/math/geometry.js';
 import { getResizeHandleAt, RESIZE_HANDLES } from '../src/engine/hitTest.js';
 
@@ -152,6 +152,51 @@ describe('shape outline rendering', () => {
     expect(moves[0]).toEqual([184, 0]);
     expect(points.some(([x, y]) => Math.abs(x - 184) < 1e-8 && Math.abs(y) < 1e-8)).toBe(true);
     expect(ctx.closePath).toHaveBeenCalledOnce();
+  });
+
+  it('batches hachure strokes into one canvas stroke operation', () => {
+    const ctx = createContext();
+    ctx.lineWidth = 2;
+
+    sketchyFill(ctx, [[0, 0], [160, 0], [160, 120], [0, 120]], 42, 1);
+
+    expect(ctx.stroke).toHaveBeenCalledOnce();
+  });
+
+  it('reuses cached hachure geometry for unchanged elements', () => {
+    const originalPath2D = globalThis.Path2D;
+    const pathInstances = [];
+    class TestPath2D {
+      constructor() {
+        pathInstances.push(this);
+      }
+      moveTo() {}
+      lineTo() {}
+      bezierCurveTo() {}
+    }
+    globalThis.Path2D = TestPath2D;
+
+    try {
+      const owner = {};
+      const paths = [[0, 0], [160, 0], [160, 120], [0, 120]];
+      const firstCtx = createContext();
+      const secondCtx = createContext();
+      firstCtx.lineWidth = 2;
+      secondCtx.lineWidth = 2;
+
+      sketchyFill(firstCtx, paths, 42, 1, owner);
+      sketchyFill(secondCtx, paths, 42, 1, owner);
+
+      expect(pathInstances).toHaveLength(1);
+      expect(firstCtx.stroke).toHaveBeenCalledWith(pathInstances[0]);
+      expect(secondCtx.stroke).toHaveBeenCalledWith(pathInstances[0]);
+    } finally {
+      if (originalPath2D === undefined) {
+        delete globalThis.Path2D;
+      } else {
+        globalThis.Path2D = originalPath2D;
+      }
+    }
   });
 
   it('normalizes pencil strokes so selection bounds contain left/up points', () => {

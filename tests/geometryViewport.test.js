@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { boundsIntersectViewport, getElementBounds } from '../src/engine/math/geometry.js';
+import {
+  boundsIntersectViewport,
+  getCachedElementBounds,
+  getElementBounds,
+} from '../src/engine/math/geometry.js';
 
 describe('viewport geometry', () => {
   const viewport = { x: 0, y: 0, width: 100, height: 100 };
@@ -22,5 +26,23 @@ describe('viewport geometry', () => {
       angle: Math.PI / 4,
     });
     expect(boundsIntersectViewport(rotated, viewport)).toBe(true);
+  });
+
+  it('caches bounds for immutable elements, including free-draw strokes', () => {
+    const element = {
+      type: 'freedraw',
+      x: 10,
+      y: 20,
+      width: 30,
+      height: 40,
+      points: [[0, 0], [30, 40]],
+    };
+    const bounds = getCachedElementBounds(element);
+    expect(getCachedElementBounds(element)).toBe(bounds);
+    expect(bounds).toEqual({ x: 10, y: 20, width: 30, height: 40 });
+
+    const updated = { ...element, points: [[0, 0], [50, 60]] };
+    expect(getCachedElementBounds(updated)).toEqual(getElementBounds(updated));
+    expect(getCachedElementBounds(updated).width).toBe(50);
   });
 });
