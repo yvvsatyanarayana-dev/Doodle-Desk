@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { cancelIdleTask, scheduleIdleTask } from '../utils/idleTask.js';
 
 const RECOVERY_STORAGE_KEY = 'doodle_desktop_recovery_data';
 const RECOVERY_META_KEY = 'doodle_desktop_recovery_meta';
@@ -37,79 +38,104 @@ export function useAutoSave({ doodleAPI, canvasAPI, currentFilePath, isDirty, on
   }, []);
 
   const lastSnapshotVersionRef = useRef(null);
+  const latestOptionsRef = useRef(null);
+  latestOptionsRef.current = {
+    activeAPI,
+    autoSaveMode,
+    currentFilePath,
+    isDirty,
+    onDirectSave,
+  };
 
   // Periodic Auto-Save / Recovery Snapshot timer
   useEffect(() => {
     if (autoSaveMode === 'off' || !activeAPI) return;
 
-    const timer = setInterval(() => {
-      if (!isDirty) return;
+    let pendingTask = null;
+    const writeSnapshot = () => {
+      pendingTask = null;
+      const {
+        activeAPI: currentAPI,
+        autoSaveMode: currentMode,
+        currentFilePath: currentPath,
+        isDirty: currentIsDirty,
+        onDirectSave: saveDirectly,
+      } = latestOptionsRef.current || {};
+      if (!currentAPI || !currentIsDirty) return;
 
       try {
-        const elements = activeAPI.getSceneElements?.() || [];
+        const elements = currentAPI.getSceneElements?.() || [];
         if (!elements || elements.length === 0) return;
 
-        // Calculate lightweight version signature
         let versionSig = 0;
         for (let i = 0; i < elements.length; i++) {
           versionSig += (elements[i].version || 1);
         }
 
-        // Skip serialization if scene has not mutated since last snapshot
-        if (lastSnapshotVersionRef.current === versionSig && autoSaveMode !== 'direct') {
+        if (lastSnapshotVersionRef.current === versionSig && currentMode !== 'direct') {
           return;
         }
 
-        const appState = activeAPI.getAppState();
-        const files = activeAPI.getFiles();
+        const appState = currentAPI.getAppState();
+        const files = currentAPI.getFiles();
 
-        if (elements && elements.length > 0) {
-          // If direct mode and we have a path, save to file
-          if (autoSaveMode === 'direct' && currentFilePath && onDirectSave) {
-            onDirectSave();
-          }
-
-          lastSnapshotVersionRef.current = versionSig;
-
-          // Always maintain crash recovery snapshot in storage
-          const snapshot = {
-            elements,
-            appState: {
-              viewBackgroundColor: appState.viewBackgroundColor,
-              gridSize: appState.gridSize,
-            },
-            files,
-            filePath: currentFilePath,
-            timestamp: Date.now(),
-          };
-
-          try {
-            localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(snapshot));
-          } catch (storageErr) {
-            // QuotaExceeded fallback: store without heavy files payload so vector shapes are safe
-            try {
-              const fallbackSnapshot = { ...snapshot, files: {} };
-              localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(fallbackSnapshot));
-            } catch (innerErr) {
-              console.warn('LocalStorage quota fully exceeded:', innerErr);
-            }
-          }
-
-          try {
-            localStorage.setItem(RECOVERY_META_KEY, JSON.stringify({
-              filePath: currentFilePath,
-              timestamp: Date.now(),
-              elementsCount: elements.length,
-            }));
-          } catch {}
+        if (currentMode === 'direct' && currentPath && saveDirectly) {
+          saveDirectly();
         }
+
+        lastSnapshotVersionRef.current = versionSig;
+        const snapshot = {
+          elements,
+          appState: {
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+          },
+          files,
+          filePath: currentPath,
+          timestamp: Date.now(),
+        };
+
+        try {
+          localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(snapshot));
+        } catch (storageErr) {
+          try {
+            const fallbackSnapshot = { ...snapshot, files: {} };
+            localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(fallbackSnapshot));
+          } catch (innerErr) {
+            console.warn('LocalStorage quota fully exceeded:', innerErr);
+          }
+        }
+
+        try {
+          localStorage.setItem(RECOVERY_META_KEY, JSON.stringify({
+            filePath: currentPath,
+            timestamp: Date.now(),
+            elementsCount: elements.length,
+          }));
+        } catch {}
       } catch (err) {
         console.error('AutoSave snapshot failed:', err);
       }
+    };
+
+    const timer = setInterval(() => {
+      if (!latestOptionsRef.current?.isDirty || pendingTask) return;
+      pendingTask = scheduleIdleTask(writeSnapshot, 1200);
     }, Math.max(2, intervalSec) * 1000);
 
-    return () => clearInterval(timer);
-  }, [autoSaveMode, intervalSec, isDirty, currentFilePath, activeAPI, onDirectSave]);
+    const flushPendingSnapshot = () => {
+      if (!latestOptionsRef.current?.isDirty) return;
+      cancelIdleTask(pendingTask);
+      writeSnapshot();
+    };
+    window.addEventListener('beforeunload', flushPendingSnapshot);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('beforeunload', flushPendingSnapshot);
+      cancelIdleTask(pendingTask);
+    };
+  }, [autoSaveMode, intervalSec, activeAPI]);
 
   const clearRecovery = useCallback(() => {
     try {

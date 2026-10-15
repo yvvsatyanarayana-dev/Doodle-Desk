@@ -9,6 +9,8 @@ files:
   - "dist/**/*"
   - "electron/**/*"
   - "public/**/*"
+  - "build/icon.ico"
+  - "build/icon.png"
   - "package.json"
 
 extraResources:
@@ -47,9 +49,11 @@ win:
   legalTrademarks: Doodle Desk
 
 nsis:
+  include: build/uninstall.nsh
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
+  deleteAppDataOnUninstall: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Doodle Desk
@@ -93,6 +97,6 @@ linux:
 
 publish:
   provider: github
-  owner: doodledesk
-  repo: doodle-desk
+  owner: yvvsatyanarayana-dev
+  repo: Doodle-Desk
   releaseType: release

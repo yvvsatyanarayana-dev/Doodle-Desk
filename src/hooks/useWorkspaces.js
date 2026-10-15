@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { updateSmartComponentInstances } from '../engine/components/smartComponents.js';
+import { cancelIdleTask, scheduleIdleTask } from '../utils/idleTask.js';
 
 const STORAGE_KEY = 'doodle_desk_workspaces_v1';
 const ACTIVE_ID_KEY = 'doodle_desk_active_workspace_id_v1';
@@ -142,16 +143,37 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
   activeWorkspaceIdRef.current = activeWorkspaceId;
   const activeFileIdRef = useRef(activeFile?.id);
   activeFileIdRef.current = activeFile?.id;
+  const persistenceSnapshotRef = useRef({ workspaces, activeWorkspaceId });
+  const persistenceTaskRef = useRef(null);
+  persistenceSnapshotRef.current = { workspaces, activeWorkspaceId };
 
-  // Persist workspaces list to localStorage
-  useEffect(() => {
+  const persistWorkspaces = useCallback(() => {
+    cancelIdleTask(persistenceTaskRef.current);
+    persistenceTaskRef.current = null;
+    const snapshot = persistenceSnapshotRef.current;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(workspaces));
-      localStorage.setItem(ACTIVE_ID_KEY, activeWorkspaceId);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot.workspaces));
+      localStorage.setItem(ACTIVE_ID_KEY, snapshot.activeWorkspaceId);
     } catch (e) {
       console.warn('Failed to persist workspaces:', e);
     }
-  }, [workspaces, activeWorkspaceId]);
+  }, []);
+
+  // Coalesce workspace writes and run serialization when the renderer is idle.
+  useEffect(() => {
+    if (persistenceTaskRef.current) return;
+    persistenceTaskRef.current = scheduleIdleTask(persistWorkspaces, 1500);
+  }, [workspaces, activeWorkspaceId, persistWorkspaces]);
+
+  useEffect(() => () => {
+    cancelIdleTask(persistenceTaskRef.current);
+    persistenceTaskRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('beforeunload', persistWorkspaces);
+    return () => window.removeEventListener('beforeunload', persistWorkspaces);
+  }, [persistWorkspaces]);
 
   // Save current canvas state into the active file inside active workspace
   const saveActiveWorkspaceSnapshot = useCallback((force = false) => {

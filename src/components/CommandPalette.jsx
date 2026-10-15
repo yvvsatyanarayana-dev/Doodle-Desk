@@ -32,6 +32,9 @@ import {
   Boxes,
   Globe,
   Tv,
+  ClipboardCheck,
+  Replace,
+  Link2,
 } from 'lucide-react';
 import {
   generateFlowchart,
@@ -40,6 +43,7 @@ import {
   generateKanban,
   generateWireframe,
 } from '../templates/templatePresets';
+import { getShortcutBindings } from '../engine/keyboardShortcuts';
 
 export function CommandPalette({
   isOpen,
@@ -68,11 +72,15 @@ export function CommandPalette({
   onOpenIconLibrary,
   onOpenAutoLayout,
   onOpenTimeMachine,
+  onOpenDiagramAudit,
+  onOpenFindReplace,
+  onOpenPrototypeLinks,
   onToggleFocusMode,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const prototypeShortcut = getShortcutBindings().openPrototypeLinks;
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const isKeyNavRef = useRef(false);
@@ -121,6 +129,28 @@ export function CommandPalette({
       shortcut: 'Ctrl+Alt+P',
       action: () => {
         onTogglePresentation();
+        onClose();
+      },
+    },
+    {
+      id: 'find_replace',
+      title: 'Find & Replace on Canvas',
+      category: 'Edit & Search',
+      icon: <Replace size={14} />,
+      shortcut: 'Ctrl+F',
+      action: () => {
+        onOpenFindReplace?.();
+        onClose();
+      },
+    },
+    {
+      id: 'interactive_prototype',
+      title: 'Configure Interactive Prototype Links',
+      category: 'Presentation',
+      icon: <Link2 size={14} />,
+      shortcut: prototypeShortcut || undefined,
+      action: () => {
+        onOpenPrototypeLinks?.();
         onClose();
       },
     },
@@ -433,6 +463,16 @@ export function CommandPalette({
       shortcut: 'Shift+T',
       action: () => {
         onOpenTimeMachine?.();
+        onClose();
+      },
+    },
+    {
+      id: 'diagram_health_check',
+      title: 'Diagram Health Check (Structure & Readability)...',
+      category: 'Diagram Quality',
+      icon: <ClipboardCheck size={14} />,
+      action: () => {
+        onOpenDiagramAudit?.();
         onClose();
       },
     },

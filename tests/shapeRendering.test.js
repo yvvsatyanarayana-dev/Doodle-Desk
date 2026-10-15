@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderElement } from '../src/engine/renderer/render.js';
+import { getTextElementBounds, renderElement } from '../src/engine/renderer/render.js';
 import { normalizeFreedrawElement } from '../src/engine/elements.js';
 import { sketchyFill, sketchyRoundedRect } from '../src/engine/renderer/sketchy.js';
 import { getElementBounds } from '../src/engine/math/geometry.js';
-import { getResizeHandleAt, RESIZE_HANDLES } from '../src/engine/hitTest.js';
+import { getResizeHandleAt, hitTestElement, RESIZE_HANDLES } from '../src/engine/hitTest.js';
 
 function createContext() {
   const ctx = {
@@ -25,6 +25,62 @@ function createContext() {
 }
 
 describe('shape outline rendering', () => {
+  it('hits the frame name label above the frame bounds', () => {
+    const frame = {
+      id: 'frame',
+      type: 'frame',
+      name: 'Frame 1',
+      x: 100,
+      y: 100,
+      width: 400,
+      height: 300,
+    };
+
+    expect(hitTestElement(frame, 110, 85)).toBe(true);
+    expect(hitTestElement(frame, 300, 85)).toBe(false);
+  });
+
+  it('uses the rendered text height instead of stale empty space for selection bounds and hits', () => {
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    try {
+      const text = {
+        id: 'text',
+        type: 'text',
+        x: 20,
+        y: 30,
+        width: 300,
+        height: 360,
+        fontSize: 32,
+        fontFamily: 5,
+        text: 'testing',
+      };
+      const bounds = getTextElementBounds(text);
+
+      expect(bounds).toEqual({ x: 20, y: 30, width: 300, height: 42 });
+      expect(hitTestElement(text, 50, 40)).toBe(true);
+      expect(hitTestElement(text, 50, 250)).toBe(false);
+      expect(getResizeHandleAt(text, 324, 76)).toBe(RESIZE_HANDLES.SE);
+    } finally {
+      getContext.mockRestore();
+    }
+  });
+
+  it('gives empty text no oversized selection bounds', () => {
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    try {
+      expect(getTextElementBounds({
+        type: 'text',
+        x: 10,
+        y: 12,
+        width: 240,
+        height: 300,
+        text: '',
+      })).toEqual({ x: 10, y: 12, width: 240, height: 0 });
+    } finally {
+      getContext.mockRestore();
+    }
+  });
+
   it('renders sharp rectangles as clean native canvas rectangles', () => {
     const ctx = createContext();
 

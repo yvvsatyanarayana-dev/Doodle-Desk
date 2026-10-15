@@ -43,6 +43,9 @@
 - **Organic Hand-Drawn Aesthetic:** Customize stroke roughness, hachure/cross-hatch fills, stroke widths, hand-drawn typography, and curated color palettes.
 - **Canvas Styles & Themes:** Standard whiteboard, blueprint grid, dot grid, isometric grid, engineering dark, and warm parchment styles with smooth light/dark switching.
 - **Precision Drawing Tools:** Built-in precision ruler, lasso selection, and shape-recognition auto-detection for quick clean sketches.
+- **Offline Diagram Health Check:** Open it from `Ctrl+K` / `Cmd+K` to find broken connector references, invalid shape geometry, blank text objects, and labels that may be too small to read; click findings to inspect them on-canvas.
+- **Board-Wide Find & Replace:** Open **Find & Replace Across Board** from `Ctrl+K` / `Cmd+K` to search text labels, frame names, and links, navigate results, replace one match, or replace all.
+- **Interactive Prototypes:** Open **Configure Interactive Prototype Links** from `Ctrl+K` / `Cmd+K` to map selected canvas objects to frames, set the opening screen, manage connections, and preview the flow by clicking linked objects. Press `Esc` to exit preview.
 
 ### 📁 Multi-Board Workspaces & Lossless Storage
 - **Native Document Format:** Lossless `.doodle` JSON documents preserve full vector state, stroke history, and editable layers.
@@ -163,6 +166,8 @@ npm run build:mac
 # Linux: AppImage, Debian (.deb), and RPM (.rpm)
 npm run build:linux
 ```
+
+The Windows uninstaller asks whether to back up the Doodle Vault and settings first. Backups are saved under `%LOCALAPPDATA%\Doodle Desk Uninstall Backups`; choosing **No** permanently deletes the vault and app data, and **Cancel** stops uninstalling. Silent uninstalls create a backup automatically because they cannot ask.
 
 ---
 

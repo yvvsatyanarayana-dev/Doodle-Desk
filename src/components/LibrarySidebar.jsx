@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search,
+  Replace,
+  CaseSensitive,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   Pin,
   X,
@@ -32,9 +36,224 @@ import {
   generateKanban,
   generateWireframe,
 } from '../templates/templatePresets';
+import { findBoardMatches, replaceBoardMatch, replaceBoardMatches } from '../engine/findReplace.js';
 
 const STORAGE_KEY = 'doodle_user_library_items_v1';
 const TEMPLATES_STORAGE_KEY = 'doodle_custom_templates_v1';
+
+function CanvasFindReplace({ doodleAPI, themeStyles, isDark, focusRequest }) {
+  const [query, setQuery] = useState('');
+  const [replacement, setReplacement] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [activeMatch, setActiveMatch] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const [status, setStatus] = useState('');
+  const searchInputRef = useRef(null);
+  const elements = doodleAPI?.getSceneElements?.() || [];
+  const matches = useMemo(
+    () => findBoardMatches(elements, query, { caseSensitive }),
+    [elements, query, caseSensitive, revision],
+  );
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, [focusRequest]);
+
+  const focusMatch = (match) => {
+    if (!match || !doodleAPI) return;
+    const element = elements.find((item) => item.id === match.elementId && !item.isDeleted);
+    if (!element) return;
+    doodleAPI.updateScene?.({
+      appState: {
+        selectedElementIds: { [element.id]: true },
+        selectedGroupIds: {},
+        activeTool: { type: 'selection' },
+      },
+    });
+    doodleAPI.scrollToContent?.([element], { fitToContent: false, animate: true, duration: 350 });
+  };
+
+  const navigateMatch = (direction) => {
+    if (!matches.length) return;
+    const next = (activeMatch + direction + matches.length) % matches.length;
+    setActiveMatch(next);
+    focusMatch(matches[next]);
+  };
+
+  const replaceCurrent = () => {
+    const match = matches[activeMatch];
+    if (!match || !doodleAPI) return;
+    const source = doodleAPI.getSceneElementsIncludingDeleted?.() || elements;
+    const result = replaceBoardMatch(source, match, query, replacement, { caseSensitive });
+    if (!result.replacements) {
+      setStatus('This match no longer exists.');
+      return;
+    }
+    doodleAPI.updateScene?.({ elements: result.elements, commitToHistory: true });
+    setRevision((value) => value + 1);
+    setActiveMatch(0);
+    setStatus(`Replaced one occurrence in ${match.field}.`);
+  };
+
+  const replaceAll = () => {
+    if (!query.trim() || !doodleAPI) return;
+    const source = doodleAPI.getSceneElementsIncludingDeleted?.() || elements;
+    const result = replaceBoardMatches(source, query, replacement, { caseSensitive });
+    if (!result.replacements) {
+      setStatus('No matches to replace.');
+      return;
+    }
+    doodleAPI.updateScene?.({ elements: result.elements, commitToHistory: true });
+    setRevision((value) => value + 1);
+    setActiveMatch(0);
+    setStatus(`Replaced ${result.replacements} occurrence${result.replacements === 1 ? '' : 's'}.`);
+  };
+
+  const fieldStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minHeight: '38px',
+    padding: '0 10px',
+    border: `1px solid ${themeStyles.inputBorder}`,
+    borderRadius: '8px',
+    background: themeStyles.inputBg,
+    color: themeStyles.inactiveIconColor,
+  };
+  const inputStyle = {
+    flex: 1,
+    minWidth: 0,
+    border: 0,
+    outline: 0,
+    background: 'transparent',
+    color: themeStyles.textColor,
+    fontSize: '13px',
+  };
+
+  return (
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column', padding: '16px 14px' }}>
+      <div style={{ display: 'grid', gap: '9px' }}>
+        <label style={{ display: 'grid', gap: '5px', color: themeStyles.subtextColor, fontSize: '11px' }}>
+          Find on canvas
+          <span style={fieldStyle}>
+            <Search size={15} />
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setActiveMatch(0); setStatus(''); }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  navigateMatch(event.shiftKey ? -1 : 1);
+                }
+              }}
+              placeholder="Find text on canvas..."
+              style={inputStyle}
+            />
+            {query && (
+              <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); setStatus(''); }} style={{ border: 0, padding: 0, background: 'transparent', color: 'inherit', cursor: 'pointer' }}>
+                <X size={14} />
+              </button>
+            )}
+          </span>
+        </label>
+        <label style={{ display: 'grid', gap: '5px', color: themeStyles.subtextColor, fontSize: '11px' }}>
+          Replace with
+          <span style={fieldStyle}>
+            <Replace size={14} />
+            <input
+              value={replacement}
+              onChange={(event) => setReplacement(event.target.value)}
+              placeholder="Replace with..."
+              style={inputStyle}
+            />
+          </span>
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+          <button
+            type="button"
+            aria-pressed={caseSensitive}
+            onClick={() => { setCaseSensitive((value) => !value); setActiveMatch(0); }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '5px 8px',
+              border: `1px solid ${caseSensitive ? themeStyles.cardHoverBorder : themeStyles.cardBorder}`,
+              borderRadius: '7px',
+              background: caseSensitive ? themeStyles.pillActiveBg : 'transparent',
+              color: caseSensitive ? themeStyles.pillActiveColor : themeStyles.subtextColor,
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            <CaseSensitive size={13} /> Match case
+          </button>
+          <span style={{ flex: 1, color: themeStyles.subtextColor, textAlign: 'right', fontSize: '11px' }}>
+            {query.trim() ? `${matches.length} result${matches.length === 1 ? '' : 's'}` : 'Search text, frames & links'}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', margin: '12px 0 8px', borderTop: `1px solid ${themeStyles.headerBorder}`, paddingTop: '10px' }}>
+        <button type="button" title="Previous match" disabled={!matches.length} onClick={() => navigateMatch(-1)} style={{ ...fieldStyle, minHeight: '30px', padding: '0 8px', cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.5 }}>
+          <ArrowUp size={14} />
+        </button>
+        <span style={{ minWidth: '66px', color: themeStyles.subtextColor, textAlign: 'center', fontSize: '11px' }}>
+          {matches.length ? `${activeMatch + 1} / ${matches.length}` : '— / —'}
+        </span>
+        <button type="button" title="Next match" disabled={!matches.length} onClick={() => navigateMatch(1)} style={{ ...fieldStyle, minHeight: '30px', padding: '0 8px', cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.5 }}>
+          <ArrowDown size={14} />
+        </button>
+        <div style={{ flex: 1 }} />
+        <button type="button" disabled={!matches.length} onClick={replaceCurrent} style={{ padding: '6px 10px', border: `1px solid ${themeStyles.btnPrimaryBorder}`, borderRadius: '7px', background: 'transparent', color: themeStyles.textColor, cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.5, fontSize: '11px' }}>
+          Replace
+        </button>
+        <button type="button" disabled={!matches.length} onClick={replaceAll} style={{ padding: '6px 10px', border: `1px solid ${themeStyles.btnPrimaryBorder}`, borderRadius: '7px', background: matches.length ? themeStyles.btnPrimaryBg : 'transparent', color: matches.length ? themeStyles.btnPrimaryColor : themeStyles.subtextColor, cursor: matches.length ? 'pointer' : 'not-allowed', opacity: matches.length ? 1 : 0.5, fontSize: '11px', fontWeight: 600 }}>
+          Replace all
+        </button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: '100px', overflowY: 'auto', border: `1px solid ${themeStyles.cardBorder}`, borderRadius: '8px' }}>
+        {!query.trim() ? (
+          <div style={{ padding: '24px 14px', color: themeStyles.subtextColor, textAlign: 'center', fontSize: '12px' }}>
+            Search text, frame names, or links on this canvas.
+          </div>
+        ) : matches.length ? matches.map((match, index) => (
+          <button
+            type="button"
+            key={`${match.elementId}-${match.field}`}
+            onClick={() => { setActiveMatch(index); focusMatch(match); }}
+            style={{
+              display: 'flex',
+              width: '100%',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              border: 0,
+              borderBottom: `1px solid ${themeStyles.cardBorder}`,
+              background: index === activeMatch ? themeStyles.pillActiveBg : 'transparent',
+              color: themeStyles.textColor,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ display: 'grid', flex: 1, minWidth: 0, gap: '3px' }}>
+              <strong style={{ fontSize: '12px', textTransform: 'capitalize' }}>{match.elementType || 'Object'} · {match.field}</strong>
+              <span style={{ overflow: 'hidden', color: themeStyles.subtextColor, fontSize: '11px', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.value}</span>
+            </span>
+            <small style={{ color: themeStyles.subtextColor, whiteSpace: 'nowrap' }}>{match.occurrences}×</small>
+          </button>
+        )) : (
+          <div style={{ padding: '24px 14px', color: themeStyles.subtextColor, textAlign: 'center', fontSize: '12px' }}>
+            No matching text found.
+          </div>
+        )}
+      </div>
+      {status && <div role="status" style={{ padding: '8px 2px 0', color: isDark ? '#a1a1aa' : '#52525b', fontSize: '11px' }}>{status}</div>}
+    </div>
+  );
+}
 
 // Visual SVG Shape & Frame Preview Component
 function ShapePreview({ elements = [] }) {
@@ -499,6 +718,7 @@ export function LibrarySidebar({
   canvasAPI,
   theme = 'dark',
   initialTab = 'templates',
+  canvasSearchFocusRequest = 0,
 }) {
   doodleAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   // Synchronize active theme dynamically with both prop and HTML data-theme attribute
@@ -526,7 +746,6 @@ export function LibrarySidebar({
   const [activeTab, setActiveTab] = useState(initialTab || 'templates'); // 'templates' | 'library' | 'icons' | 'search'
   const [templateSubTab, setTemplateSubTab] = useState('presets'); // 'presets' | 'my'
   const [isPinned, setIsPinned] = useState(false);
-  const [canvasSearchQuery, setCanvasSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -588,6 +807,10 @@ export function LibrarySidebar({
       setActiveTab(initialTab);
     }
   }, [initialTab, isOpen]);
+
+  useEffect(() => {
+    if (canvasSearchFocusRequest) setActiveTab('search');
+  }, [canvasSearchFocusRequest]);
 
   // Track canvas selection count
   useEffect(() => {
@@ -1011,27 +1234,6 @@ export function LibrarySidebar({
     return [...userItems, ...BUILTIN_SHAPES_AND_FRAMES];
   }, [userItems]);
 
-  // Canvas text search matches
-  const canvasSearchMatches = useMemo(() => {
-    if (!doodleAPI || !canvasSearchQuery.trim()) return [];
-    const elements = doodleAPI.getSceneElements?.() || [];
-    const q = canvasSearchQuery.toLowerCase();
-    return elements.filter(el =>
-      el.type === 'text' && !el.isDeleted && (el.text || '').toLowerCase().includes(q)
-    );
-  }, [doodleAPI, canvasSearchQuery]);
-
-  const handleFocusCanvasElement = (el) => {
-    if (!doodleAPI) return;
-    doodleAPI.updateScene?.({
-      appState: {
-        selectedElementIds: { [el.id]: true },
-        scrollX: window.innerWidth / 2 - el.x - (el.width || 0) / 2,
-        scrollY: window.innerHeight / 2 - el.y - (el.height || 0) / 2,
-      }
-    });
-  };
-
   if (!isOpen) return null;
 
   // Pure Black & Neutral Dark Palette (Zero Blue Tint, matching Settings Sidebar)
@@ -1219,7 +1421,7 @@ export function LibrarySidebar({
             <button
               type="button"
               onClick={() => setActiveTab('search')}
-              title="Search canvas text"
+              title="Find & Replace on canvas (Ctrl+F)"
               style={{
                 background: activeTab === 'search' ? themeStyles.pillActiveBg : 'transparent',
                 color: activeTab === 'search' ? themeStyles.pillActiveColor : themeStyles.inactiveIconColor,
@@ -1238,6 +1440,7 @@ export function LibrarySidebar({
             >
               <Search size={14} strokeWidth={activeTab === 'search' ? 2.4 : 1.8} />
             </button>
+
           </div>
 
           {/* Right Segment: Pin & Close — always visible, never shrink */}
@@ -1827,78 +2030,16 @@ export function LibrarySidebar({
           </div>
         )}
 
-        {/* TAB 1: Search Canvas Text */}
         {activeTab === 'search' && (
-          <div style={{ padding: '16px 14px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div
-              style={{
-                background: themeStyles.inputBg,
-                border: `1px solid ${themeStyles.inputBorder}`,
-                borderRadius: '8px',
-                padding: '9px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              <Search size={16} color={themeStyles.inactiveIconColor} />
-              <input
-                type="text"
-                placeholder="Find text on canvas..."
-                value={canvasSearchQuery}
-                onChange={e => setCanvasSearchQuery(e.target.value)}
-                autoFocus
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: themeStyles.textColor,
-                  fontSize: '13.5px',
-                }}
-              />
-              {canvasSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setCanvasSearchQuery('')}
-                  style={{ background: 'none', border: 'none', color: themeStyles.inactiveIconColor, cursor: 'pointer', padding: 0 }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', marginTop: '14px' }}>
-              {canvasSearchQuery && canvasSearchMatches.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '30px 10px', color: themeStyles.subtextColor, fontSize: '13px' }}>
-                  No matching text found
-                </div>
-              )}
-              {canvasSearchMatches.map(el => (
-                <div
-                  key={el.id}
-                  onClick={() => handleFocusCanvasElement(el)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    background: themeStyles.cardBg,
-                    marginBottom: '8px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    color: themeStyles.textColor,
-                    border: `1px solid ${themeStyles.cardBorder}`,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = themeStyles.cardHoverBorder}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = themeStyles.cardBorder}
-                >
-                  {el.text}
-                </div>
-              ))}
-            </div>
-          </div>
+          <CanvasFindReplace
+            doodleAPI={doodleAPI}
+            themeStyles={themeStyles}
+            isDark={isDark}
+            focusRequest={canvasSearchFocusRequest}
+          />
         )}
 
-        {/* TAB 2: Library (Visual Shapes & Frames Grid + Personal Saving) */}
+        {/* TAB 1: Library (Visual Shapes & Frames Grid + Personal Saving) */}
         {activeTab === 'library' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Action Bar: "+ Add selected to library" and 3-Dots Menu */}

@@ -4,6 +4,7 @@ import {
   toLocalPoint, getElementCenter, polygonContainsPoint, distance, getBoundsFromPoints
 } from './math/geometry.js';
 import { ELEMENT_TYPES, STROKE_WIDTHS } from './elements.js';
+import { getTextElementBounds } from './renderer/render.js';
 
 const HIT_TOLERANCE = 8; // pixels
 
@@ -11,9 +12,19 @@ function getStrokeWidth(el) {
   return STROKE_WIDTHS[el.strokeWidth] ?? el.strokeWidth ?? 2;
 }
 
+export function isPointOnFrameLabel(el, px, py) {
+  if (el.type !== ELEMENT_TYPES.FRAME) return false;
+  const [lx, ly] = toLocalPoint(px, py, el);
+  const rx = el.width < 0 ? el.x + el.width : el.x;
+  const ry = el.height < 0 ? el.y + el.height : el.y;
+  const labelW = Math.max(54, ((el.name?.length || 5) * 8) + 20);
+  return lx >= rx && lx <= rx + labelW && ly >= ry - 30 && ly <= ry;
+}
+
 // Test if a point hits a specific element
-export function hitTestElement(el, px, py) {
-  if (el.isDeleted || el.isHidden || el.locked) return false;
+export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
+  if (el.isDeleted || el.isHidden || (el.locked && !includeLocked)) return false;
+  if (isPointOnFrameLabel(el, px, py)) return true;
 
   const tol = HIT_TOLERANCE + getStrokeWidth(el) / 2;
   const bounds = getCachedElementBounds(el);
@@ -96,7 +107,10 @@ export function hitTestElement(el, px, py) {
       return false;
     }
 
-    case ELEMENT_TYPES.TEXT:
+    case ELEMENT_TYPES.TEXT: {
+      const textBounds = getTextElementBounds(el);
+      return isPointInRect(lx, ly, textBounds.x, textBounds.y, textBounds.width, textBounds.height, tol);
+    }
     case ELEMENT_TYPES.IMAGE:
     case ELEMENT_TYPES.IFRAME: {
       return isPointInRect(lx, ly, x, y, w, h, tol);
@@ -109,11 +123,6 @@ export function hitTestElement(el, px, py) {
       const ry = h < 0 ? y + h : y;
       const rw = Math.max(1, Math.abs(w));
       const rh = Math.max(1, Math.abs(h));
-      // Check frame top-left label tag
-      const labelW = Math.max(54, ((el.name?.length || 5) * 8) + 20);
-      if (lx >= rx && lx <= rx + labelW && ly >= ry - 30 && ly <= ry) {
-        return true;
-      }
       return isPointInRect(lx, ly, rx, ry, rw, rh, tol);
     }
 
@@ -124,16 +133,16 @@ export function hitTestElement(el, px, py) {
 
 // Find the topmost element at a point (reverse Z-order)
 // Non-frame elements take priority so children inside a frame can be selected directly
-export function getElementAtPoint(elements, px, py) {
+export function getElementAtPoint(elements, px, py, { includeLocked = false } = {}) {
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
-    if (el.type !== ELEMENT_TYPES.FRAME && hitTestElement(el, px, py)) {
+    if (el.type !== ELEMENT_TYPES.FRAME && hitTestElement(el, px, py, { includeLocked })) {
       return el;
     }
   }
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
-    if (el.type === ELEMENT_TYPES.FRAME && hitTestElement(el, px, py)) {
+    if (el.type === ELEMENT_TYPES.FRAME && hitTestElement(el, px, py, { includeLocked })) {
       return el;
     }
   }
@@ -213,8 +222,10 @@ export function getResizeHandleAt(el, px, py, zoom = 1) {
     return null;
   }
 
-  const bounds = el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length
-    ? (() => {
+  const bounds = el.type === ELEMENT_TYPES.TEXT
+    ? getTextElementBounds(el)
+    : el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length
+      ? (() => {
       const pointsBounds = getBoundsFromPoints(el.points);
       return {
         x: el.x + pointsBounds.x,
@@ -222,8 +233,8 @@ export function getResizeHandleAt(el, px, py, zoom = 1) {
         width: pointsBounds.width,
         height: pointsBounds.height,
       };
-    })()
-    : el;
+      })()
+      : el;
   const { x, y, width: w, height: h } = bounds;
   const padding = 4 / zoom;
 

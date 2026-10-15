@@ -1,14 +1,14 @@
 import React, {
-  useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef
+  lazy, Suspense, useRef, useEffect, useCallback, useMemo, useState, useImperativeHandle, forwardRef
 } from 'react';
 import { renderElement, renderSelectionOverlay, measureText } from './renderer/render.js';
 import {
-  getElementAtPoint, getElementsInRect,
+  getElementAtPoint, getElementsInRect, isPointOnFrameLabel,
   getResizeHandleAt, getCursorForHandle, RESIZE_HANDLES
 } from './hitTest.js';
 import {
   ELEMENT_TYPES, createElement, createTextElement, createLinearElement,
-  createFreedrawElement, cloneElement, normalizeElement, normalizeFreedrawElement,
+  createFreedrawElement, cloneElement, cloneElementSet, normalizeElement, normalizeFreedrawElement,
   FONT_FAMILY, FONT_SIZE_DEFAULT, serializeAsJSON, generateId, versionNonce
 } from './elements.js';
 import { HistoryManager } from './history.js';
@@ -21,11 +21,6 @@ import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
 import { exportToBlob, exportToSvg } from './io/export.js';
 import { BookOpen, Box, CirclePlay, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop } from 'lucide-react';
-import { LayersPanel } from './components/LayersPanel.jsx';
-import { SmartComponentsPanel } from './components/SmartComponentsPanel.jsx';
-import { BoardPortalPanel } from './components/BoardPortalPanel.jsx';
-import { SimulationPanel } from './components/SimulationPanel.jsx';
-import { ChangeTrackingPanel } from './components/ChangeTrackingPanel.jsx';
 import { findShortcutAction, getShortcutBindings } from './keyboardShortcuts.js';
 import { buildSimulationGraph, getSimulationChoices } from './simulation.js';
 import {
@@ -43,6 +38,14 @@ import {
   writeSmartComponents,
 } from './components/smartComponents.js';
 import { adaptDefaultStrokeColors } from './themeColors.js';
+import { drawDotGrid } from './renderer/paperGrid.js';
+
+const CanvasContextMenu = lazy(() => import('./components/CanvasContextMenu.jsx').then(module => ({ default: module.CanvasContextMenu })));
+const LayersPanel = lazy(() => import('./components/LayersPanel.jsx').then(module => ({ default: module.LayersPanel })));
+const SmartComponentsPanel = lazy(() => import('./components/SmartComponentsPanel.jsx').then(module => ({ default: module.SmartComponentsPanel })));
+const BoardPortalPanel = lazy(() => import('./components/BoardPortalPanel.jsx').then(module => ({ default: module.BoardPortalPanel })));
+const SimulationPanel = lazy(() => import('./components/SimulationPanel.jsx').then(module => ({ default: module.SimulationPanel })));
+const ChangeTrackingPanel = lazy(() => import('./components/ChangeTrackingPanel.jsx').then(module => ({ default: module.ChangeTrackingPanel })));
 
 // ──────────────────────────────────────────────
 //  Tool → cursor mapping
@@ -79,8 +82,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     theme = 'light',
     canvasStyle = 'standard',
     onChange,
+    onToast,
+    onSelectionChange,
     onPointerUpdate,
     onLinkOpen,
+    isPrototypeMode = false,
     renderEmbeddable,
     isDrawToShapeActive = false,
     onFreeDrawCommit,
@@ -101,7 +107,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const overlayRef = useRef(null);
   const containerRef = useRef(null);
   const animRef = useRef(null);
+  const renderRef = useRef(null);
   const imageCache = useRef({});
+  const dotGridPatternCache = useRef(null);
   const canvasDprRef = useRef(0);
   const pendingPanRef = useRef({ x: 0, y: 0, frame: null });
   const pendingWheelRef = useRef({
@@ -113,6 +121,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   });
 
   const [elements, setElementsState] = useState(() => initialData?.elements || []);
+  const [frameNameEdit, setFrameNameEdit] = useState(null);
+  const frameNameInputRef = useRef(null);
+  const cancelFrameNameEditRef = useRef(false);
   const [appState, setAppStateRaw] = useState(() => ({
     viewBackgroundColor: theme === 'dark' ? '#121212' : '#ffffff',
     scrollX: 0,
@@ -157,6 +168,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const [changeSnapshot, setChangeSnapshot] = useState(null);
   const [isChangeTrackingOpen, setIsChangeTrackingOpen] = useState(false);
   const [isToolLocked, setIsToolLocked] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenuStylesAvailable, setContextMenuStylesAvailable] = useState(false);
   const isToolLockedRef = useRef(false);
   isToolLockedRef.current = isToolLocked;
 
@@ -222,6 +235,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
   const setAppState = useCallback((updater) => {
     const patch = typeof updater === 'function' ? updater(appStateRef.current) : updater;
+    const previousSelection = appStateRef.current?.selectedElementIds || {};
+    const hasSelectionPatch = patch?.selectedElementIds !== undefined;
     const next = {
       ...appStateRef.current,
       ...patch,
@@ -231,7 +246,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     };
     appStateRef.current = next;
     setAppStateRaw(next);
-  }, []);
+    if (hasSelectionPatch) {
+      const nextIds = Object.keys(next.selectedElementIds);
+      const previousIds = Object.keys(previousSelection);
+      if (nextIds.length !== previousIds.length || nextIds.some((id) => !previousSelection[id])) {
+        onSelectionChange?.(next.selectedElementIds);
+      }
+    }
+  }, [onSelectionChange]);
 
   // ── Derived helpers ──
   const getSelectedElements = useCallback(() => {
@@ -273,7 +295,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   }, [canvasToScene, getCanvasPoint]);
 
   // ── Rendering ──
-  const render = useCallback(() => {
+  const render = useCallback((renderCanvasStyle = canvasStyle) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -289,22 +311,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     // ── 1. Determine Background Color by canvasStyle ──
     let bg = viewBackgroundColor || (theme === 'dark' ? '#121212' : '#ffffff');
-    if (canvasStyle === 'blueprint') {
+    if (renderCanvasStyle === 'blueprint') {
       bg = '#0c1b33';
-    } else if (canvasStyle === 'dotgrid') {
+    } else if (renderCanvasStyle === 'dotgrid') {
       bg = theme === 'dark' ? '#141416' : '#f8fafc';
-    } else if (canvasStyle === 'isometric') {
+    } else if (renderCanvasStyle === 'isometric') {
       bg = theme === 'dark' ? '#121215' : '#ffffff';
-    } else if (canvasStyle === 'parchment') {
+    } else if (renderCanvasStyle === 'parchment') {
       bg = '#fbf7ee';
-    } else if (canvasStyle === 'engineering') {
+    } else if (renderCanvasStyle === 'engineering') {
       bg = '#111215';
     }
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cssW, cssH);
 
     // ── 2. Render Canvas Paper & Grid System ──
-    if (canvasStyle === 'blueprint') {
+    if (renderCanvasStyle === 'blueprint') {
       ctx.save();
       const step = 20 * z;
       const majorStep = 100 * z;
@@ -336,23 +358,19 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (canvasStyle === 'dotgrid') {
+    } else if (renderCanvasStyle === 'dotgrid') {
       ctx.save();
-      const step = 24 * z;
-      const startX = ((scrollX % step) + cssW) % step;
-      const startY = ((scrollY % step) + cssH) % step;
-      ctx.fillStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.28)' : 'rgba(15, 23, 42, 0.25)';
-      const dotRadius = Math.max(1, Math.min(2.2, 1.25 * Math.sqrt(z)));
-      ctx.beginPath();
-      for (let gx = startX; gx < cssW; gx += step) {
-        for (let gy = startY; gy < cssH; gy += step) {
-          ctx.moveTo(gx + dotRadius, gy);
-          ctx.arc(gx, gy, dotRadius, 0, Math.PI * 2);
-        }
-      }
-      ctx.fill();
+      drawDotGrid(ctx, {
+        width: cssW,
+        height: cssH,
+        zoom: z,
+        scrollX,
+        scrollY,
+        theme,
+        patternCache: dotGridPatternCache,
+      });
       ctx.restore();
-    } else if (canvasStyle === 'isometric') {
+    } else if (renderCanvasStyle === 'isometric') {
       ctx.save();
       // Equilateral isometric 30° / 150° / 90° technical grid
       const dy = 20 * z;
@@ -387,7 +405,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (canvasStyle === 'parchment') {
+    } else if (renderCanvasStyle === 'parchment') {
       ctx.save();
       const step = 20 * z;
       const startX = ((scrollX % step) + cssW) % step;
@@ -417,7 +435,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (canvasStyle === 'engineering') {
+    } else if (renderCanvasStyle === 'engineering') {
       ctx.save();
       const step = 20 * z;
       const majorStep = 100 * z;
@@ -615,6 +633,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     ctx.restore();
   }, [theme, collaborators, canvasStyle]);
+  renderRef.current = render;
 
   // Schedule render via RAF
   const scheduleRender = useCallback(() => {
@@ -624,6 +643,40 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       render();
     });
   }, [render]);
+
+  const beginFrameNameEdit = useCallback((frame) => {
+    if (!frame || frame.locked) return;
+    setAppState({ selectedElementIds: { [frame.id]: true } });
+    setFrameNameEdit({ id: frame.id, draft: frame.name || 'Frame' });
+  }, [setAppState]);
+
+  const commitFrameNameEdit = useCallback(() => {
+    if (!frameNameEdit) return;
+    const frame = elementsRef.current.find(element => element.id === frameNameEdit.id);
+    const name = frameNameEdit.draft.trim();
+    setFrameNameEdit(null);
+    if (!frame) return;
+    if (!name) {
+      onToast?.('Frame name cannot be empty.');
+      return;
+    }
+    if (name === frame.name) return;
+    commitHistory();
+    setElements(prev => prev.map(element =>
+      element.id === frame.id
+        ? { ...element, name, version: (element.version || 1) + 1, versionNonce: versionNonce() }
+        : element
+    ));
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Renamed frame to “${name}”.`);
+  }, [frameNameEdit, commitHistory, setElements, notifyChange, scheduleRender, onToast]);
+
+  useEffect(() => {
+    if (!frameNameEdit || !frameNameInputRef.current) return;
+    frameNameInputRef.current.focus();
+    frameNameInputRef.current.select();
+  }, [frameNameEdit?.id]);
 
   const flushPan = useCallback(() => {
     const pending = pendingPanRef.current;
@@ -716,6 +769,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   // ── Pointer events ──
   const onPointerDown = useCallback((e) => {
     if (isSimulationActive) return;
+    if (isPrototypeMode) {
+      if (e.button === 0) {
+        e.preventDefault();
+        const [sceneX, sceneY] = getScenePoint(e);
+        const hit = getElementAtPoint(elementsRef.current, sceneX, sceneY, { includeLocked: true });
+        const linkedContainer = hit?.containerId
+          ? elementsRef.current.find((element) => element.id === hit.containerId && !element.isDeleted && element.link)
+          : null;
+        const linkedFrame = hit?.frameId
+          ? elementsRef.current.find((element) => element.id === hit.frameId && element.type === 'frame' && !element.isDeleted && !element.isHidden && element.link)
+          : null;
+        const linkTarget = hit?.link ? hit : linkedContainer || linkedFrame;
+        if (linkTarget) onLinkOpen?.(linkTarget, e);
+      }
+      return;
+    }
     // Capture pointer to ensure smooth drag gestures across the whole window
     canvasRef.current?.setPointerCapture?.(e.pointerId);
 
@@ -793,6 +862,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
       // Hit test
       const rawHit = getElementAtPoint(elementsRef.current, sx, sy);
+      if (rawHit?.type === ELEMENT_TYPES.FRAME && isPointOnFrameLabel(rawHit, sx, sy)) {
+        beginFrameNameEdit(rawHit);
+        return;
+      }
       if (rawHit) {
         // If clicking inside a container (such as text on a sticky note), select the container box
         const hit = rawHit.containerId
@@ -929,7 +1002,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       scheduleRender();
       return;
     }
-  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, commitHistory, notifyChange]);
+  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, commitHistory, notifyChange, isSimulationActive, isPrototypeMode, onLinkOpen, beginFrameNameEdit, onToast]);
 
   const onPointerMove = useCallback((e) => {
     const [sx, sy] = getScenePoint(e);
@@ -1044,15 +1117,18 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
       if (el.type === ELEMENT_TYPES.TEXT) {
         const origW = Math.max(1, el.width || 1);
-        const origH = Math.max(1, el.height || 1);
         const origFontSize = el.fontSize || FONT_SIZE_DEFAULT;
+        const origH = Math.max(
+          1,
+          measureText(el.text || ' ', origFontSize, el.fontFamily, el.width > 0 ? el.width : null).height
+        );
 
         const factor = e.altKey ? 2 : 1;
         const effDx = dx * factor;
         const effDy = dy * factor;
 
         const scaleX = handle.includes('e') ? (el.width + effDx) / origW : handle.includes('w') ? (el.width - effDx) / origW : 1;
-        const scaleY = handle.includes('s') ? (el.height + effDy) / origH : handle.includes('n') ? (el.height - effDy) / origH : 1;
+        const scaleY = handle.includes('s') ? (origH + effDy) / origH : handle.includes('n') ? (origH - effDy) / origH : 1;
 
         let scale = 1;
         if (handle === 'e' || handle === 'w') {
@@ -1072,7 +1148,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
         if (e.altKey) {
           x = (el.x + el.width / 2) - newW / 2;
-          y = (el.y + el.height / 2) - newH / 2;
+          y = (el.y + origH / 2) - newH / 2;
         } else {
           if (handle.includes('w')) {
             x = el.x + (el.width - newW);
@@ -1081,7 +1157,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           }
 
           if (handle.includes('n')) {
-            y = el.y + (el.height - newH);
+            y = el.y + (origH - newH);
           } else {
             y = el.y;
           }
@@ -1159,17 +1235,16 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const currentElements = elementsRef.current;
         const ids = as?.selectedElementIds || {};
 
-        const clones = [];
+        const originals = [];
         const newSelectedIds = {};
         for (const el of currentElements) {
           if (ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked) {
             const startState = ia.dragStartPositions?.[el.id];
-            const baseEl = startState || el;
-            const clone = cloneElement(baseEl);
-            clones.push(clone);
-            newSelectedIds[clone.id] = true;
+            originals.push(startState || el);
           }
         }
+        const clones = cloneElementSet(originals);
+        for (const clone of clones) newSelectedIds[clone.id] = true;
 
         if (clones.length > 0) {
           if (ia.dragStartPositions) {
@@ -1963,16 +2038,70 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       setElements([...selected, ...unselected]);
       notifyChange();
       scheduleRender();
+    } else if (action === 'sendBackward' || action === 'bringForward') {
+      const selected = new Set(elementsRef.current
+        .filter(el => selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked)
+        .map(el => el.id));
+      if (!selected.size) return;
+      const next = [...elementsRef.current];
+      if (action === 'sendBackward') {
+        for (let index = 1; index < next.length; index += 1) {
+          if (selected.has(next[index].id) && !selected.has(next[index - 1].id)) {
+            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+          }
+        }
+      } else {
+        for (let index = next.length - 2; index >= 0; index -= 1) {
+          if (selected.has(next[index].id) && !selected.has(next[index + 1].id)) {
+            [next[index], next[index + 1]] = [next[index + 1], next[index]];
+          }
+        }
+      }
+      commitHistory();
+      setElements(next);
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'toggleLock') {
+      const selected = elementsRef.current.filter(el => selectedIds[el.id] && !el.isDeleted && !el.isHidden);
+      if (!selected.length) return;
+      const locked = !selected.every(el => el.locked);
+      commitHistory();
+      setElements(prev => prev.map(el => selectedIds[el.id] && !el.isDeleted && !el.isHidden
+        ? { ...el, locked, version: (el.version || 1) + 1, versionNonce: versionNonce(), updated: Date.now() }
+        : el));
+      setAppState({ selectedElementIds: locked ? {} : selectedIds });
+      notifyChange();
+      scheduleRender();
+    } else if (action === 'paste') {
+      if (!window.__doodleClipboard?.length) {
+        onToast?.('Nothing to paste. Copy an object first.');
+        return;
+      }
+      commitHistory();
+      const pasted = window.__doodleClipboard.map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
+      setElements(prev => [...prev, ...pasted]);
+      setAppState({ selectedElementIds: Object.fromEntries(pasted.map(el => [el.id, true])) });
+      notifyChange();
+      scheduleRender();
+      onToast?.(`Pasted ${pasted.length} object${pasted.length === 1 ? '' : 's'}.`);
     } else if (action === 'group' || action === 'ungroup') {
       const selectedElements = elementsRef.current.filter(el =>
         selectedIds[el.id] && !el.isDeleted && !el.isHidden && !el.locked
       );
-      if (action === 'group' && selectedElements.length < 2) return;
-      if (action === 'ungroup' && !selectedElements.some(el => el.groupIds?.length)) return;
+      const groupedElements = selectedElements.filter(el => el.groupIds?.length);
+      if (action === 'group' && selectedElements.length < 2) {
+        onToast?.('Select at least two unlocked objects to group.');
+        return;
+      }
+      if (action === 'ungroup' && !groupedElements.length) {
+        onToast?.('No grouped objects selected.');
+        return;
+      }
       const groupId = generateId();
       commitHistory();
       setElements(prev => prev.map(el => {
         if (!selectedIds[el.id] || el.isDeleted || el.isHidden || el.locked) return el;
+        if (action === 'ungroup' && !el.groupIds?.length) return el;
         const groupIds = action === 'group'
           ? [...(el.groupIds || []), groupId]
           : (el.groupIds || []).slice(0, -1);
@@ -1980,6 +2109,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }));
       notifyChange();
       scheduleRender();
+      const changedCount = action === 'group' ? selectedElements.length : groupedElements.length;
+      onToast?.(`${action === 'group' ? 'Grouped' : 'Ungrouped'} ${changedCount} object${changedCount === 1 ? '' : 's'}.`);
     } else if (action === 'branchChildRight') {
       branchChildNode('right');
     } else if (action === 'branchChildDown') {
@@ -1989,7 +2120,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     } else if (action === 'createPresentationFrame') {
       createPresentationFrame('16:9');
     }
-  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, autoArrangeTreeLayout, createPresentationFrame]);
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, autoArrangeTreeLayout, createPresentationFrame, onToast]);
 
   const selectLayer = useCallback((elementId, extendSelection) => {
     const target = elementsRef.current.find(el => el.id === elementId && !el.isDeleted);
@@ -2094,17 +2225,27 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           scheduleRender();
           return;
         }
-        case 'copy':
-          window.__doodleClipboard = getSelectedElements().map(el => ({ ...el }));
+        case 'copy': {
+          const copied = getSelectedElements();
+          window.__doodleClipboard = copied.map(el => ({ ...el }));
+          onToast?.(copied.length
+            ? `Copied ${copied.length} object${copied.length === 1 ? '' : 's'}.`
+            : 'Nothing selected to copy.');
           return;
-        case 'paste': {
-          if (window.__doodleClipboard?.length) {
-            commitHistory();
-            const pasted = window.__doodleClipboard.map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
-            setElements(prev => [...prev, ...pasted]);
-            setAppState({ selectedElementIds: Object.fromEntries(pasted.map(el => [el.id, true])) });
-            notifyChange();
+        }
+        case 'cut': {
+          const cut = getSelectedElements();
+          window.__doodleClipboard = cut.map(el => ({ ...el }));
+          if (!cut.length) {
+            onToast?.('Nothing selected to cut.');
+            return;
           }
+          handleAction('delete');
+          onToast?.(`Cut ${cut.length} object${cut.length === 1 ? '' : 's'}.`);
+          return;
+        }
+        case 'paste': {
+          handleAction('paste');
           return;
         }
         case 'duplicate':
@@ -2298,20 +2439,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         startTextEdit(sx, sy);
       }
     } else if (hit?.type === ELEMENT_TYPES.FRAME) {
-      const newName = window.prompt('Rename Frame:', hit.name || 'Frame');
-      if (newName && newName.trim()) {
-        setElements(prev => prev.map(el =>
-          el.id === hit.id
-            ? { ...el, name: newName.trim(), version: (el.version || 1) + 1, versionNonce: versionNonce() }
-            : el
-        ));
-        commitHistory();
-        scheduleRender();
-      }
+      beginFrameNameEdit(hit);
     } else {
       startTextEdit(sx, sy);
     }
-  }, [getScenePoint, setElements, commitHistory, scheduleRender, onNavigateBoardPortal]);
+  }, [getScenePoint, beginFrameNameEdit, onNavigateBoardPortal]);
 
   // ── Text editing ──
   function startTextEdit(sx, sy) {
@@ -2471,8 +2603,264 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   // ── Context menu ──
   const onContextMenu = useCallback((e) => {
     e.preventDefault();
-    // Context menu will be handled externally
-  }, []);
+    if (isPrototypeMode || isSimulationActive) return;
+    const [sceneX, sceneY] = getScenePoint(e);
+    const hit = getElementAtPoint(elementsRef.current, sceneX, sceneY, { includeLocked: true });
+    const previousSelection = appStateRef.current.selectedElementIds || {};
+    let nextSelection = {};
+    if (hit) {
+      if (previousSelection[hit.id]) {
+        nextSelection = previousSelection;
+      } else {
+        const groupId = hit.groupIds?.at(-1);
+        const group = groupId
+          ? elementsRef.current.filter(el => !el.isDeleted && !el.isHidden && el.groupIds?.includes(groupId))
+          : [hit];
+        nextSelection = Object.fromEntries(group.map(el => [el.id, true]));
+      }
+    }
+    setAppState({ selectedElementIds: nextSelection });
+    scheduleRender();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      elementIds: Object.keys(nextSelection),
+    });
+    setContextMenuStylesAvailable(Boolean(window.__doodleStyleClipboard));
+  }, [getScenePoint, isPrototypeMode, isSimulationActive, scheduleRender, setAppState]);
+
+  const handleContextMenuAction = useCallback(async (action, value) => {
+    const ids = contextMenu?.elementIds || [];
+    const selected = elementsRef.current.filter(el =>
+      ids.includes(el.id) && !el.isDeleted && !el.isHidden
+    );
+    const editable = selected.filter(el => !el.locked);
+    const styleProperties = [
+      'strokeColor', 'backgroundColor', 'fillStyle', 'strokeWidth', 'strokeStyle',
+      'roughness', 'opacity', 'roundness', 'fontFamily', 'fontSize',
+      'textAlign', 'verticalAlign', 'lineHeight',
+    ];
+    const writeText = async (text) => {
+      let electronError = null;
+      if (window.electronAPI?.writeClipboardText) {
+        try {
+          const copied = await window.electronAPI.writeClipboardText(text);
+          if (copied) return;
+        } catch (error) {
+          electronError = error;
+          console.warn('Electron clipboard write failed; trying the browser clipboard:', error);
+        }
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      if (electronError) throw electronError;
+      throw new Error('Clipboard text access is not available.');
+    };
+
+    try {
+      switch (action) {
+        case 'copy':
+          window.__doodleClipboard = selected.map(el => JSON.parse(JSON.stringify(el)));
+          onToast?.(selected.length
+            ? `Copied ${selected.length} object${selected.length === 1 ? '' : 's'}.`
+            : 'Nothing selected to copy.');
+          return;
+        case 'cut':
+          window.__doodleClipboard = selected.map(el => JSON.parse(JSON.stringify(el)));
+          if (!editable.length) {
+            onToast?.('Nothing unlocked is selected to cut.');
+            return;
+          }
+          handleAction('delete');
+          onToast?.(`Cut ${editable.length} object${editable.length === 1 ? '' : 's'}.`);
+          return;
+        case 'paste':
+          handleAction('paste');
+          return;
+        case 'duplicate':
+        case 'delete':
+        case 'sendBackward':
+        case 'bringForward':
+        case 'sendToBack':
+        case 'bringToFront':
+        case 'toggleLock':
+          handleAction(action);
+          return;
+        case 'copyStyles':
+          if (selected.length) {
+            window.__doodleStyleClipboard = Object.fromEntries(
+              styleProperties
+                .filter(property => selected[0][property] !== undefined)
+                .map(property => [property, selected[0][property]])
+            );
+            setContextMenuStylesAvailable(true);
+          }
+          return;
+        case 'pasteStyles': {
+          const styles = window.__doodleStyleClipboard;
+          if (!styles || !editable.length) return;
+          const editableIds = new Set(editable.map(el => el.id));
+          commitHistory();
+          setElements(prev => prev.map(el => editableIds.has(el.id)
+            ? { ...el, ...styles, version: (el.version || 1) + 1, versionNonce: versionNonce(), updated: Date.now() }
+            : el));
+          notifyChange();
+          scheduleRender();
+          return;
+        }
+        case 'wrapFrame': {
+          if (!editable.length) return;
+          const bounds = getCommonBounds(editable);
+          if (!bounds) return;
+          const padding = 32;
+          const frameCount = elementsRef.current.filter(el => el.type === ELEMENT_TYPES.FRAME && !el.isDeleted).length + 1;
+          const frame = createElement(
+            ELEMENT_TYPES.FRAME,
+            bounds.x - padding,
+            bounds.y - padding,
+            bounds.width + padding * 2,
+            bounds.height + padding * 2,
+            {
+              name: `Frame ${frameCount}`,
+              strokeColor: theme === 'dark' ? '#737373' : '#525252',
+              backgroundColor: 'rgba(128, 128, 128, 0.04)',
+              fillStyle: 'solid',
+            }
+          );
+          const selectedIds = new Set(editable.map(el => el.id));
+          const firstSelected = elementsRef.current.findIndex(el => selectedIds.has(el.id));
+          commitHistory();
+          setElements(prev => {
+            const children = prev.map(el => selectedIds.has(el.id)
+              ? { ...el, frameId: frame.id, version: (el.version || 1) + 1, versionNonce: versionNonce() }
+              : el);
+            const insertionIndex = Math.max(0, firstSelected);
+            return [...children.slice(0, insertionIndex), frame, ...children.slice(insertionIndex)];
+          });
+          setAppState({ selectedElementIds: { [frame.id]: true } });
+          notifyChange();
+          scheduleRender();
+          return;
+        }
+        case 'flipHorizontal':
+        case 'flipVertical': {
+          if (!editable.length) return;
+          const bounds = getCommonBounds(editable);
+          if (!bounds) return;
+          const horizontal = action === 'flipHorizontal';
+          const axis = horizontal ? bounds.x + bounds.width / 2 : bounds.y + bounds.height / 2;
+          const editableIds = new Set(editable.map(el => el.id));
+          commitHistory();
+          setElements(prev => prev.map(el => {
+            if (!editableIds.has(el.id)) return el;
+            const next = { ...el };
+            if (horizontal) {
+              next.x = 2 * axis - (el.x + (el.width || 0));
+              next.angle = -(el.angle || 0);
+              if (el.points?.length) next.points = el.points.map(([px, py]) => [el.width - px, py]);
+            } else {
+              next.y = 2 * axis - (el.y + (el.height || 0));
+              next.angle = Math.PI - (el.angle || 0);
+              if (el.points?.length) next.points = el.points.map(([px, py]) => [px, el.height - py]);
+            }
+            next.version = (el.version || 1) + 1;
+            next.versionNonce = versionNonce();
+            next.updated = Date.now();
+            return next;
+          }));
+          notifyChange();
+          scheduleRender();
+          return;
+        }
+        case 'addToLibrary': {
+          if (!editable.length) return;
+          const bounds = getCommonBounds(editable);
+          if (!bounds) return;
+          const stored = localStorage.getItem('doodle_custom_templates_v1');
+          const templates = stored ? JSON.parse(stored) : [];
+          const normalizedElements = editable.map(el => ({
+            ...JSON.parse(JSON.stringify(el)),
+            x: el.x - bounds.x,
+            y: el.y - bounds.y,
+          }));
+          const template = {
+            id: `tpl_${Date.now()}`,
+            title: `Selection ${templates.length + 1}`,
+            category: 'Custom',
+            desc: `${editable.length} saved elements`,
+            elements: normalizedElements,
+            createdAt: Date.now(),
+            elementCount: editable.length,
+          };
+          localStorage.setItem('doodle_custom_templates_v1', JSON.stringify([template, ...templates]));
+          window.alert(`Saved "${template.title}" to the template library.`);
+          return;
+        }
+        case 'saveLink': {
+          if (!editable.length || !value) return;
+          const editableIds = new Set(editable.map(el => el.id));
+          commitHistory();
+          setElements(prev => prev.map(el => editableIds.has(el.id)
+            ? { ...el, link: value, version: (el.version || 1) + 1, versionNonce: versionNonce(), updated: Date.now() }
+            : el));
+          notifyChange();
+          scheduleRender();
+          return;
+        }
+        case 'copyLink': {
+          if (!selected.length) return;
+          const url = new URL(window.location.href);
+          url.searchParams.set('element', selected[0].id);
+          await writeText(url.toString());
+          window.electronAPI?.showNotification?.('Clipboard', 'Copied object link to clipboard');
+          return;
+        }
+        case 'copySvg': {
+          if (!selected.length) return;
+          const svg = await exportToSvg(selected, appStateRef.current, filesRef.current, { exportBackground: false });
+          await writeText(svg);
+          window.electronAPI?.showNotification?.('Clipboard', 'Copied SVG vector to clipboard');
+          return;
+        }
+        case 'copyPng': {
+          if (!selected.length) return;
+          const blob = await exportToBlob(selected, appStateRef.current, filesRef.current, {
+            exportBackground: false,
+            exportScale: 2,
+          });
+          if (!blob) throw new Error('Unable to render the selected objects as an image.');
+          let copied = false;
+          if (window.electronAPI?.writeClipboardImage) {
+            try {
+              const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              copied = await window.electronAPI.writeClipboardImage(dataUrl);
+            } catch (error) {
+              console.warn('Electron image clipboard write failed; trying the browser clipboard:', error);
+            }
+          }
+          if (!copied && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            copied = true;
+          }
+          if (!copied) throw new Error('Clipboard image access is not available.');
+          window.electronAPI?.showNotification?.('Clipboard', 'Copied PNG image to clipboard');
+          return;
+        }
+        default:
+          return;
+      }
+    } catch (error) {
+      console.error(`Canvas context-menu action "${action}" failed`, error);
+      window.alert(`Could not ${action === 'copyPng' ? 'copy the PNG' : action === 'copySvg' ? 'copy the SVG' : action === 'copyLink' ? 'copy the object link' : action === 'addToLibrary' ? 'save the selection' : 'complete this action'}: ${error.message}`);
+    }
+  }, [contextMenu, commitHistory, handleAction, notifyChange, scheduleRender, setAppState, setElements, theme, onToast]);
 
   // ── Imperative Doodle Engine API ──
   useImperativeHandle(ref, () => {
@@ -2482,6 +2870,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       getSceneElementsIncludingDeleted: () => elementsRef.current,
       getAppState: () => appStateRef.current,
       getFiles: () => filesRef.current,
+      renderCanvasStyle: (style) => renderRef.current?.(style),
 
       // Scene mutation
       updateScene: (sceneData) => {
@@ -3147,21 +3536,34 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
 
-  const selectedElementsForComponent = getSelectedElements();
-  const selectedComponentIds = [...new Set(selectedElementsForComponent
-    .map(element => element.componentId)
-    .filter(Boolean))];
+  const selectedElementsForComponent = useMemo(
+    () => isComponentsPanelOpen ? getSelectedElements() : [],
+    [isComponentsPanelOpen, elements, appState.selectedElementIds, getSelectedElements]
+  );
+  const selectedComponentIds = useMemo(
+    () => [...new Set(selectedElementsForComponent
+      .map(element => element.componentId)
+      .filter(Boolean))],
+    [selectedElementsForComponent]
+  );
   const selectedComponentId = selectedComponentIds.length === 1 &&
     selectedElementsForComponent.every(element => element.componentId === selectedComponentIds[0])
     ? selectedComponentIds[0]
     : null;
-  const simulationGraph = buildSimulationGraph(elements);
-  const simulationChoices = simulationCurrentId
-    ? getSimulationChoices(simulationGraph, simulationCurrentId)
-    : [];
-  const changeRows = changeSnapshot
-    ? compareSceneToSnapshot(elements, changeSnapshot)
-    : [];
+  const simulationGraph = useMemo(
+    () => isSimulationActive ? buildSimulationGraph(elements) : null,
+    [elements, isSimulationActive]
+  );
+  const simulationChoices = useMemo(
+    () => simulationCurrentId && simulationGraph
+      ? getSimulationChoices(simulationGraph, simulationCurrentId)
+      : [],
+    [simulationGraph, simulationCurrentId]
+  );
+  const changeRows = useMemo(
+    () => changeSnapshot ? compareSceneToSnapshot(elements, changeSnapshot) : [],
+    [elements, changeSnapshot]
+  );
   const createComponentFromSelection = (name) => {
     const component = createSmartComponent(selectedElementsForComponent, name, filesRef.current);
     const nextComponents = writeSmartComponents([...readSmartComponents(), component]);
@@ -3311,11 +3713,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     setIsPortalPanelOpen(false);
     setIsChangeTrackingOpen(false);
     setIsSimulationActive(true);
+    const graph = buildSimulationGraph(elementsRef.current);
     const selected = getSelectedElements().find(element =>
-      simulationGraph.nodes.some(node => node.id === element.id)
+      graph.nodes.some(node => node.id === element.id)
     );
     if (selected) startSimulationAt(selected.id);
-    else if (simulationGraph.starts.length === 1) startSimulationAt(simulationGraph.starts[0].id);
+    else if (graph.starts.length === 1) startSimulationAt(graph.starts[0].id);
     else {
       setSimulationCurrentId(null);
       setSimulationPath([]);
@@ -3329,6 +3732,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
   // ── Welcome screen ──
   const nonDeletedElements = elements.filter(e => !e.isDeleted);
+  const contextMenuElements = contextMenu
+    ? elements.filter(el => contextMenu.elementIds.includes(el.id) && !el.isDeleted && !el.isHidden)
+    : [];
   const showWelcome = nonDeletedElements.length === 0 &&
     (appState.activeTool?.type === 'selection' || !appState.activeTool?.type);
 
@@ -3338,9 +3744,25 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       className={`doodle-canvas-root doodle-engine-container ${theme === 'dark' ? 'theme--dark' : 'theme--light'}`}
       style={{ position: 'absolute', inset: 0, overflow: 'hidden', userSelect: 'none' }}
     >
+      {contextMenu && (
+        <Suspense fallback={null}>
+          <CanvasContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            hasSelection={contextMenuElements.length > 0}
+            canEdit={contextMenuElements.length > 0 && contextMenuElements.every(el => !el.locked)}
+            canPaste={Boolean(window.__doodleClipboard?.length)}
+            hasStyles={contextMenuStylesAvailable}
+            selectedLocked={contextMenuElements.length > 0 && contextMenuElements.every(el => el.locked)}
+            onAction={handleContextMenuAction}
+            onClose={() => setContextMenu(null)}
+            theme={theme}
+          />
+        </Suspense>
+      )}
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', touchAction: 'none', cursor: isPrototypeMode ? 'pointer' : undefined }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -3348,6 +3770,53 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />
+
+      {frameNameEdit && (() => {
+        const frame = elements.find(element => element.id === frameNameEdit.id && !element.isDeleted && !element.isHidden);
+        if (!frame) return null;
+        const frameX = frame.width < 0 ? frame.x + frame.width : frame.x;
+        const frameY = frame.height < 0 ? frame.y + frame.height : frame.y;
+        const [left, top] = sceneBoundsToCanvas(frameX, frameY - 26);
+        const zoom = appState.zoom?.value || 1;
+        const width = Math.max(54, ((frameNameEdit.draft.length || 5) * 8) + 20) * zoom;
+        return (
+          <input
+            ref={frameNameInputRef}
+            type="text"
+            className="doodle-frame-name-input"
+            aria-label="Frame name"
+            value={frameNameEdit.draft}
+            onChange={(event) => setFrameNameEdit(current =>
+              current ? { ...current, draft: event.target.value } : current
+            )}
+            onBlur={() => {
+              if (cancelFrameNameEditRef.current) {
+                cancelFrameNameEditRef.current = false;
+                return;
+              }
+              commitFrameNameEdit();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelFrameNameEditRef.current = true;
+                setFrameNameEdit(null);
+                event.currentTarget.blur();
+              }
+            }}
+            style={{
+              left,
+              top,
+              width,
+              height: 22 * zoom,
+              fontSize: 12 * zoom,
+            }}
+          />
+        );
+      })()}
 
       {changeRows.map(change => {
         const bounds = getElementBounds(change.element);
@@ -3597,79 +4066,89 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       </div>
 
       {isLayersPanelOpen && (
-        <LayersPanel
-          elements={elements}
-          selectedIds={appState.selectedElementIds || {}}
-          onClose={() => setIsLayersPanelOpen(false)}
-          onSelect={selectLayer}
-          onToggleVisibility={(id) => {
-            const element = elementsRef.current.find(item => item.id === id);
-            if (element) updateLayerProperty(id, 'isHidden', !element.isHidden);
-          }}
-          onToggleLock={(id) => {
-            const element = elementsRef.current.find(item => item.id === id);
-            if (element) updateLayerProperty(id, 'locked', !element.locked);
-          }}
-          onMove={moveLayer}
-          onGroup={() => handleAction('group')}
-          onUngroup={() => handleAction('ungroup')}
-        />
+        <Suspense fallback={null}>
+          <LayersPanel
+            elements={elements}
+            selectedIds={appState.selectedElementIds || {}}
+            onClose={() => setIsLayersPanelOpen(false)}
+            onSelect={selectLayer}
+            onToggleVisibility={(id) => {
+              const element = elementsRef.current.find(item => item.id === id);
+              if (element) updateLayerProperty(id, 'isHidden', !element.isHidden);
+            }}
+            onToggleLock={(id) => {
+              const element = elementsRef.current.find(item => item.id === id);
+              if (element) updateLayerProperty(id, 'locked', !element.locked);
+            }}
+            onMove={moveLayer}
+            onGroup={() => handleAction('group')}
+            onUngroup={() => handleAction('ungroup')}
+          />
+        </Suspense>
       )}
       {isComponentsPanelOpen && (
-        <SmartComponentsPanel
-          components={smartComponents}
-          selectedCount={selectedElementsForComponent.length}
-          selectedComponentId={selectedComponentId}
-          onClose={() => setIsComponentsPanelOpen(false)}
-          onCreate={createComponentFromSelection}
-          onInsert={insertComponent}
-          onUpdate={updateComponentMaster}
-          onDelete={deleteSmartComponent}
-        />
+        <Suspense fallback={null}>
+          <SmartComponentsPanel
+            components={smartComponents}
+            selectedCount={selectedElementsForComponent.length}
+            selectedComponentId={selectedComponentId}
+            onClose={() => setIsComponentsPanelOpen(false)}
+            onCreate={createComponentFromSelection}
+            onInsert={insertComponent}
+            onUpdate={updateComponentMaster}
+            onDelete={deleteSmartComponent}
+          />
+        </Suspense>
       )}
       {isPortalPanelOpen && (
-        <BoardPortalPanel
-          workspaces={workspaces}
-          activeWorkspaceId={workspaceId}
-          activeFileId={fileId}
-          onCreate={createBoardPortal}
-          onClose={() => setIsPortalPanelOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <BoardPortalPanel
+            workspaces={workspaces}
+            activeWorkspaceId={workspaceId}
+            activeFileId={fileId}
+            onCreate={createBoardPortal}
+            onClose={() => setIsPortalPanelOpen(false)}
+          />
+        </Suspense>
       )}
       {isChangeTrackingOpen && (
-        <ChangeTrackingPanel
-          hasBaseline={Boolean(changeSnapshot)}
-          changes={changeRows}
-          onSetBaseline={saveChangeBaseline}
-          onClearBaseline={removeChangeBaseline}
-          onFocus={focusTrackedChange}
-          onClose={() => setIsChangeTrackingOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ChangeTrackingPanel
+            hasBaseline={Boolean(changeSnapshot)}
+            changes={changeRows}
+            onSetBaseline={saveChangeBaseline}
+            onClearBaseline={removeChangeBaseline}
+            onFocus={focusTrackedChange}
+            onClose={() => setIsChangeTrackingOpen(false)}
+          />
+        </Suspense>
       )}
       {isSimulationActive && (
-        <SimulationPanel
-          nodes={simulationCurrentId ? simulationGraph.nodes : simulationGraph.starts.length ? simulationGraph.starts : simulationGraph.nodes}
-          currentId={simulationCurrentId}
-          path={simulationPath}
-          choices={simulationChoices}
-          onStart={startSimulationAt}
-          onChoose={chooseSimulationBranch}
-          onBack={() => {
-            const previousPath = simulationPath.slice(0, -1);
-            setSimulationPath(previousPath);
-            setSimulationCurrentId(previousPath[previousPath.length - 1] || null);
-          }}
-          onReset={() => {
-            const firstId = simulationPath[0];
-            setSimulationCurrentId(firstId || null);
-            setSimulationPath(firstId ? [firstId] : []);
-          }}
-          onClose={() => {
-            setIsSimulationActive(false);
-            setSimulationCurrentId(null);
-            setSimulationPath([]);
-          }}
-        />
+        <Suspense fallback={null}>
+          <SimulationPanel
+            nodes={simulationCurrentId ? simulationGraph.nodes : simulationGraph.starts.length ? simulationGraph.starts : simulationGraph.nodes}
+            currentId={simulationCurrentId}
+            path={simulationPath}
+            choices={simulationChoices}
+            onStart={startSimulationAt}
+            onChoose={chooseSimulationBranch}
+            onBack={() => {
+              const previousPath = simulationPath.slice(0, -1);
+              setSimulationPath(previousPath);
+              setSimulationCurrentId(previousPath[previousPath.length - 1] || null);
+            }}
+            onReset={() => {
+              const firstId = simulationPath[0];
+              setSimulationCurrentId(firstId || null);
+              setSimulationPath(firstId ? [firstId] : []);
+            }}
+            onClose={() => {
+              setIsSimulationActive(false);
+              setSimulationCurrentId(null);
+              setSimulationPath([]);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Bottom-Right: Help (?) button pill */}

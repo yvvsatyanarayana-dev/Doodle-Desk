@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { getShortcutBindings } from '../engine/keyboardShortcuts';
 
 export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
   useEffect(() => {
@@ -16,6 +17,7 @@ export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
   if (!isOpen) return null;
 
   const isDark = theme === 'dark' || (theme !== 'light' && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const prototypeShortcut = getShortcutBindings().openPrototypeLinks;
 
   const toolsShortcuts = [
     { label: 'Hand (panning tool)', shortcut: <kbd className="doodle-help-kbd">H</kbd> },
@@ -143,6 +145,23 @@ export function HelpModal({ isOpen, onClose, theme = 'dark' }) {
   ];
 
   const editorShortcuts = [
+    ...(prototypeShortcut ? [{
+      label: 'Open interactive prototype flows',
+      shortcut: prototypeShortcut.split('+').map((key, index) => (
+        <React.Fragment key={`${key}-${index}`}>
+          {index > 0 && <span className="doodle-help-connector">+</span>}
+          <kbd className="doodle-help-kbd">{key}</kbd>
+        </React.Fragment>
+      )),
+    }] : []),
+    {
+      label: 'Find & Replace on canvas',
+      shortcut: (
+        <>
+          <kbd className="doodle-help-kbd">Ctrl</kbd> <kbd className="doodle-help-kbd">F</kbd>
+        </>
+      ),
+    },
     {
       label: 'Open layers (visibility, locking & order)',
       shortcut: (

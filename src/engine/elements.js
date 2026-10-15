@@ -26,6 +26,48 @@ export function cloneElement(el, overrides = {}) {
   return cloned;
 }
 
+export function cloneElementSet(elements) {
+  const clones = elements.map(element => cloneElement(element));
+  const elementIds = new Map(elements.map((element, index) => [element.id, clones[index].id]));
+  const groupIds = new Map();
+  const componentInstanceIds = new Map();
+
+  for (const element of elements) {
+    for (const groupId of element.groupIds || []) {
+      if (!groupIds.has(groupId)) groupIds.set(groupId, generateId());
+    }
+    if (element.componentInstanceId && !componentInstanceIds.has(element.componentInstanceId)) {
+      componentInstanceIds.set(element.componentInstanceId, generateId());
+    }
+  }
+
+  return clones.map((clone, index) => {
+    const source = elements[index];
+    const remapElementId = id => elementIds.get(id) || id;
+    if (Array.isArray(source.boundElements)) {
+      clone.boundElements = source.boundElements.map(binding => ({
+        ...binding,
+        id: remapElementId(binding.id),
+      }));
+    }
+    if (source.containerId) clone.containerId = remapElementId(source.containerId);
+    if (source.frameId) clone.frameId = remapElementId(source.frameId);
+    if (source.startBinding?.elementId) {
+      clone.startBinding = { ...source.startBinding, elementId: remapElementId(source.startBinding.elementId) };
+    }
+    if (source.endBinding?.elementId) {
+      clone.endBinding = { ...source.endBinding, elementId: remapElementId(source.endBinding.elementId) };
+    }
+    if (Array.isArray(source.groupIds)) {
+      clone.groupIds = source.groupIds.map(groupId => groupIds.get(groupId));
+    }
+    if (source.componentInstanceId) {
+      clone.componentInstanceId = componentInstanceIds.get(source.componentInstanceId);
+    }
+    return clone;
+  });
+}
+
 // All font families
 export const FONT_FAMILY = {
   Doodlefont: 5,

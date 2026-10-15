@@ -657,6 +657,24 @@ export function measureText(text, fontSize, fontFamily = 5, maxWidth = null) {
   };
 }
 
+export function getTextElementBounds(element) {
+  const text = element.text || '';
+  const measured = text
+    ? measureText(
+      text,
+      element.fontSize || 20,
+      element.fontFamily,
+      element.width > 0 ? element.width : null
+    )
+    : { width: 0, height: 0 };
+  return {
+    x: element.x,
+    y: element.y,
+    width: element.width > 0 ? element.width : measured.width,
+    height: measured.height,
+  };
+}
+
 // Render hit-test overlay (selection box + handles)
 export function renderSelectionOverlay(ctx, elements, zoom = 1) {
   for (const el of elements) {
@@ -668,7 +686,9 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
       : null;
     const localBounds = pointBounds
       ? { x: el.x + pointBounds.x, y: el.y + pointBounds.y, width: pointBounds.width, height: pointBounds.height }
-      : { x: el.x, y: el.y, width: el.width, height: el.height };
+      : el.type === ELEMENT_TYPES.TEXT
+        ? getTextElementBounds(el)
+        : { x: el.x, y: el.y, width: el.width, height: el.height };
 
     if (el.angle && Math.abs(el.angle) > 0.0001) {
       const [cx, cy] = [localBounds.x + localBounds.width / 2, localBounds.y + localBounds.height / 2];

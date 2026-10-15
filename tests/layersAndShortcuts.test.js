@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { hitTestElement } from '../src/engine/hitTest.js';
+import { getElementAtPoint, hitTestElement } from '../src/engine/hitTest.js';
 import { exportToSvg } from '../src/engine/io/export.js';
 import {
   findShortcutAction,
@@ -8,6 +8,7 @@ import {
   resetShortcutBindings,
   saveShortcutBindings,
 } from '../src/engine/keyboardShortcuts.js';
+import { cloneElementSet } from '../src/engine/elements.js';
 
 afterEach(() => {
   localStorage.clear();
@@ -30,12 +31,52 @@ describe('Layers and keyboard shortcuts', () => {
     expect(hitTestElement(elements[2], 240, 0)).toBe(false);
   });
 
+  it('can hit-test a locked element only when explicitly requested', () => {
+    const locked = { id: 'locked', type: 'rectangle', x: 10, y: 10, width: 80, height: 60, locked: true };
+    expect(getElementAtPoint([locked], 10, 40)).toBeNull();
+    expect(getElementAtPoint([locked], 10, 40, { includeLocked: true })).toBe(locked);
+  });
+
+  it('duplicates grouped elements into a separate group and remaps internal bindings', () => {
+    const originals = [
+      {
+        id: 'shape',
+        type: 'rectangle',
+        x: 10,
+        y: 20,
+        width: 80,
+        height: 60,
+        groupIds: ['original-group'],
+        boundElements: [{ id: 'label', type: 'text' }],
+      },
+      {
+        id: 'label',
+        type: 'text',
+        x: 20,
+        y: 30,
+        width: 40,
+        height: 20,
+        groupIds: ['original-group'],
+        containerId: 'shape',
+      },
+    ];
+
+    const clones = cloneElementSet(originals);
+
+    expect(clones.map(element => element.id)).not.toEqual(originals.map(element => element.id));
+    expect(clones[0].groupIds[0]).toBe(clones[1].groupIds[0]);
+    expect(clones[0].groupIds[0]).not.toBe(originals[0].groupIds[0]);
+    expect(clones[0].boundElements[0].id).toBe(clones[1].id);
+    expect(clones[1].containerId).toBe(clones[0].id);
+  });
+
   it('matches default and customized shortcuts without matching other modifiers', () => {
     const defaults = getShortcutBindings();
     expect(findShortcutAction({ key: 'z', ctrlKey: true }, defaults)).toBe('undo');
     expect(findShortcutAction({ key: 'g', ctrlKey: true, shiftKey: true }, defaults)).toBe('ungroup');
     expect(findShortcutAction({ key: 'g', ctrlKey: true }, defaults)).toBe('group');
     expect(findShortcutAction({ key: 'l', shiftKey: true }, defaults)).toBe('toggleLayers');
+    expect(findShortcutAction({ key: 'p', ctrlKey: true, shiftKey: true }, defaults)).toBe('openPrototypeLinks');
     expect(findShortcutAction({ key: 'z', ctrlKey: true, altKey: true }, defaults)).toBeNull();
     expect(findShortcutConflict('Ctrl+S', 'undo', defaults)).toBe('Save');
     expect(findShortcutConflict('Ctrl+Z', 'redo', defaults)).toBe('Undo');

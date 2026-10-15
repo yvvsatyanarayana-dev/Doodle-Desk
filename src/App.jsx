@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Link2, Sparkles, X } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useFileActions } from './hooks/useFileActions';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -31,6 +31,8 @@ const SmartDiagramGeneratorModal = lazy(() => import('./components/SmartDiagramG
 const CanvasTimeMachine = lazy(() => import('./components/CanvasTimeMachine').then((module) => ({ default: module.CanvasTimeMachine })));
 const SmartAutoLayoutModal = lazy(() => import('./components/SmartAutoLayoutModal').then((module) => ({ default: module.SmartAutoLayoutModal })));
 const FocusModeOverlay = lazy(() => import('./components/FocusModeOverlay').then((module) => ({ default: module.FocusModeOverlay })));
+const DiagramHealthCheck = lazy(() => import('./components/DiagramHealthCheck').then((module) => ({ default: module.DiagramHealthCheck })));
+const PrototypeLinksPanel = lazy(() => import('./components/PrototypeLinksPanel').then((module) => ({ default: module.PrototypeLinksPanel })));
 import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
@@ -39,6 +41,7 @@ import { CanvasExtraToolsDropdown } from './components/CanvasExtraToolsDropdown'
 import { CanvasTopRightSettings } from './components/CanvasTopRightSettings';
 import { CustomLaserPointer } from './components/CustomLaserPointer';
 import { LibrarySidebar } from './components/LibrarySidebar';
+import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
 
 export default function App() {
   const doodleCanvasRef = useRef(null);
@@ -54,10 +57,13 @@ export default function App() {
     setDoodleAPI((prev) => prev || ref);
   }, []);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isTemplateLibraryOpen, setIsTemplateLibraryOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [canvasSearchFocusRequest, setCanvasSearchFocusRequest] = useState(0);
   const [isPresentationActive, setIsPresentationActive] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
   const [isLiveChatOpen, setIsLiveChatOpen] = useState(false);
@@ -90,7 +96,36 @@ export default function App() {
   const [isColorPaletteOpen, setIsColorPaletteOpen] = useState(false);
   const [isTimeMachineOpen, setIsTimeMachineOpen] = useState(false);
   const [isAutoLayoutOpen, setIsAutoLayoutOpen] = useState(false);
+  const [isDiagramHealthCheckOpen, setIsDiagramHealthCheckOpen] = useState(false);
+  const [isPrototypeLinksOpen, setIsPrototypeLinksOpen] = useState(false);
+  const [isPrototypeActive, setIsPrototypeActive] = useState(false);
+  const [, setCanvasSelection] = useState({});
   const [isFocusModeActive, setIsFocusModeActive] = useState(false);
+
+  const showToast = useCallback((message) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+      toastTimerRef.current = null;
+    }, 2200);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isPrototypeActive) return undefined;
+    const exitPrototype = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsPrototypeActive(false);
+    };
+    window.addEventListener('keydown', exitPrototype, true);
+    return () => window.removeEventListener('keydown', exitPrototype, true);
+  }, [isPrototypeActive]);
 
   // Creative drawing tools
   const [isDrawToShapeActive, setIsDrawToShapeActive] = useState(false);
@@ -437,6 +472,7 @@ export default function App() {
   // Set canvas paper & grid style with proper canvas scene synchronization
   const handleSetCanvasStyle = useCallback((style) => {
     setCanvasStyle(style);
+    doodleAPI?.renderCanvasStyle?.(style);
     if (!doodleAPI) return;
 
     let bg = undefined;
@@ -593,25 +629,26 @@ export default function App() {
     // 1. Check if this is an internal target element link (e.g. ?element=PTJIEF9OFk-lYKCbxZkeJ)
     const targetElementId = extractElementIdFromLink(rawUrl);
 
-    if (targetElementId && doodleAPI) {
-      const elements = doodleAPI.getSceneElements?.() || [];
+    if (targetElementId) {
+      const elements = doodleAPI?.getSceneElements?.() || [];
       const targetElement = elements.find((el) => el.id === targetElementId && !el.isDeleted);
 
       if (targetElement) {
-        // Select the target element and smoothly scroll & center it in the canvas viewport
-        doodleAPI.updateScene({
-          appState: {
-            selectedElementIds: { [targetElement.id]: true },
-            selectedGroupIds: {},
-          },
-        });
+        if (!isPrototypeActive) {
+          doodleAPI.updateScene({
+            appState: {
+              selectedElementIds: { [targetElement.id]: true },
+              selectedGroupIds: {},
+            },
+          });
+        }
         doodleAPI.scrollToContent([targetElement], {
-          fitToContent: false,
+          fitToContent: isPrototypeActive && targetElement.type === 'frame',
           animate: true,
-          duration: 350,
+          duration: isPrototypeActive ? 420 : 350,
         });
-        return;
       }
+      return;
     }
 
     // 2. Prevent opening internal app localhost / file URLs in external browser
@@ -640,7 +677,7 @@ export default function App() {
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
-  }, [doodleAPI]);
+  }, [doodleAPI, isPrototypeActive]);
 
   // Clean internal element linking without full localhost URLs
   const generateLinkForSelection = useCallback((id) => {
@@ -718,11 +755,30 @@ export default function App() {
         e.target?.tagName === 'TEXTAREA' ||
         e.target?.isContentEditable;
 
+      if (!isInputFocused && findShortcutAction(e, getShortcutBindings()) === 'openPrototypeLinks') {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsPrototypeActive(false);
+        setIsPrototypeLinksOpen((isOpen) => !isOpen);
+        return;
+      }
+
       // Ctrl+K (Command Palette)
       if (isCtrlOrCmd && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         e.stopPropagation();
         setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl+F (Find & Replace on canvas)
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'f' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsCommandPaletteOpen(false);
+        setLibraryInitialTab('search');
+        setIsLibraryOpen(true);
+        setCanvasSearchFocusRequest((request) => request + 1);
         return;
       }
 
@@ -968,7 +1024,8 @@ export default function App() {
         },
       });
     }
-  }, [activeFile, activeWorkspace, renameFile, doodleAPI]);
+    showToast(`Renamed file to “${newTitle}”.`);
+  }, [activeFile, activeWorkspace, renameFile, doodleAPI, showToast]);
 
   const handlePrintCanvas = useCallback(async () => {
     if (!doodleAPI) return;
@@ -1152,7 +1209,10 @@ export default function App() {
         onImportWorkspace={importWorkspace}
         onCreateFile={(wsId) => createFile(wsId || activeWorkspaceId)}
         onSwitchFile={(fileId, wsId) => switchFile(fileId, wsId || activeWorkspaceId)}
-        onRenameFile={(fileId, name, wsId) => renameFile(fileId, name, wsId || activeWorkspaceId)}
+        onRenameFile={(fileId, name, wsId) => {
+          renameFile(fileId, name, wsId || activeWorkspaceId);
+          showToast(`Renamed file to “${name.trim()}”.`);
+        }}
         onDuplicateFile={(fileId, wsId) => duplicateFile(fileId, wsId || activeWorkspaceId)}
         onDeleteFile={(fileId, wsId) => deleteFile(fileId, wsId || activeWorkspaceId)}
         collabStatus={collabStatus}
@@ -1190,10 +1250,13 @@ export default function App() {
           ref={doodleAPICallback}
           theme={effectiveTheme}
           onChange={handleSceneChange}
+          onToast={showToast}
+          onSelectionChange={setCanvasSelection}
           isCollaborating={collabStatus !== 'disconnected'}
           collaborators={collaborators}
           onPointerUpdate={handlePointerUpdate}
           onLinkOpen={handleLinkOpen}
+          isPrototypeMode={isPrototypeActive}
           renderEmbeddable={renderEmbeddable}
           isDrawToShapeActive={isDrawToShapeActive}
           onFreeDrawCommit={handleFreeDrawCommit}
@@ -1337,6 +1400,13 @@ export default function App() {
         onOpenMermaid={() => setIsMermaidModalOpen(true)}
         onOpenAutoLayout={() => setIsAutoLayoutOpen(true)}
         onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
+        onOpenDiagramAudit={() => setIsDiagramHealthCheckOpen(true)}
+        onOpenFindReplace={() => {
+          setLibraryInitialTab('search');
+          setIsLibraryOpen(true);
+          setCanvasSearchFocusRequest((request) => request + 1);
+        }}
+        onOpenPrototypeLinks={() => setIsPrototypeLinksOpen(true)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         onOpenWorkspaces={() => {
           saveActiveWorkspaceSnapshot(true);
@@ -1375,6 +1445,7 @@ export default function App() {
         doodleAPI={doodleAPI}
         theme={effectiveTheme}
         initialTab={libraryInitialTab}
+        canvasSearchFocusRequest={canvasSearchFocusRequest}
       />
 
       {/* Smart Template Library */}
@@ -1493,7 +1564,10 @@ export default function App() {
         onImportWorkspace={importWorkspace}
         onCreateFile={(wsId) => createFile(wsId || activeWorkspaceId)}
         onSwitchFile={(fileId, wsId) => switchFile(fileId, wsId || activeWorkspaceId)}
-        onRenameFile={(fileId, name, wsId) => renameFile(fileId, name, wsId || activeWorkspaceId)}
+        onRenameFile={(fileId, name, wsId) => {
+          renameFile(fileId, name, wsId || activeWorkspaceId);
+          showToast(`Renamed file to “${name.trim()}”.`);
+        }}
         onDuplicateFile={(fileId, wsId) => duplicateFile(fileId, wsId || activeWorkspaceId)}
         onDeleteFile={(fileId, wsId) => deleteFile(fileId, wsId || activeWorkspaceId)}
         theme={effectiveTheme}
@@ -1566,6 +1640,59 @@ export default function App() {
         </Suspense>
       )}
 
+      {isDiagramHealthCheckOpen && (
+        <Suspense fallback={null}>
+          <DiagramHealthCheck
+            isOpen={isDiagramHealthCheckOpen}
+            onClose={() => setIsDiagramHealthCheckOpen(false)}
+            doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {isPrototypeLinksOpen && (
+        <Suspense fallback={null}>
+          <PrototypeLinksPanel
+            doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+            onToast={showToast}
+            onClose={() => setIsPrototypeLinksOpen(false)}
+            onStart={(startElementId) => {
+              const startElement = (doodleAPI?.getSceneElements?.() || []).find((element) => element.id === startElementId);
+              if (startElement) {
+                doodleAPI?.scrollToContent?.([startElement], { fitToContent: true, animate: true, duration: 420 });
+              }
+              setIsPrototypeLinksOpen(false);
+              setIsPrototypeActive(true);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {isPrototypeActive && (
+        <div className="prototype-active-pill" role="status">
+          <span><Link2 size={14} /> Prototype mode</span>
+          <small>Click linked objects to navigate</small>
+          <button
+            type="button"
+            className="prototype-edit-flow"
+            onClick={() => {
+              setIsPrototypeActive(false);
+              setIsPrototypeLinksOpen(true);
+            }}
+          >
+            Edit flow
+          </button>
+          <button type="button" onClick={() => setIsPrototypeActive(false)} aria-label="Exit prototype mode"><X size={14} /></button>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className="app-toast" role="status" aria-live="polite">
+          {toastMessage}
+        </div>
+      )}
 
       {/* Canvas Spotlight Focus Mode Overlay */}
       {isFocusModeActive && (
