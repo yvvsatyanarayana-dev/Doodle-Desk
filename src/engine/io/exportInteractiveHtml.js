@@ -1,5 +1,6 @@
 import { exportToSvg } from './export.js';
 import { getCommonBounds } from '../math/geometry.js';
+import { getScenarioWalkthroughScenes } from '../scenarioWalkthrough.js';
 
 /**
  * Generates a self-contained, zero-dependency interactive HTML web player document.
@@ -9,6 +10,7 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
   const activeElements = elements.filter((el) => !el.isDeleted);
   const docTitle = appState.name || 'Doodle Diagram';
   const theme = appState.theme || 'dark';
+  const isWalkthrough = options.mode === 'walkthrough';
 
   // Extract frames as presentation slides
   const frameElements = activeElements
@@ -18,14 +20,16 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
       return a.x - b.x;
     });
 
-  const framesData = frameElements.map((f, i) => ({
+  const framesData = isWalkthrough
+    ? getScenarioWalkthroughScenes(activeElements)
+    : frameElements.map((f, i) => ({
     id: f.id,
     name: f.name || `Slide ${i + 1}`,
     x: f.x,
     y: f.y,
     width: f.width,
     height: f.height,
-  }));
+    }));
 
   // Generate SVG vector markup
   const rawSvg = await exportToSvg(activeElements, appState, files, {
@@ -260,6 +264,109 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
     [data-theme="light"] .hint-chip kbd {
       background: rgba(0, 0, 0, 0.07);
     }
+
+    ${isWalkthrough ? `
+    .scenario-story-card {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 95;
+      width: min(360px, calc(100vw - 32px));
+      max-height: calc(100vh - 100px);
+      overflow: auto;
+      padding: 17px;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .scenario-story-eyebrow {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .scenario-story-card h1 {
+      margin: 7px 0 0;
+      font-size: 20px;
+      line-height: 1.3;
+    }
+
+    .scenario-story-description {
+      margin: 8px 0 0;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .scenario-story-choices {
+      display: grid;
+      gap: 7px;
+      margin-top: 15px;
+    }
+
+    .scenario-story-choice {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 11px;
+      border: 1px solid var(--card-border);
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .scenario-story-choice:hover:not(:disabled) {
+      background: rgba(127, 127, 127, .12);
+    }
+
+    .scenario-story-choice:disabled {
+      cursor: default;
+      opacity: .65;
+    }
+
+    .scenario-story-controls {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 13px;
+      padding-top: 11px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .scenario-story-controls button {
+      padding: 7px 9px;
+      border: 1px solid var(--card-border);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .scenario-story-controls button:disabled {
+      cursor: not-allowed;
+      opacity: .4;
+    }
+
+    .scenario-story-progress {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    ` : ''}
   </style>
 </head>
 <body>
@@ -270,9 +377,23 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
   </div>
 
   <div class="hint-chip">
-    <span>Pan: Drag | Zoom: Scroll | Slides:</span>
+    <span>Pan: Drag | Zoom: Scroll | ${isWalkthrough ? 'Walkthrough:' : 'Slides:'}</span>
     <kbd>←</kbd><kbd>→</kbd>
   </div>
+
+  ${isWalkthrough ? `
+  <aside class="scenario-story-card" aria-label="Scenario walkthrough">
+    <div id="scenario-eyebrow" class="scenario-story-eyebrow"></div>
+    <h1 id="scenario-title"></h1>
+    <p id="scenario-description" class="scenario-story-description"></p>
+    <div id="scenario-choices" class="scenario-story-choices"></div>
+    <div class="scenario-story-controls">
+      <button id="scenario-back" type="button">Back</button>
+      <button id="scenario-restart" type="button">Restart</button>
+      <span id="scenario-progress" class="scenario-story-progress"></span>
+    </div>
+  </aside>
+  ` : ''}
 
   <div class="player-dock">
     <div class="dock-title">
@@ -280,7 +401,7 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
       <span>${escapeHtml(docTitle)}</span>
     </div>
 
-    ${framesData.length > 0 ? `
+    ${framesData.length > 0 && !isWalkthrough ? `
     <div class="dock-divider"></div>
 
     <button id="btn-prev" class="dock-btn" title="Previous Slide (Left Arrow)">
@@ -334,7 +455,9 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
       const slideCurrentLabel = document.getElementById('slide-current');
 
       const bounds = ${JSON.stringify(bounds)};
-      const frames = ${JSON.stringify(framesData)};
+      const frames = ${safeJsonForScript(framesData)};
+      const scenarioMode = ${JSON.stringify(isWalkthrough)};
+      const scenarioHistory = [];
 
       let currentSlide = 0;
       let scale = 1;
@@ -372,11 +495,52 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
         updateTransform();
       }
 
-      function goToSlide(index) {
+      function renderScenario() {
+        if (!scenarioMode) return;
+        const frame = frames[currentSlide];
+        const eyebrow = document.getElementById('scenario-eyebrow');
+        const title = document.getElementById('scenario-title');
+        const description = document.getElementById('scenario-description');
+        const choices = document.getElementById('scenario-choices');
+        const progress = document.getElementById('scenario-progress');
+        const back = document.getElementById('scenario-back');
+        if (!frame || !eyebrow || !title || !description || !choices || !progress || !back) return;
+
+        eyebrow.textContent = 'Scene ' + (currentSlide + 1) + ' · ' + scenarioHistory.length + ' visited';
+        title.textContent = frame.name;
+        description.textContent = frame.description || 'Explore this scene, then choose a connected path to continue.';
+        choices.replaceChildren();
+        (frame.choices || []).forEach((choice) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'scenario-story-choice';
+          button.textContent = choice.label + '  →  ' + choice.targetFrameName;
+          button.addEventListener('click', () => {
+            const destination = frames.findIndex((item) => item.id === choice.targetFrameId);
+            if (destination >= 0) goToSlide(destination);
+          });
+          choices.appendChild(button);
+        });
+        if (!(frame.choices || []).length) {
+          const complete = document.createElement('button');
+          complete.type = 'button';
+          complete.className = 'scenario-story-choice';
+          complete.textContent = 'End of this path · Restart to play again';
+          complete.disabled = true;
+          choices.appendChild(complete);
+        }
+        progress.textContent = scenarioHistory.length + ' scene' + (scenarioHistory.length === 1 ? '' : 's');
+        back.disabled = scenarioHistory.length < 2;
+      }
+
+      function goToSlide(index, recordHistory = true) {
         if (!frames || frames.length === 0) return;
         currentSlide = Math.max(0, Math.min(index, frames.length - 1));
         const frame = frames[currentSlide];
         if (!frame) return;
+        if (scenarioMode && recordHistory && scenarioHistory[scenarioHistory.length - 1] !== currentSlide) {
+          scenarioHistory.push(currentSlide);
+        }
 
         const vw = window.innerWidth;
         const vh = window.innerHeight;
@@ -394,6 +558,7 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
         if (slideCurrentLabel) slideCurrentLabel.textContent = currentSlide + 1;
         if (prevBtn) prevBtn.disabled = currentSlide === 0;
         if (nextBtn) nextBtn.disabled = currentSlide >= frames.length - 1;
+        renderScenario();
       }
 
       // Initial fit
@@ -460,13 +625,33 @@ export async function generateInteractiveHtml(elements = [], appState = {}, file
 
       if (prevBtn) prevBtn.addEventListener('click', () => goToSlide(currentSlide - 1));
       if (nextBtn) nextBtn.addEventListener('click', () => goToSlide(currentSlide + 1));
+      if (scenarioMode) {
+        document.getElementById('scenario-back').addEventListener('click', () => {
+          if (scenarioHistory.length < 2) return;
+          scenarioHistory.pop();
+          goToSlide(scenarioHistory[scenarioHistory.length - 1], false);
+        });
+        document.getElementById('scenario-restart').addEventListener('click', () => {
+          scenarioHistory.length = 0;
+          goToSlide(0);
+        });
+      }
 
       // Keyboard shortcuts
       window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight' || e.key === ' ') {
-          if (frames.length > 0) goToSlide(currentSlide + 1);
+          if (frames.length > 0 && (!scenarioMode || (frames[currentSlide].choices || []).length === 1)) {
+            const nextFrameId = scenarioMode ? frames[currentSlide].choices[0].targetFrameId : null;
+            const nextIndex = scenarioMode ? frames.findIndex((frame) => frame.id === nextFrameId) : currentSlide + 1;
+            if (nextIndex >= 0) goToSlide(nextIndex);
+          }
         } else if (e.key === 'ArrowLeft') {
-          if (frames.length > 0) goToSlide(currentSlide - 1);
+          if (scenarioMode) {
+            if (scenarioHistory.length > 1) {
+              scenarioHistory.pop();
+              goToSlide(scenarioHistory[scenarioHistory.length - 1], false);
+            }
+          } else if (frames.length > 0) goToSlide(currentSlide - 1);
         } else if (e.key === '+' || e.key === '=') {
           zoomToPoint(scale * 1.25, window.innerWidth / 2, window.innerHeight / 2);
         } else if (e.key === '-' || e.key === '_') {
@@ -498,4 +683,13 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function safeJsonForScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }

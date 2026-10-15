@@ -373,14 +373,21 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       }
 
       const baseDocName = (appState.name || 'drawing').replace(/[\\/:*?"<>|]/g, '_');
-      const defaultExt = format === 'html' ? 'html' : (format === 'svg' ? 'svg' : (embedScene ? 'doodle.png' : 'png'));
-      const defaultName = `${baseDocName}.${defaultExt}`;
+      const defaultExt = format === 'html' || format === 'scenario' ? 'html' : (format === 'svg' ? 'svg' : (embedScene ? 'doodle.png' : 'png'));
+      const defaultName = format === 'scenario'
+        ? `${baseDocName}-walkthrough.html`
+        : `${baseDocName}.${defaultExt}`;
+
+      if (format === 'scenario' && !active.some((element) => element.type === 'frame' && !element.isHidden)) {
+        alert('Add at least one frame before exporting a scenario walkthrough.');
+        return;
+      }
 
       if (window.electronAPI) {
         const savePath = await window.electronAPI.showSaveDialog({
           defaultPath: defaultName,
-          filters: format === 'html'
-            ? [{ name: 'Interactive HTML Web Player (*.html)', extensions: ['html'] }]
+          filters: format === 'html' || format === 'scenario'
+            ? [{ name: format === 'scenario' ? 'Playable Scenario Walkthrough (*.html)' : 'Interactive HTML Web Player (*.html)', extensions: ['html'] }]
             : (format === 'svg'
               ? [{ name: 'SVG Vector Image (*.svg)', extensions: ['svg'] }]
               : [{ name: 'PNG Image (*.png)', extensions: ['png', 'doodle.png'] }]),
@@ -388,8 +395,10 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
 
         if (!savePath) return;
 
-        if (format === 'html') {
-          const htmlContent = await generateInteractiveHtml(elements, appState, files);
+        if (format === 'html' || format === 'scenario') {
+          const htmlContent = await generateInteractiveHtml(elements, appState, files, {
+            mode: format === 'scenario' ? 'walkthrough' : 'presentation',
+          });
           await window.electronAPI.writeFile(savePath, htmlContent, false);
         } else if (format === 'svg') {
           const svgXml = await exportToSvg(elements, appState, files, {
@@ -419,8 +428,10 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
         window.electronAPI.showNotification('Export Complete', `Saved to ${savePath.split(/[\\/]/).pop()}`);
       } else {
         // Web fallback (Browser direct download)
-        if (format === 'html') {
-          const htmlContent = await generateInteractiveHtml(elements, appState, files);
+        if (format === 'html' || format === 'scenario') {
+          const htmlContent = await generateInteractiveHtml(elements, appState, files, {
+            mode: format === 'scenario' ? 'walkthrough' : 'presentation',
+          });
           const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');

@@ -40,7 +40,6 @@ export const RESERVED_SHORTCUTS = [
   { shortcut: 'Ctrl+P', label: 'Print' },
   { shortcut: 'Ctrl+,', label: 'Preferences' },
   { shortcut: 'Ctrl+Shift+E', label: 'Quick export' },
-  { shortcut: 'Ctrl+Shift+A', label: 'AI diagram generator' },
   { shortcut: 'Ctrl+Shift+I', label: 'Icon library' },
 ];
 

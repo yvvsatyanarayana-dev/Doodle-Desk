@@ -7,6 +7,7 @@ import {
   Copy,
   Check,
   Globe,
+  Route,
 } from 'lucide-react';
 
 export default function ExportDropdown({
@@ -199,16 +200,31 @@ export default function ExportDropdown({
         <button
           type="button"
           style={itemBtnStyle}
+          onClick={() => handleExportFile(() => onExport?.('scenario'))}
+          onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title="Export a self-contained, choice-driven walkthrough of your framed prototype"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Route size={14} style={{ color: '#888888' }} />
+            <span>Playable Scenario Walkthrough...</span>
+          </div>
+          <span style={{ ...badgeStyle, color: '#888888', borderColor: 'rgba(129, 140, 248, 0.3)' }}>HTML</span>
+        </button>
+
+        <button
+          type="button"
+          style={itemBtnStyle}
           onClick={() => handleExportFile(() => onExport?.('html'))}
           onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          title="Export as a self-contained web player that works in any browser"
+          title="Export a self-contained presentation player that works in any browser"
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Globe size={14} style={{ color: '#888888' }} />
-            <span>Interactive HTML Player...</span>
+            <Globe size={14} style={{ color: T.textSecondary }} />
+            <span>Interactive Presentation Player...</span>
           </div>
-          <span style={{ ...badgeStyle, color: '#888888', borderColor: 'rgba(129, 140, 248, 0.3)' }}>HTML</span>
+          <span style={badgeStyle}>HTML</span>
         </button>
 
         {/* Divider */}

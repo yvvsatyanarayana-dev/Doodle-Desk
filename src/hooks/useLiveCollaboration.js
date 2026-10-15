@@ -1,4 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { cancelIdleTask, scheduleIdleTask } from '../utils/idleTask.js';
+import {
+  clearOfflineQueue,
+  mergeOfflineScenes,
+  offlineQueueStorageKey,
+  readOfflineQueue,
+  writeOfflineQueue,
+} from '../engine/offlineCollaboration.js';
 
 let peerModulePromise;
 const loadPeer = () => {
@@ -25,13 +33,15 @@ const getSceneSignature = (elements) => elements
   .map((element) => `${element.id}:${element.version || 1}:${element.versionNonce || 0}:${element.isDeleted ? 1 : 0}`)
   .join('|');
 
-export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
+export function useLiveCollaboration({ doodleAPI, canvasAPI, workspaceId, fileId }) {
   const activeAPI = doodleAPI || canvasAPI;
   const [status, setStatus] = useState('disconnected'); // 'disconnected' | 'hosting' | 'joined'
   const [connectionError, setConnectionError] = useState('');
   const [roomId, setRoomId] = useState('');
   const [collaborators, setCollaborators] = useState(new Map());
   const [chatMessages, setChatMessages] = useState([]);
+  const [pendingConflict, setPendingConflict] = useState(null);
+  const [offlineQueueError, setOfflineQueueError] = useState('');
 
   const [myProfile, setMyProfile] = useState(() => {
     try {
@@ -53,7 +63,93 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
   const lastBroadcastElementsSigRef = useRef(null);
   const statusRef = useRef(status);
   const sessionGenerationRef = useRef(0);
+  const sessionRef = useRef(null);
+  const lastSyncedSceneRef = useRef(null);
+  const offlineQueueRef = useRef(null);
+  const offlineQueueKeyRef = useRef(null);
+  const pendingConflictRef = useRef(null);
+  const pendingQueueWriteRef = useRef(null);
+  const pendingQueueTaskRef = useRef(null);
+  const broadcastDataRef = useRef(null);
   statusRef.current = status;
+
+  const persistPendingQueue = useCallback(() => {
+    cancelIdleTask(pendingQueueTaskRef.current);
+    pendingQueueTaskRef.current = null;
+    const pending = pendingQueueWriteRef.current;
+    pendingQueueWriteRef.current = null;
+    if (!pending) return;
+    try {
+      if (pending.isEmpty) {
+        clearOfflineQueue(pending.key);
+        offlineQueueRef.current = null;
+      } else {
+        writeOfflineQueue(pending.key, pending.queue);
+        offlineQueueRef.current = pending.queue;
+      }
+      setOfflineQueueError('');
+    } catch (error) {
+      console.error('Could not persist offline collaboration changes:', error);
+      setOfflineQueueError(`Offline changes could not be saved: ${error.message}`);
+    }
+  }, []);
+
+  const queueOfflineScene = useCallback((elements, session = sessionRef.current) => {
+    if (!session || !workspaceId || !fileId || !Array.isArray(elements)) return;
+    const key = offlineQueueStorageKey(workspaceId, fileId, session.roomId);
+    if (!key) return;
+    const baseElements = lastSyncedSceneRef.current || [];
+    const isEmpty = getSceneSignature(elements) === getSceneSignature(baseElements);
+    const queue = { baseElements, localElements: elements, updatedAt: Date.now() };
+    offlineQueueKeyRef.current = key;
+    offlineQueueRef.current = isEmpty ? null : queue;
+    pendingQueueWriteRef.current = { key, queue, isEmpty };
+    cancelIdleTask(pendingQueueTaskRef.current);
+    pendingQueueTaskRef.current = scheduleIdleTask(persistPendingQueue, 500);
+  }, [workspaceId, fileId, persistPendingQueue]);
+
+  const initializeSessionQueue = useCallback((roomCode) => {
+    persistPendingQueue();
+    const key = offlineQueueStorageKey(workspaceId, fileId, roomCode);
+    offlineQueueKeyRef.current = key;
+    pendingQueueWriteRef.current = null;
+    cancelIdleTask(pendingQueueTaskRef.current);
+    pendingQueueTaskRef.current = null;
+    try {
+      const queue = readOfflineQueue(key);
+      offlineQueueRef.current = queue;
+      lastSyncedSceneRef.current = queue?.baseElements || activeAPI?.getSceneElements?.() || [];
+      setOfflineQueueError('');
+    } catch (error) {
+      console.error('Could not read the offline collaboration queue:', error);
+      setOfflineQueueError(`Could not restore queued offline changes: ${error.message}`);
+      const localElements = activeAPI?.getSceneElements?.() || [];
+      const queue = { baseElements: [], localElements, updatedAt: Date.now() };
+      offlineQueueRef.current = queue;
+      lastSyncedSceneRef.current = [];
+    }
+  }, [workspaceId, fileId, activeAPI, persistPendingQueue]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => persistPendingQueue();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      persistPendingQueue();
+    };
+  }, [persistPendingQueue]);
+
+  useEffect(() => {
+    if (!activeAPI) return;
+    const session = sessionRef.current;
+    if (session && workspaceId && fileId) {
+      initializeSessionQueue(session.roomId);
+    } else {
+      lastSyncedSceneRef.current = activeAPI.getSceneElements?.() || [];
+      offlineQueueRef.current = null;
+      offlineQueueKeyRef.current = null;
+    }
+  }, [activeAPI, workspaceId, fileId, initializeSessionQueue]);
 
   // Save profile changes
   useEffect(() => {
@@ -100,15 +196,52 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
       });
     } else if (msg.type === 'scene') {
       if (msg.elements && activeAPI) {
+        let elementsToApply = msg.elements;
+        const queue = offlineQueueRef.current;
+        const queueKey = offlineQueueKeyRef.current;
+        let resolvedOfflineQueue = false;
+        if (queue) {
+          const localElements = activeAPI.getSceneElements?.() || queue.localElements;
+          const reconciliation = mergeOfflineScenes(
+            queue.baseElements,
+            localElements,
+            msg.elements
+          );
+          if (reconciliation.conflicts.length > 0) {
+            const nextConflict = {
+              baseElements: queue.baseElements,
+              localElements,
+              remoteElements: msg.elements,
+              conflicts: reconciliation.conflicts,
+              storageKey: queueKey,
+            };
+            pendingConflictRef.current = nextConflict;
+            setPendingConflict(nextConflict);
+            return;
+          }
+          elementsToApply = reconciliation.elements;
+          resolvedOfflineQueue = true;
+        }
+
         isRemoteUpdateRef.current = true;
         try {
           activeAPI.updateScene({
-            elements: msg.elements,
-            commitToHistory: false,
+            elements: elementsToApply,
+            commitToHistory: resolvedOfflineQueue,
           });
+          lastSyncedSceneRef.current = elementsToApply;
+          if (resolvedOfflineQueue) {
+            clearOfflineQueue(queueKey);
+            offlineQueueRef.current = null;
+            offlineQueueKeyRef.current = queueKey;
+          }
         } finally {
           setTimeout(() => {
             isRemoteUpdateRef.current = false;
+            if (resolvedOfflineQueue) {
+              lastBroadcastElementsSigRef.current = getSceneSignature(elementsToApply);
+              broadcastDataRef.current?.({ type: 'scene', elements: elementsToApply });
+            }
           }, 60);
         }
       }
@@ -178,6 +311,7 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
       }
     });
   }, [myProfile]);
+  broadcastDataRef.current = broadcastData;
 
   const closeTransports = useCallback(() => {
     if (broadcastChannelRef.current) {
@@ -216,13 +350,15 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
   const failSession = useCallback((error, generation) => {
     if (generation !== sessionGenerationRef.current) return;
     const message = error?.message || 'Could not connect to the collaboration signaling service.';
+    const session = sessionRef.current;
+    if (session && activeAPI) queueOfflineScene(activeAPI.getSceneElements?.() || [], session);
     sessionGenerationRef.current += 1;
     statusRef.current = 'disconnected';
     closeTransports();
     setConnectionError(message);
     setStatus('disconnected');
-    setRoomId('');
-  }, [closeTransports]);
+    setRoomId(session?.roomId || '');
+  }, [activeAPI, closeTransports, queueOfflineScene]);
 
   const relayToOtherPeers = useCallback((payload, sourcePeerId) => {
     connectionsRef.current.forEach((conn, peerId) => {
@@ -253,7 +389,12 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
   // Broadcast canvas scene elements mutations to peers
   const broadcastScene = useCallback(
     (elements) => {
-      if (status === 'disconnected' || isRemoteUpdateRef.current || !elements) return;
+      if (isRemoteUpdateRef.current || !elements) return;
+
+      if (statusRef.current === 'disconnected' || pendingConflictRef.current) {
+        queueOfflineScene(elements);
+        return;
+      }
 
       // Quick signature to prevent redundant flooding
       const sig = getSceneSignature(elements);
@@ -265,7 +406,7 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
         elements,
       });
     },
-    [status, broadcastData]
+    [broadcastData, queueOfflineScene]
   );
 
   // Send a chat message or reaction
@@ -301,6 +442,8 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
     const code = normalizeRoomCode(customRoomCode) || `DOODLE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const generation = ++sessionGenerationRef.current;
     closeTransports();
+    sessionRef.current = { roomId: code, role: 'hosting' };
+    initializeSessionQueue(code);
     setConnectionError('');
     setRoomId(code);
     statusRef.current = 'hosting';
@@ -397,7 +540,7 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
         failSession(e, generation);
       }
     }
-  }, [broadcastData, closeTransports, collaborators, failSession, handleIncomingMessage, openBroadcastChannel, activeAPI, myProfile, relayToOtherPeers]);
+  }, [broadcastData, closeTransports, collaborators, failSession, handleIncomingMessage, initializeSessionQueue, openBroadcastChannel, activeAPI, myProfile, relayToOtherPeers]);
 
   // Join an existing room
   const joinSession = useCallback(async (targetRoomCode) => {
@@ -405,6 +548,8 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
     if (!code) return;
     const generation = ++sessionGenerationRef.current;
     closeTransports();
+    sessionRef.current = { roomId: code, role: 'joined' };
+    initializeSessionQueue(code);
     setConnectionError('');
     setRoomId(code);
     statusRef.current = 'joined';
@@ -478,11 +623,14 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
         failSession(e, generation);
       }
     }
-  }, [broadcastData, closeTransports, failSession, handleIncomingMessage, myProfile, openBroadcastChannel]);
+  }, [broadcastData, closeTransports, failSession, handleIncomingMessage, initializeSessionQueue, myProfile, openBroadcastChannel]);
 
   // Leave active session
   const leaveSession = useCallback(() => {
-    if (statusRef.current === 'disconnected') return;
+    if (sessionRef.current && activeAPI) {
+      queueOfflineScene(activeAPI.getSceneElements?.() || []);
+      persistPendingQueue();
+    }
     sessionGenerationRef.current += 1;
     statusRef.current = 'disconnected';
 
@@ -494,7 +642,66 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
     setConnectionError('');
     setStatus('disconnected');
     setRoomId('');
-  }, [broadcastData, closeTransports, syncCollaboratorsToCanvas]);
+    sessionRef.current = null;
+    pendingConflictRef.current = null;
+    setPendingConflict(null);
+  }, [activeAPI, broadcastData, closeTransports, persistPendingQueue, queueOfflineScene, syncCollaboratorsToCanvas]);
+
+  const reconnectSession = useCallback(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    return session.role === 'hosting'
+      ? startHosting(session.roomId)
+      : joinSession(session.roomId);
+  }, [joinSession, startHosting]);
+
+  const resolveOfflineConflict = useCallback((choices) => {
+    const conflict = pendingConflictRef.current;
+    if (!conflict || !activeAPI) return false;
+
+    const localElements = activeAPI.getSceneElements?.() || [];
+    const reconciliation = mergeOfflineScenes(
+      conflict.baseElements,
+      localElements,
+      conflict.remoteElements,
+      choices
+    );
+    const unresolved = reconciliation.conflicts.filter(({ id }) => !choices?.[id]);
+    if (unresolved.length > 0) {
+      const nextConflict = { ...conflict, localElements, conflicts: unresolved };
+      pendingConflictRef.current = nextConflict;
+      setPendingConflict(nextConflict);
+      return false;
+    }
+
+    isRemoteUpdateRef.current = true;
+    try {
+      activeAPI.updateScene({
+        elements: reconciliation.elements,
+        commitToHistory: true,
+      });
+      lastSyncedSceneRef.current = reconciliation.elements;
+      clearOfflineQueue(conflict.storageKey);
+      offlineQueueRef.current = null;
+      offlineQueueKeyRef.current = conflict.storageKey;
+      pendingQueueWriteRef.current = null;
+      pendingConflictRef.current = null;
+      setPendingConflict(null);
+      setOfflineQueueError('');
+      lastBroadcastElementsSigRef.current = getSceneSignature(reconciliation.elements);
+      broadcastData({
+        type: 'scene',
+        elements: reconciliation.elements,
+      });
+      return true;
+    } catch (error) {
+      console.error('Could not apply offline collaboration changes:', error);
+      setOfflineQueueError(`Could not apply queued changes: ${error.message}`);
+      return false;
+    } finally {
+      isRemoteUpdateRef.current = false;
+    }
+  }, [activeAPI, broadcastData]);
 
   const leaveSessionRef = useRef(leaveSession);
   leaveSessionRef.current = leaveSession;
@@ -520,6 +727,10 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI }) {
     broadcastPointer,
     broadcastScene,
     sendChatMessage,
+    reconnectSession,
+    pendingConflict,
+    resolveOfflineConflict,
+    offlineQueueError,
   };
 }
 

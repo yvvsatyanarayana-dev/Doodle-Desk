@@ -29,15 +29,9 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('Doodle Desk');
 }
 
-// Hardware acceleration & GPU performance settings
+// Let Chromium select GPU features supported by the installed driver.
 if (!getSetting('hardwareAcceleration', true)) {
   app.disableHardwareAcceleration();
-} else {
-  app.commandLine.appendSwitch('enable-gpu-rasterization');
-  app.commandLine.appendSwitch('enable-zero-copy');
-  app.commandLine.appendSwitch('ignore-gpu-blocklist');
-  app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
-  app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization');
 }
 
 let tray = null;

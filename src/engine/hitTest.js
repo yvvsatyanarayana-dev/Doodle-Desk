@@ -133,7 +133,16 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
 
 // Find the topmost element at a point (reverse Z-order)
 // Non-frame elements take priority so children inside a frame can be selected directly
-export function getElementAtPoint(elements, px, py, { includeLocked = false } = {}) {
+export function getElementAtPoint(elements, px, py, { includeLocked = false, preferFrameIds = [] } = {}) {
+  if (preferFrameIds.length) {
+    const preferredFrames = new Set(preferFrameIds);
+    for (let i = elements.length - 1; i >= 0; i--) {
+      const el = elements[i];
+      if (el.type === ELEMENT_TYPES.FRAME && preferredFrames.has(el.id) && hitTestElement(el, px, py, { includeLocked })) {
+        return el;
+      }
+    }
+  }
   for (let i = elements.length - 1; i >= 0; i--) {
     const el = elements[i];
     if (el.type !== ELEMENT_TYPES.FRAME && hitTestElement(el, px, py, { includeLocked })) {

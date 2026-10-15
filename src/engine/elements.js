@@ -68,6 +68,35 @@ export function cloneElementSet(elements) {
   });
 }
 
+export function assignUniqueClonedFrameNames(clones, existingElements) {
+  const usedNames = new Set(
+    existingElements
+      .filter(element => element.type === 'frame' && !element.isDeleted && element.name?.trim())
+      .map(element => element.name.trim().toLowerCase())
+  );
+  let nextFrameNumber = existingElements.reduce((highest, element) => {
+    if (element.type !== 'frame' || element.isDeleted) return highest;
+    const match = /^Frame\s+(\d+)$/i.exec(element.name?.trim() || '');
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0) + 1;
+
+  return clones.map(element => {
+    if (element.type !== 'frame') return element;
+    const currentName = element.name?.trim();
+    if (currentName && !usedNames.has(currentName.toLowerCase())) {
+      usedNames.add(currentName.toLowerCase());
+      return currentName === element.name ? element : { ...element, name: currentName };
+    }
+
+    let name = `Frame ${nextFrameNumber++}`;
+    while (usedNames.has(name.toLowerCase())) {
+      name = `Frame ${nextFrameNumber++}`;
+    }
+    usedNames.add(name.toLowerCase());
+    return { ...element, name };
+  });
+}
+
 // All font families
 export const FONT_FAMILY = {
   Doodlefont: 5,

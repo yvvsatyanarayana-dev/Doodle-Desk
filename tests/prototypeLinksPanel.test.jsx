@@ -112,7 +112,8 @@ describe('PrototypeLinksPanel', () => {
     });
 
     expect(container.querySelector('.prototype-destination-hint')?.textContent).toContain('Add another shape');
-    expect([...container.querySelector('.prototype-frame-select select').options].map((option) => option.value)).toEqual(['frame']);
+    const destinationPicker = container.querySelector('.prototype-frame-select select');
+    expect([...destinationPicker.options].map((option) => option.value)).toEqual(['frame']);
 
     act(() => {
       root.unmount();
@@ -155,6 +156,53 @@ describe('PrototypeLinksPanel', () => {
       container.querySelector('.prototype-preview-button').click();
     });
     expect(onStart).toHaveBeenCalledWith('button');
+
+    act(() => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
+  });
+
+  it('creates and plays the sample walkthrough without duplicating it on replay', () => {
+    let elements = [];
+    const updateScene = vi.fn(({ elements: updated }) => { elements = updated; });
+    const api = {
+      getSceneElements: () => elements,
+      getSceneElementsIncludingDeleted: () => elements,
+      getAppState: () => ({ selectedElementIds: {} }),
+      updateScene,
+      scrollToContent: vi.fn(),
+    };
+    const onStart = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<PrototypeLinksPanel doodleAPI={api} onClose={vi.fn()} onStart={onStart} />);
+    });
+
+    act(() => {
+      container.querySelector('.prototype-sample-button').click();
+    });
+
+    const sampleFrames = elements.filter((element) => element.scenarioSample === 'saturday-plans-v1');
+    const startFrame = sampleFrames.find((frame) => frame.scenarioSampleStart);
+    const frameIds = new Set(sampleFrames.map((frame) => frame.id));
+    const sampleLinks = elements.filter((element) => element.link && element.frameId === startFrame?.id);
+    expect(sampleFrames).toHaveLength(3);
+    expect(sampleLinks).toHaveLength(4);
+    expect(sampleLinks.every((element) => frameIds.has(decodeURIComponent(element.link.split('=')[1])))).toBe(true);
+    expect(updateScene).toHaveBeenCalledTimes(1);
+    expect(updateScene).toHaveBeenCalledWith(expect.objectContaining({ commitToHistory: true }));
+    expect(onStart).toHaveBeenLastCalledWith(startFrame.id, { mode: 'walkthrough' });
+    expect(container.querySelector('.prototype-sample-button').textContent).toContain('Play sample');
+
+    act(() => {
+      container.querySelector('.prototype-sample-button').click();
+    });
+    expect(updateScene).toHaveBeenCalledTimes(1);
+    expect(onStart).toHaveBeenLastCalledWith(startFrame.id, { mode: 'walkthrough' });
 
     act(() => {
       root.unmount();

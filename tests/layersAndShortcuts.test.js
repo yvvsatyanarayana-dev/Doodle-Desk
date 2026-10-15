@@ -8,7 +8,7 @@ import {
   resetShortcutBindings,
   saveShortcutBindings,
 } from '../src/engine/keyboardShortcuts.js';
-import { cloneElementSet } from '../src/engine/elements.js';
+import { assignUniqueClonedFrameNames, cloneElementSet } from '../src/engine/elements.js';
 
 afterEach(() => {
   localStorage.clear();
@@ -35,6 +35,21 @@ describe('Layers and keyboard shortcuts', () => {
     const locked = { id: 'locked', type: 'rectangle', x: 10, y: 10, width: 80, height: 60, locked: true };
     expect(getElementAtPoint([locked], 10, 40)).toBeNull();
     expect(getElementAtPoint([locked], 10, 40, { includeLocked: true })).toBe(locked);
+  });
+
+  it('moves an already selected frame instead of its overlapping canvas content', () => {
+    const frame = { id: 'frame-copy', type: 'frame', x: 0, y: 0, width: 200, height: 120 };
+    const content = {
+      id: 'content',
+      type: 'rectangle',
+      x: 30,
+      y: 30,
+      width: 60,
+      height: 40,
+      backgroundColor: '#ffffff',
+    };
+    expect(getElementAtPoint([frame, content], 45, 45, { preferFrameIds: ['frame-copy'] })).toBe(frame);
+    expect(getElementAtPoint([frame, content], 45, 45)).toBe(content);
   });
 
   it('duplicates grouped elements into a separate group and remaps internal bindings', () => {
@@ -68,6 +83,27 @@ describe('Layers and keyboard shortcuts', () => {
     expect(clones[0].groupIds[0]).not.toBe(originals[0].groupIds[0]);
     expect(clones[0].boundElements[0].id).toBe(clones[1].id);
     expect(clones[1].containerId).toBe(clones[0].id);
+  });
+
+  it('remaps copied frame membership to the pasted frame', () => {
+    const originals = [
+      { id: 'frame', type: 'frame', x: 0, y: 0, width: 200, height: 120 },
+      { id: 'child', type: 'rectangle', frameId: 'frame', x: 20, y: 20, width: 40, height: 30 },
+    ];
+    const clones = cloneElementSet(originals);
+    expect(clones[1].frameId).toBe(clones[0].id);
+    expect(clones[1].frameId).not.toBe(originals[0].id);
+  });
+
+  it('assigns unique sequential names to cloned frames', () => {
+    const originals = [
+      { id: 'frame-1', type: 'frame', name: 'Frame 1' },
+      { id: 'frame-2', type: 'frame', name: 'Frame 2' },
+    ];
+    const clones = assignUniqueClonedFrameNames(cloneElementSet(originals), originals);
+
+    expect(clones.map(frame => frame.name)).toEqual(['Frame 3', 'Frame 4']);
+    expect(originals.map(frame => frame.name)).toEqual(['Frame 1', 'Frame 2']);
   });
 
   it('matches default and customized shortcuts without matching other modifiers', () => {

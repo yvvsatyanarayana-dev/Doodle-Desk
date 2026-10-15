@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
+  BookOpen,
   Check,
   ChevronDown,
   CircleAlert,
   ExternalLink,
+  Footprints,
   Link2,
   LocateFixed,
   MousePointer2,
@@ -15,6 +17,9 @@ import {
   X,
 } from 'lucide-react';
 import { extractElementIdFromLink } from './WebFrameCard.jsx';
+import { getWalkthroughFrameForElement } from '../engine/scenarioWalkthrough.js';
+import { createElement, createTextElement, ELEMENT_TYPES } from '../engine/elements.js';
+import { getCommonBounds } from '../engine/math/geometry.js';
 
 function makeElementLink(elementId) {
   return `#element=${encodeURIComponent(elementId)}`;
@@ -27,11 +32,122 @@ function getElementLabel(element) {
   return element.name || `${element.type || 'Canvas'} object`;
 }
 
+const SAMPLE_WALKTHROUGH_ID = 'saturday-plans-v1';
+
+function createSampleWalkthrough(originX, originY, theme) {
+  const isDark = theme !== 'light';
+  const frameWidth = 420;
+  const frameHeight = 300;
+  const frameStroke = isDark ? '#71717a' : '#a1a1aa';
+  const titleColor = isDark ? '#f4f4f5' : '#18181b';
+  const bodyColor = isDark ? '#a1a1aa' : '#52525b';
+  const buttonFill = isDark ? '#27272a' : '#f4f4f5';
+  const buttonStroke = isDark ? '#52525b' : '#d4d4d8';
+  const buttonText = isDark ? '#fafafa' : '#18181b';
+
+  const startFrame = createElement(ELEMENT_TYPES.FRAME, originX, originY, frameWidth, frameHeight, {
+    name: 'Saturday plans',
+    strokeColor: frameStroke,
+    backgroundColor: 'transparent',
+    roughness: 0,
+    scenarioSample: SAMPLE_WALKTHROUGH_ID,
+    scenarioSampleStart: true,
+    walkthroughDescription: 'Choose a plan for Saturday. Try either option, then use Back or Restart to explore again.',
+  });
+  const outdoorFrame = createElement(ELEMENT_TYPES.FRAME, originX + 540, originY - 120, frameWidth, frameHeight, {
+    name: 'Outdoor day',
+    strokeColor: frameStroke,
+    backgroundColor: 'transparent',
+    roughness: 0,
+    scenarioSample: SAMPLE_WALKTHROUGH_ID,
+    walkthroughDescription: 'Pack a light lunch, bring water, and take the scenic trail.',
+  });
+  const cozyFrame = createElement(ELEMENT_TYPES.FRAME, originX + 540, originY + 320, frameWidth, frameHeight, {
+    name: 'Cozy day',
+    strokeColor: frameStroke,
+    backgroundColor: 'transparent',
+    roughness: 0,
+    scenarioSample: SAMPLE_WALKTHROUGH_ID,
+    walkthroughDescription: 'Make a warm drink, pick something to read, and enjoy a slower day.',
+  });
+  const frames = [startFrame, outdoorFrame, cozyFrame];
+  const children = [];
+  const addText = (frame, text, x, y, width, fontSize, color, extra = {}) => {
+    const height = Math.ceil(fontSize * (text.includes('\n') ? 2.6 : 1.45));
+    children.push(createTextElement(x, y, text, {
+      width,
+      height,
+      fontSize,
+      fontFamily: 5,
+      lineHeight: 1.3,
+      strokeColor: color,
+      frameId: frame.id,
+      ...extra,
+    }));
+  };
+  const addChoice = (frame, text, target, y) => {
+    const x = frame.x + 28;
+    const width = frame.width - 56;
+    const button = createElement(ELEMENT_TYPES.RECTANGLE, x, y, width, 42, {
+      strokeColor: buttonStroke,
+      backgroundColor: buttonFill,
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      roughness: 0,
+      frameId: frame.id,
+      link: `#element=${encodeURIComponent(target.id)}`,
+    });
+    children.push(button);
+    addText(frame, text, x + 14, y + 10, width - 28, 17, buttonText, {
+      link: `#element=${encodeURIComponent(target.id)}`,
+    });
+  };
+
+  addText(startFrame, 'How do you want to spend Saturday?', originX + 28, originY + 40, frameWidth - 56, 23, titleColor);
+  addText(startFrame, 'Pick a path to see how choices guide a walkthrough.', originX + 28, originY + 93, frameWidth - 56, 15, bodyColor);
+  addChoice(startFrame, 'Explore the outdoors', outdoorFrame, originY + 158);
+  addChoice(startFrame, 'Stay in and unwind', cozyFrame, originY + 214);
+
+  addText(outdoorFrame, 'A day outside', outdoorFrame.x + 28, outdoorFrame.y + 48, frameWidth - 56, 23, titleColor);
+  addText(outdoorFrame, 'Take a trail walk, bring a picnic, and find a new view.', outdoorFrame.x + 28, outdoorFrame.y + 104, frameWidth - 56, 16, bodyColor);
+  addText(outdoorFrame, 'End of this path — use Back or Restart to try the other choice.', outdoorFrame.x + 28, outdoorFrame.y + 188, frameWidth - 56, 14, bodyColor);
+
+  addText(cozyFrame, 'A slower kind of Saturday', cozyFrame.x + 28, cozyFrame.y + 48, frameWidth - 56, 23, titleColor);
+  addText(cozyFrame, 'Make a warm drink, get comfortable, and enjoy a good book.', cozyFrame.x + 28, cozyFrame.y + 104, frameWidth - 56, 16, bodyColor);
+  addText(cozyFrame, 'End of this path — use Back or Restart to try the other choice.', cozyFrame.x + 28, cozyFrame.y + 188, frameWidth - 56, 14, bodyColor);
+
+  return { elements: [...frames, ...children], startFrame };
+}
+
+function DestinationPicker({ value, options, onChange, theme, ariaLabel, compact = false }) {
+  return (
+    <span className={`prototype-themed-select${compact ? ' is-compact' : ''}`} data-theme={theme}>
+      <select
+        aria-label={ariaLabel}
+        value={options.some((option) => option.id === value) ? value : (options[0]?.id || '')}
+        disabled={!options.length}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {!options.length && <option value="">No destinations</option>}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.type === 'frame' ? 'Frame' : option.type || 'Object'}: {getElementLabel(option)}
+          </option>
+        ))}
+      </select>
+      <span className="prototype-themed-select-icon" aria-hidden="true">
+        <ChevronDown size={14} />
+      </span>
+    </span>
+  );
+}
+
 export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStart, onToast }) {
   const [targetId, setTargetId] = useState('');
   const [startElementId, setStartElementId] = useState('');
   const [editingFrameId, setEditingFrameId] = useState('');
   const [frameNameDraft, setFrameNameDraft] = useState('');
+  const [guideDraft, setGuideDraft] = useState('');
   const [status, setStatus] = useState('');
   const [revision, setRevision] = useState(0);
   const elements = doodleAPI?.getSceneElements?.() || [];
@@ -58,6 +174,10 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
   const startElement = targets.find((element) => element.id === startElementId)
     || frames[0]
     || targets[0];
+  const startFrame = getWalkthroughFrameForElement(elements, startElement);
+  const sampleStartFrame = frames.find(
+    (frame) => frame.scenarioSample === SAMPLE_WALKTHROUGH_ID && frame.scenarioSampleStart,
+  );
   const elementById = useMemo(() => new Map(targets.map((element) => [element.id, element])), [targets]);
   const links = useMemo(() => elements.flatMap((source) => {
     if (source.isDeleted || source.isHidden || !source.link) return [];
@@ -69,7 +189,7 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        event.preventDefault();
+       event.preventDefault();
         event.stopPropagation();
         onClose?.();
       }
@@ -159,6 +279,44 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
     if (startElement && onStart) onStart(startElement.id);
   };
 
+  const createOrPlaySampleWalkthrough = () => {
+    if (sampleStartFrame) {
+      onStart?.(sampleStartFrame.id, { mode: 'walkthrough' });
+      return;
+    }
+    if (!doodleAPI?.updateScene) {
+      setStatus('Canvas is not available. Close this panel and try again.');
+      return;
+    }
+    const existing = doodleAPI.getSceneElementsIncludingDeleted?.() || elements;
+    const bounds = getCommonBounds(elements);
+    const originX = bounds ? bounds.x + bounds.width + 120 : 0;
+    const originY = bounds ? bounds.y : 0;
+    const sample = createSampleWalkthrough(originX, originY, theme);
+    if (!saveElements([...existing, ...sample.elements])) return;
+    setStatus('Added the Saturday sample to your board. Starting the walkthrough.');
+    onStart?.(sample.startFrame.id, { mode: 'walkthrough' });
+  };
+
+  useEffect(() => {
+    setGuideDraft(startFrame?.walkthroughDescription || '');
+  }, [startFrame?.id, startFrame?.walkthroughDescription]);
+
+  const saveWalkthroughGuide = () => {
+    if (!startFrame || guideDraft === (startFrame.walkthroughDescription || '')) return;
+    const source = doodleAPI.getSceneElementsIncludingDeleted?.() || elements;
+    const updated = source.map((element) => element.id === startFrame.id
+      ? {
+        ...element,
+        walkthroughDescription: guideDraft,
+        version: (element.version || 1) + 1,
+        versionNonce: Math.floor(Math.random() * 100000),
+        updated: Date.now(),
+      }
+      : element);
+    saveElements(updated);
+  };
+
   return (
     <div className="modal-overlay feature-modal-overlay prototype-editor-overlay" data-theme={theme}>
       <section
@@ -183,6 +341,20 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
             <div><strong>{targets.length}</strong><span>Objects</span></div>
             <div><strong>{links.length}</strong><span>Connections</span></div>
             <div><strong>{targets.length ? 'Ready' : 'Setup needed'}</strong><span>Preview</span></div>
+          </div>
+          <div className="prototype-sample-card">
+            <div>
+              <strong>{sampleStartFrame ? 'Sample walkthrough is ready' : 'Want to see how walkthroughs work?'}</strong>
+              <span>{sampleStartFrame ? 'Play the branching Saturday example.' : 'Adds a small branching example without replacing your work.'}</span>
+            </div>
+            <button
+              type="button"
+              className="feature-secondary-button prototype-sample-button"
+              onClick={createOrPlaySampleWalkthrough}
+            >
+              {sampleStartFrame ? <BookOpen size={15} /> : <Footprints size={15} />}
+              {sampleStartFrame ? 'Play sample' : 'Create & play sample'}
+            </button>
           </div>
 
           {!targets.length ? (
@@ -209,16 +381,13 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
                   <div className="prototype-connect-arrow"><ArrowRight size={15} /></div>
                   <label className="prototype-frame-select">
                     <span>Destination</span>
-                    <span className="prototype-select-wrap">
-                      <select value={targetElement?.id || ''} onChange={(event) => { setTargetId(event.target.value); setStatus(''); }}>
-                        {availableTargets.map((element) => (
-                          <option key={element.id} value={element.id}>
-                            {element.type === 'frame' ? 'Frame' : element.type || 'Object'}: {getElementLabel(element)}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} />
-                    </span>
+                    <DestinationPicker
+                      value={targetElement?.id || ''}
+                      options={availableTargets}
+                      theme={theme}
+                      ariaLabel="Choose connection destination"
+                      onChange={(value) => { setTargetId(value); setStatus(''); }}
+                    />
                     {selectedElements.some((element) => element.type !== 'frame') && !canTargetAnotherObject && (
                       <small className="prototype-destination-hint">
                         Add another shape to the canvas to create a shape-to-shape link.
@@ -308,6 +477,27 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
                 </div>
               </section>
 
+              {startFrame && (
+                <section className="prototype-editor-section">
+                  <div className="prototype-section-heading">
+                    <div><strong>Scene guide</strong><span>Add context for people playing this walkthrough</span></div>
+                    <BookOpen size={15} className="scenario-guide-icon" />
+                  </div>
+                  <label className="scenario-guide-field">
+                    <span>{startFrame.name?.trim() || 'Starting scene'} instructions</span>
+                    <textarea
+                      value={guideDraft}
+                      maxLength={500}
+                      placeholder="Set the scene, explain the goal, or share what to look for..."
+                      onChange={(event) => setGuideDraft(event.target.value)}
+                      onBlur={saveWalkthroughGuide}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    />
+                    <small>{guideDraft.length}/500 · Saved with this frame</small>
+                  </label>
+                </section>
+              )}
+
               <section className="prototype-editor-section">
                 <div className="prototype-section-heading">
                   <div><strong>Interactions</strong><span>Manage links between canvas objects</span></div>
@@ -322,15 +512,16 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
                           <span><strong>{getElementLabel(source)}</strong><small>{source.type || 'Canvas object'}</small></span>
                         </button>
                         <ArrowRight size={14} className="prototype-interaction-arrow" />
-                        <label className="prototype-interaction-target">
-                          <select aria-label={`Destination for ${getElementLabel(source)}`} value={destination.id} onChange={(event) => changeDestination(source.id, event.target.value)}>
-                            {targets.filter((element) => element.id !== source.id || element.id === destination.id).map((element) => (
-                              <option key={element.id} value={element.id}>
-                                {element.type === 'frame' ? 'Frame' : element.type || 'Object'}: {getElementLabel(element)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        <span className="prototype-interaction-target">
+                          <DestinationPicker
+                            value={destination.id}
+                            options={targets.filter((element) => element.id !== source.id || element.id === destination.id)}
+                            theme={theme}
+                            compact
+                            ariaLabel={`Destination for ${getElementLabel(source)}`}
+                            onChange={(value) => changeDestination(source.id, value)}
+                          />
+                        </span>
                         <button type="button" className="prototype-remove-link" onClick={() => changeDestination(source.id, '')} aria-label={`Remove link from ${getElementLabel(source)}`} title="Remove connection">
                           <Unlink size={14} />
                         </button>
@@ -351,9 +542,28 @@ export function PrototypeLinksPanel({ doodleAPI, theme = 'dark', onClose, onStar
 
         <footer className="feature-modal-footer prototype-editor-footer">
           <button type="button" className="feature-secondary-button" onClick={onClose}>Done</button>
-          <button type="button" className="feature-primary-button prototype-preview-button" onClick={startPrototype} disabled={!targets.length}>
-            <Play size={15} /> Preview flow <ExternalLink size={13} />
-          </button>
+          <div className="prototype-preview-actions">
+            <button
+              type="button"
+              className="feature-secondary-button prototype-walkthrough-button"
+              onClick={() => startFrame && onStart?.(startFrame.id, { mode: 'walkthrough' })}
+              disabled={!startFrame}
+              aria-label="Play walkthrough"
+              title="Play walkthrough"
+            >
+              <BookOpen size={15} /> Walkthrough
+            </button>
+            <button
+              type="button"
+              className="feature-primary-button prototype-preview-button"
+              onClick={startPrototype}
+              disabled={!targets.length}
+              aria-label="Preview flow"
+              title="Preview flow"
+            >
+              <Play size={15} /> Preview <ExternalLink size={13} />
+            </button>
+          </div>
         </footer>
       </section>
     </div>

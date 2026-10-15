@@ -42,10 +42,13 @@
 - **Versatile Toolset:** Rectangles, diamonds, ellipses, lines, arrows, freehand sketching, text, eraser, laser pointer, and flood fill.
 - **Organic Hand-Drawn Aesthetic:** Customize stroke roughness, hachure/cross-hatch fills, stroke widths, hand-drawn typography, and curated color palettes.
 - **Canvas Styles & Themes:** Standard whiteboard, blueprint grid, dot grid, isometric grid, engineering dark, and warm parchment styles with smooth light/dark switching.
+- **Sticky Note Writing Focus:** Expand the Sticky Notes & Quick Cards editor into a distraction-free writing space, then add the finished note directly to the canvas.
+- **Complete In-App User Guide:** Open the book icon beside the theme control for searchable, step-by-step help covering boards, drawing, notes, diagram tools, presentations, exports, and collaboration.
 - **Precision Drawing Tools:** Built-in precision ruler, lasso selection, and shape-recognition auto-detection for quick clean sketches.
 - **Offline Diagram Health Check:** Open it from `Ctrl+K` / `Cmd+K` to find broken connector references, invalid shape geometry, blank text objects, and labels that may be too small to read; click findings to inspect them on-canvas.
 - **Board-Wide Find & Replace:** Open **Find & Replace Across Board** from `Ctrl+K` / `Cmd+K` to search text labels, frame names, and links, navigate results, replace one match, or replace all.
 - **Interactive Prototypes:** Open **Configure Interactive Prototype Links** from `Ctrl+K` / `Cmd+K` to map selected canvas objects to frames, set the opening screen, manage connections, and preview the flow by clicking linked objects. Press `Esc` to exit preview.
+- **Playable Scenario Walkthroughs:** Add scene instructions to frames, link labeled objects as decision choices, and play a guided path with progress, back, and restart controls. Export a self-contained HTML walkthrough to share without Doodle Desk.
 
 ### 📁 Multi-Board Workspaces & Lossless Storage
 - **Native Document Format:** Lossless `.doodle` JSON documents preserve full vector state, stroke history, and editable layers.

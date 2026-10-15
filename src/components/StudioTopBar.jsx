@@ -29,7 +29,6 @@ import {
   Link,
   PhoneOff,
   Trash2,
-  Sparkles,
   LogOut,
   History,
   Focus,
@@ -56,7 +55,6 @@ function StudioTopBarComponent({
   onCopyToClipboard,
   onPrint,
   onOpenCommandPalette,
-  onOpenSmartDiagram,
   onOpenTimeMachine,
   onToggleFocusMode,
   isFocusModeActive,
@@ -678,14 +676,6 @@ function StudioTopBarComponent({
             <Search size={13} className="studio-search-icon" />
             <span className="studio-search-text">Search actions or tools...</span>
             <kbd className="studio-search-kbd">Ctrl+K</kbd>
-          </button>
-
-          <button
-            className="studio-capsule-btn"
-            onClick={onOpenSmartDiagram}
-            title="AI Text-to-Diagram Assistant (Ctrl+Shift+A)"
-          >
-            <Sparkles size={13} />
           </button>
 
           <button

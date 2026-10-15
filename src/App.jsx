@@ -27,12 +27,13 @@ const WorkspaceModal = lazy(() => import('./components/WorkspaceModal'));
 const LiveCollabModal = lazy(() => import('./components/LiveCollabModal'));
 const HelpModal = lazy(() => import('./components/HelpModal').then((module) => ({ default: module.HelpModal })));
 const MermaidToDoodleModal = lazy(() => import('./components/MermaidToDoodleModal').then((module) => ({ default: module.MermaidToDoodleModal })));
-const SmartDiagramGeneratorModal = lazy(() => import('./components/SmartDiagramGeneratorModal').then((module) => ({ default: module.SmartDiagramGeneratorModal || module.default })));
 const CanvasTimeMachine = lazy(() => import('./components/CanvasTimeMachine').then((module) => ({ default: module.CanvasTimeMachine })));
 const SmartAutoLayoutModal = lazy(() => import('./components/SmartAutoLayoutModal').then((module) => ({ default: module.SmartAutoLayoutModal })));
 const FocusModeOverlay = lazy(() => import('./components/FocusModeOverlay').then((module) => ({ default: module.FocusModeOverlay })));
 const DiagramHealthCheck = lazy(() => import('./components/DiagramHealthCheck').then((module) => ({ default: module.DiagramHealthCheck })));
 const PrototypeLinksPanel = lazy(() => import('./components/PrototypeLinksPanel').then((module) => ({ default: module.PrototypeLinksPanel })));
+const ScenarioWalkthroughPlayer = lazy(() => import('./components/ScenarioWalkthroughPlayer').then((module) => ({ default: module.ScenarioWalkthroughPlayer })));
+const SmartBoardSearch = lazy(() => import('./components/SmartBoardSearch').then((module) => ({ default: module.SmartBoardSearch })));
 import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
@@ -42,6 +43,7 @@ import { CanvasTopRightSettings } from './components/CanvasTopRightSettings';
 import { CustomLaserPointer } from './components/CustomLaserPointer';
 import { LibrarySidebar } from './components/LibrarySidebar';
 import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
+import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
 
 export default function App() {
   const doodleCanvasRef = useRef(null);
@@ -63,12 +65,12 @@ export default function App() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isTemplateLibraryOpen, setIsTemplateLibraryOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isBoardSearchOpen, setIsBoardSearchOpen] = useState(false);
   const [canvasSearchFocusRequest, setCanvasSearchFocusRequest] = useState(0);
   const [isPresentationActive, setIsPresentationActive] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
   const [isLiveChatOpen, setIsLiveChatOpen] = useState(false);
   const [isMermaidModalOpen, setIsMermaidModalOpen] = useState(false);
-  const [isSmartDiagramOpen, setIsSmartDiagramOpen] = useState(false);
   const [libraryInitialTab, setLibraryInitialTab] = useState('templates');
   const [canvasStyle, setCanvasStyle] = useState('standard');
   const [globalDialog, setGlobalDialog] = useState(null);
@@ -99,6 +101,8 @@ export default function App() {
   const [isDiagramHealthCheckOpen, setIsDiagramHealthCheckOpen] = useState(false);
   const [isPrototypeLinksOpen, setIsPrototypeLinksOpen] = useState(false);
   const [isPrototypeActive, setIsPrototypeActive] = useState(false);
+  const [walkthroughFrameId, setWalkthroughFrameId] = useState('');
+  const [walkthroughPath, setWalkthroughPath] = useState([]);
   const [, setCanvasSelection] = useState({});
   const [isFocusModeActive, setIsFocusModeActive] = useState(false);
 
@@ -111,6 +115,19 @@ export default function App() {
     }, 2200);
   }, []);
 
+  const navigateWalkthrough = useCallback((frameId, options = {}) => {
+    const elements = doodleAPI?.getSceneElements?.() || [];
+    const frame = elements.find((element) => element.id === frameId && element.type === 'frame' && !element.isDeleted);
+    if (!frame) return;
+    setWalkthroughFrameId(frame.id);
+    setWalkthroughPath((path) => {
+      if (options.restart) return [frame.id];
+      if (options.back) return path.length > 1 ? path.slice(0, -1) : path;
+      return path[path.length - 1] === frame.id ? path : [...path, frame.id];
+    });
+    doodleAPI?.scrollToContent?.([frame], { fitToContent: true, animate: true, duration: 420 });
+  }, [doodleAPI]);
+
   useEffect(() => () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
   }, []);
@@ -122,6 +139,8 @@ export default function App() {
       event.preventDefault();
       event.stopPropagation();
       setIsPrototypeActive(false);
+      setWalkthroughFrameId('');
+      setWalkthroughPath([]);
     };
     window.addEventListener('keydown', exitPrototype, true);
     return () => window.removeEventListener('keydown', exitPrototype, true);
@@ -164,6 +183,34 @@ export default function App() {
     updateComponentInstancesOnBoards,
   } = useWorkspaces({ doodleAPI });
 
+  const openBoardSearch = useCallback(() => {
+    setIsCommandPaletteOpen(false);
+    setIsBoardSearchOpen(true);
+  }, []);
+
+  const navigateToBoardSearchResult = useCallback((result) => {
+    if (!doodleAPI) return;
+    const focusResult = () => {
+      const currentElements = doodleAPI.getSceneElements?.() || [];
+      const target = result.elementId
+        ? currentElements.find(element => element.id === result.elementId && !element.isDeleted)
+        : null;
+      if (target) {
+        doodleAPI.setSelectedElements?.({ [target.id]: true });
+        doodleAPI.scrollToContent?.([target], { animate: true, duration: 420 });
+      } else {
+        doodleAPI.scrollToContent?.(currentElements, { animate: true, duration: 420 });
+      }
+    };
+
+    if (result.workspaceId !== activeWorkspaceId || result.fileId !== activeFileId) {
+      switchFile(result.fileId, result.workspaceId);
+      window.setTimeout(focusResult, 100);
+    } else {
+      focusResult();
+    }
+  }, [doodleAPI, activeWorkspaceId, activeFileId, switchFile]);
+
   // Live Collaboration & Real-time WebRTC Mesh
   const [isLiveCollabModalOpen, setIsLiveCollabModalOpen] = useState(false);
   const {
@@ -180,7 +227,19 @@ export default function App() {
     broadcastPointer,
     broadcastScene,
     sendChatMessage: sendCollabChatMessage,
-  } = useLiveCollaboration({ doodleAPI });
+    reconnectSession: reconnectCollabSession,
+    pendingConflict: collabPendingConflict,
+    resolveOfflineConflict: resolveCollabConflict,
+    offlineQueueError: collabOfflineQueueError,
+  } = useLiveCollaboration({
+    doodleAPI,
+    workspaceId: activeWorkspaceId,
+    fileId: activeFileId,
+  });
+
+  useEffect(() => {
+    if (collabPendingConflict) setIsLiveCollabModalOpen(true);
+  }, [collabPendingConflict]);
 
   // Auto-join room from URL query if present
   useEffect(() => {
@@ -582,9 +641,7 @@ export default function App() {
   // Safe scene change handler without infinite loops or redundant re-renders
   const handleSceneChange = useCallback((elements, appState) => {
     onFileSceneChange(elements, appState);
-    if (collabStatus !== 'disconnected') {
-      broadcastScene(elements);
-    }
+    broadcastScene(elements);
     if (appState) {
       if (appState.activeTool?.type) {
         const isLaser = appState.activeTool.type === 'laser';
@@ -611,7 +668,7 @@ export default function App() {
         setIsPreferencesOpen((prev) => (prev ? false : prev));
       }
     }
-  }, [onFileSceneChange, isDrawToShapeActive, isBucketActive, isLassoActive, isLaserActive, collabStatus, broadcastScene]);
+  }, [onFileSceneChange, isDrawToShapeActive, isBucketActive, isLassoActive, isLaserActive, broadcastScene]);
 
   // Validate any URL for Web Embeds
   const validateEmbeddable = useCallback((url) => {
@@ -647,6 +704,10 @@ export default function App() {
           animate: true,
           duration: isPrototypeActive ? 420 : 350,
         });
+        if (walkthroughFrameId) {
+          const targetFrame = getWalkthroughFrameForElement(elements, targetElement);
+          if (targetFrame) navigateWalkthrough(targetFrame.id);
+        }
       }
       return;
     }
@@ -677,7 +738,7 @@ export default function App() {
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
-  }, [doodleAPI, isPrototypeActive]);
+  }, [doodleAPI, isPrototypeActive, walkthroughFrameId, navigateWalkthrough]);
 
   // Clean internal element linking without full localhost URLs
   const generateLinkForSelection = useCallback((id) => {
@@ -881,6 +942,13 @@ export default function App() {
 
       const key = e.key.toLowerCase();
 
+      if (key === 'f' && e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        openBoardSearch();
+        return;
+      }
+
       // Ctrl+S / Ctrl+Shift+S (Save / Save As)
       if (key === 's') {
         e.preventDefault();
@@ -937,14 +1005,6 @@ export default function App() {
         return;
       }
 
-      // Ctrl+Shift+A (AI Smart Diagram Generator)
-      if (key === 'a' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsSmartDiagramOpen((prev) => !prev);
-        return;
-      }
-
       // Ctrl+Shift+I (Tech & Architecture Icon Library)
       if (key === 'i' && e.shiftKey) {
         e.preventDefault();
@@ -956,7 +1016,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [handleSave, handleSaveAs, handleOpen, handleNew, handleExport]);
+  }, [handleSave, handleSaveAs, handleOpen, handleNew, handleExport, openBoardSearch]);
 
   // Drag and drop handler for OS files
   const handleDragEnter = useCallback((e) => {
@@ -1182,7 +1242,6 @@ export default function App() {
         onCopyToClipboard={handleCopyToClipboard}
         onPrint={handlePrintCanvas}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenSmartDiagram={() => setIsSmartDiagramOpen(true)}
         onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         isFocusModeActive={isFocusModeActive}
@@ -1335,7 +1394,6 @@ export default function App() {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenTemplates={handleOpenTemplates}
         onOpenMermaid={() => setIsMermaidModalOpen(true)}
-        onOpenSmartDiagram={() => setIsSmartDiagramOpen(true)}
         onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         isFocusModeActive={isFocusModeActive}
@@ -1406,6 +1464,7 @@ export default function App() {
           setIsLibraryOpen(true);
           setCanvasSearchFocusRequest((request) => request + 1);
         }}
+        onOpenBoardSearch={openBoardSearch}
         onOpenPrototypeLinks={() => setIsPrototypeLinksOpen(true)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         onOpenWorkspaces={() => {
@@ -1447,6 +1506,19 @@ export default function App() {
         initialTab={libraryInitialTab}
         canvasSearchFocusRequest={canvasSearchFocusRequest}
       />
+
+      {isBoardSearchOpen && (
+        <Suspense fallback={null}>
+          <SmartBoardSearch
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            activeFileId={activeFileId}
+            currentElements={doodleAPI?.getSceneElements?.() || []}
+            onNavigate={navigateToBoardSearchResult}
+            onClose={() => setIsBoardSearchOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Smart Template Library */}
       {isTemplateLibraryOpen && <Suspense fallback={null}><TemplateLibraryModal
@@ -1587,6 +1659,10 @@ export default function App() {
         startHosting={startCollabHosting}
         joinSession={joinCollabSession}
         leaveSession={leaveCollabSession}
+        reconnectSession={reconnectCollabSession}
+        pendingConflict={collabPendingConflict}
+        resolveOfflineConflict={resolveCollabConflict}
+        offlineQueueError={collabOfflineQueueError}
         sendChatMessage={sendCollabChatMessage}
         onFollowCollaborator={handleFollowCollaborator}
         theme={effectiveTheme}
@@ -1599,18 +1675,6 @@ export default function App() {
             isOpen={isHelpModalOpen}
             onClose={() => setIsHelpModalOpen(false)}
             theme={effectiveTheme}
-          />
-        </Suspense>
-      )}
-
-      {/* AI Text-to-Diagram Assistant Modal */}
-      {isSmartDiagramOpen && (
-        <Suspense fallback={null}>
-          <SmartDiagramGeneratorModal
-            isOpen={isSmartDiagramOpen}
-            onClose={() => setIsSmartDiagramOpen(false)}
-            doodleAPI={doodleAPI}
-            canvasAPI={canvasAPI}
           />
         </Suspense>
       )}
@@ -1658,10 +1722,16 @@ export default function App() {
             theme={effectiveTheme}
             onToast={showToast}
             onClose={() => setIsPrototypeLinksOpen(false)}
-            onStart={(startElementId) => {
+            onStart={(startElementId, options = {}) => {
               const startElement = (doodleAPI?.getSceneElements?.() || []).find((element) => element.id === startElementId);
               if (startElement) {
-                doodleAPI?.scrollToContent?.([startElement], { fitToContent: true, animate: true, duration: 420 });
+                if (options.mode === 'walkthrough') {
+                  navigateWalkthrough(startElement.id, { restart: true });
+                } else {
+                  setWalkthroughFrameId('');
+                  setWalkthroughPath([]);
+                  doodleAPI?.scrollToContent?.([startElement], { fitToContent: true, animate: true, duration: 420 });
+                }
               }
               setIsPrototypeLinksOpen(false);
               setIsPrototypeActive(true);
@@ -1670,7 +1740,35 @@ export default function App() {
         </Suspense>
       )}
 
-      {isPrototypeActive && (
+      {isPrototypeActive && walkthroughFrameId && (
+        <Suspense fallback={null}>
+          <ScenarioWalkthroughPlayer
+            elements={doodleAPI?.getSceneElements?.() || []}
+            frameId={walkthroughFrameId}
+            path={walkthroughPath}
+            theme={effectiveTheme}
+            onNavigate={(frameId) => navigateWalkthrough(frameId)}
+            onBack={() => {
+              if (walkthroughPath.length > 1) {
+                navigateWalkthrough(walkthroughPath[walkthroughPath.length - 2], { back: true });
+              }
+            }}
+            onRestart={() => navigateWalkthrough(walkthroughPath[0] || walkthroughFrameId, { restart: true })}
+            onEdit={() => {
+              setIsPrototypeActive(false);
+              setWalkthroughFrameId('');
+              setIsPrototypeLinksOpen(true);
+            }}
+            onClose={() => {
+              setIsPrototypeActive(false);
+              setWalkthroughFrameId('');
+              setWalkthroughPath([]);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {isPrototypeActive && !walkthroughFrameId && (
         <div className="prototype-active-pill" role="status">
           <span><Link2 size={14} /> Prototype mode</span>
           <small>Click linked objects to navigate</small>

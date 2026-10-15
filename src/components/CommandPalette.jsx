@@ -68,12 +68,12 @@ export function CommandPalette({
   onOpenWorkspaces,
   onOpenLiveCollab,
   onOpenMermaid,
-  onOpenSmartDiagram,
   onOpenIconLibrary,
   onOpenAutoLayout,
   onOpenTimeMachine,
   onOpenDiagramAudit,
   onOpenFindReplace,
+  onOpenBoardSearch,
   onOpenPrototypeLinks,
   onToggleFocusMode,
 }) {
@@ -140,6 +140,17 @@ export function CommandPalette({
       shortcut: 'Ctrl+F',
       action: () => {
         onOpenFindReplace?.();
+        onClose();
+      },
+    },
+    {
+      id: 'search_all_boards',
+      title: 'Search all boards',
+      category: 'Edit & Search',
+      icon: <Search size={14} />,
+      shortcut: 'Ctrl+Shift+F',
+      action: () => {
+        onOpenBoardSearch?.();
         onClose();
       },
     },
@@ -433,17 +444,6 @@ export function CommandPalette({
     },
 
     // AI & Advanced Mind Mapping
-    {
-      id: 'ai_smart_diagram',
-      title: 'AI Text-to-Diagram Assistant...',
-      category: 'AI & Generation',
-      icon: <Sparkles size={14} />,
-      shortcut: 'Ctrl+Shift+A',
-      action: () => {
-        onOpenSmartDiagram?.();
-        onClose();
-      },
-    },
     {
       id: 'ai_smart_auto_layout',
       title: 'AI Smart Auto-Layout Diagrams & Shapes...',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, StickyNote, CheckSquare, Lightbulb, Bug, Code, Sparkles, Plus } from 'lucide-react';
+import { X, StickyNote, CheckSquare, Lightbulb, Bug, Code, Sparkles, Plus, Maximize2, Minimize2 } from 'lucide-react';
 import { FONT_FAMILY } from '../engine/elements.js';
 
 const STICKY_PALETTES = [
@@ -63,11 +63,14 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
   const [title, setTitle] = useState(PRESETS[0].title);
   const [content, setContent] = useState(PRESETS[0].content);
   const [selectedSize, setSelectedSize] = useState(SIZES[1]);
+  const [isWritingFocus, setIsWritingFocus] = useState(false);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => textareaRef.current?.focus(), 80);
+    } else {
+      setIsWritingFocus(false);
     }
   }, [isOpen]);
 
@@ -190,6 +193,12 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
+      if (isWritingFocus) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsWritingFocus(false);
+        return;
+      }
       onClose();
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       handleInsert();
@@ -199,7 +208,7 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
   return (
     <div className="modal-overlay" onClick={onClose} onKeyDown={handleKeyDown}>
       <div
-        className="modal-container sticky-notes-modal-content"
+        className={`modal-container sticky-notes-modal-content${isWritingFocus ? ' is-writing-focus' : ''}`}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '740px',
@@ -216,6 +225,7 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
       >
         {/* Header */}
         <div
+          className="sticky-notes-modal-header"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -241,77 +251,95 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#f3f4f6' }}>
-                Sticky Notes & Quick Cards
+                {isWritingFocus ? 'Writing focus' : 'Sticky Notes & Quick Cards'}
               </h3>
               <p style={{ margin: 0, fontSize: '12px', color: '#9ca3af' }}>
-                Drop customizable hand-drawn sticky cards directly onto your canvas
+                {isWritingFocus ? 'Draft your note, then add it to the canvas' : 'Drop customizable hand-drawn sticky cards directly onto your canvas'}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="studio-icon-btn"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#9ca3af',
-              cursor: 'pointer',
-              padding: '6px',
-              borderRadius: '6px',
-            }}
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              className="studio-icon-btn sticky-notes-focus-toggle"
+              aria-label={isWritingFocus ? 'Exit writing focus mode' : 'Enter writing focus mode'}
+              aria-pressed={isWritingFocus}
+              title={isWritingFocus ? 'Exit writing focus mode (Esc)' : 'Write without distractions'}
+              onClick={() => {
+                setIsWritingFocus((active) => !active);
+                if (!isWritingFocus) setTimeout(() => textareaRef.current?.focus(), 0);
+              }}
+            >
+              {isWritingFocus ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
+              onClick={onClose}
+              className="studio-icon-btn"
+              aria-label="Close sticky notes"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '6px',
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
-        <div className="sticky-notes-modal-body" style={{ display: 'flex', padding: '20px', gap: '20px', overflowY: 'auto' }}>
+        <div className={`sticky-notes-modal-body${isWritingFocus ? ' is-writing-focus' : ''}`} style={{ display: 'flex', padding: '20px', gap: '20px', overflowY: 'auto' }}>
           {/* Left Configuration Panel */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="sticky-notes-editor-fields" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Template Presets */}
-            <div>
-              <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
-                Card Templates
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {PRESETS.map((preset) => {
-                  const Icon = preset.icon;
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => handleApplyPreset(preset)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 10px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        borderRadius: '6px',
-                        color: '#d1d5db',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                      }}
-                    >
-                      <Icon size={13} />
-                      <span>{preset.label}</span>
-                    </button>
-                  );
-                })}
+            {!isWritingFocus && (
+              <div>
+                <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                  Card Templates
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {PRESETS.map((preset) => {
+                    const Icon = preset.icon;
+                    return (
+                      <button
+                        key={preset.id}
+                        onClick={() => handleApplyPreset(preset)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 10px',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '6px',
+                          color: '#d1d5db',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      >
+                        <Icon size={13} />
+                        <span>{preset.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Title & Content Inputs */}
-            <div>
+            <div className="sticky-notes-title-field">
               <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
                 Title (Optional)
               </label>
@@ -334,16 +362,17 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
               />
             </div>
 
-            <div>
+            <div className="sticky-notes-content-field">
               <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
                 Content
               </label>
               <textarea
                 ref={textareaRef}
+                className="sticky-notes-content-input"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Write your note, task list, or ideas..."
-                rows={4}
+                rows={isWritingFocus ? 18 : 4}
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -362,7 +391,7 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
             </div>
 
             {/* Color Palette Selection */}
-            <div>
+            {!isWritingFocus && <div>
               <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
                 Card Color
               </label>
@@ -386,10 +415,10 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
                   />
                 ))}
               </div>
-            </div>
+            </div>}
 
             {/* Size Options */}
-            <div>
+            {!isWritingFocus && <div>
               <label style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
                 Card Size
               </label>
@@ -413,11 +442,12 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Right Live Preview Card */}
-          <div
+          {!isWritingFocus && (
+            <div
             className="sticky-notes-preview-panel"
             style={{
               width: '280px',
@@ -465,7 +495,8 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
             <div style={{ marginTop: '16px', fontSize: '11px', color: '#6b7280' }}>
               Press <kbd style={{ padding: '2px 5px', background: '#1e1e24', borderRadius: '4px', border: '1px solid #333' }}>Ctrl+Enter</kbd> to insert
             </div>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -512,7 +543,7 @@ function StickyNotesModalComponent({ isOpen, onClose, doodleAPI, canvasAPI }) {
             }}
           >
             <Plus size={16} />
-            <span>Drop Card on Canvas</span>
+            <span>{isWritingFocus ? 'Add Note to Canvas' : 'Drop Card on Canvas'}</span>
           </button>
         </div>
       </div>

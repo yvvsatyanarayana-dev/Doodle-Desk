@@ -8,14 +8,16 @@ import {
 } from './hitTest.js';
 import {
   ELEMENT_TYPES, createElement, createTextElement, createLinearElement,
-  createFreedrawElement, cloneElement, cloneElementSet, normalizeElement, normalizeFreedrawElement,
+  createFreedrawElement, cloneElement, cloneElementSet, assignUniqueClonedFrameNames, normalizeElement, normalizeFreedrawElement,
   FONT_FAMILY, FONT_SIZE_DEFAULT, serializeAsJSON, generateId, versionNonce
 } from './elements.js';
 import { HistoryManager } from './history.js';
 import {
-  boundsIntersectViewport, getCachedElementBounds, getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
+  getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
   getElementCenter, snapToGrid, distance
 } from './math/geometry.js';
+import { buildSceneSpatialIndex, getVisibleSceneElements } from './math/sceneSpatialIndex.js';
+import { getFrameMoveElementIds } from './frameMovement.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
@@ -108,6 +110,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const containerRef = useRef(null);
   const animRef = useRef(null);
   const renderRef = useRef(null);
+  const sceneSpatialIndexRef = useRef({ elements: null, index: null });
   const imageCache = useRef({});
   const dotGridPatternCache = useRef(null);
   const canvasDprRef = useRef(0);
@@ -499,14 +502,25 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const viewportPadding = 32 + 48 / z;
     const selectedEls = [];
 
+    // Build once per scene version; pan/zoom redraws can query just nearby elements.
+    const sceneElements = elementsRef.current;
+    if (sceneSpatialIndexRef.current.elements !== sceneElements) {
+      sceneSpatialIndexRef.current = {
+        elements: sceneElements,
+        index: buildSceneSpatialIndex(sceneElements),
+      };
+    }
+
     // Skip off-screen elements before drawing their paths or fills.
-    for (const el of elementsRef.current) {
-      if (el.isDeleted || el.isHidden) continue;
+    const visibleElements = getVisibleSceneElements(
+      sceneSpatialIndexRef.current.index,
+      viewport,
+      viewportPadding,
+    );
+    for (const el of visibleElements) {
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
       if (el.id === interaction.current.editingElementId) continue;
-      const bounds = getCachedElementBounds(el);
-      if (!boundsIntersectViewport(bounds, viewport, viewportPadding)) continue;
       renderElement(ctx, el, imageCache.current);
       if (selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
     }
@@ -861,7 +875,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
 
       // Hit test
-      const rawHit = getElementAtPoint(elementsRef.current, sx, sy);
+      const rawHit = getElementAtPoint(elementsRef.current, sx, sy, {
+        preferFrameIds: Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]),
+      });
       if (rawHit?.type === ELEMENT_TYPES.FRAME && isPointOnFrameLabel(rawHit, sx, sy)) {
         beginFrameNameEdit(rawHit);
         return;
@@ -903,7 +919,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         const startPositions = {};
         for (const el of elementsRef.current) {
           if ((nextSelectedIds[el.id] || el.id === hit.id) && !el.isDeleted && !el.isHidden && !el.locked) {
-            startPositions[el.id] = cloneElement(el);
+            startPositions[el.id] = {
+              ...el,
+              ...(Array.isArray(el.points) ? { points: el.points.map(point => [...point]) } : {}),
+              ...(Array.isArray(el.pressures) ? { pressures: [...el.pressures] } : {}),
+              ...(Array.isArray(el.groupIds) ? { groupIds: [...el.groupIds] } : {}),
+            };
           }
         }
         interaction.current.dragStartPositions = startPositions;
@@ -1243,7 +1264,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             originals.push(startState || el);
           }
         }
-        const clones = cloneElementSet(originals);
+        const clones = assignUniqueClonedFrameNames(cloneElementSet(originals), currentElements);
         for (const clone of clones) newSelectedIds[clone.id] = true;
 
         if (clones.length > 0) {
@@ -1309,26 +1330,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         }
       }
 
-      const selectedFrames = currentElements.filter(el =>
-        allIdsToMove.has(el.id) && el.type === ELEMENT_TYPES.FRAME && !el.isDeleted && !el.isHidden && !el.locked
-      );
-      if (selectedFrames.length > 0) {
-        for (const frame of selectedFrames) {
-          const fx1 = Math.min(frame.x, frame.x + (frame.width || 0));
-          const fx2 = Math.max(frame.x, frame.x + (frame.width || 0));
-          const fy1 = Math.min(frame.y, frame.y + (frame.height || 0));
-          const fy2 = Math.max(frame.y, frame.y + (frame.height || 0));
-          for (const el of currentElements) {
-            if (el.id === frame.id || el.isDeleted || allIdsToMove.has(el.id)) continue;
-            // Check if element center is inside the frame boundary
-            const cx = el.x + (el.width || 0) / 2;
-            const cy = el.y + (el.height || 0) / 2;
-            if (cx >= fx1 && cx <= fx2 && cy >= fy1 && cy <= fy2) {
-              allIdsToMove.add(el.id);
-            }
-          }
-        }
-      }
+      const frameMoveIds = getFrameMoveElementIds(currentElements, allIdsToMove);
+      for (const id of frameMoveIds) allIdsToMove.add(id);
 
       // Smart Magnetic Alignment & Guide Snapping
       const activeGuides = [];
@@ -2007,8 +2010,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       if (toDuplicate.length === 0) return;
       commitHistory();
       const newSelected = {};
-      const newEls = toDuplicate.map(el => {
-        const cloned = cloneElement(el, { x: el.x + 20, y: el.y + 20 });
+      const newEls = assignUniqueClonedFrameNames(cloneElementSet(toDuplicate), elementsRef.current).map((cloned, index) => {
+        const el = toDuplicate[index];
+        cloned.x = el.x + 20;
+        cloned.y = el.y + 20;
         newSelected[cloned.id] = true;
         return cloned;
       });
@@ -2078,7 +2083,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         return;
       }
       commitHistory();
-      const pasted = window.__doodleClipboard.map(el => cloneElement(el, { x: el.x + 20, y: el.y + 20 }));
+      const pasted = assignUniqueClonedFrameNames(
+        cloneElementSet(window.__doodleClipboard),
+        elementsRef.current
+      ).map(el => ({
+        ...el,
+        x: el.x + 20,
+        y: el.y + 20,
+      }));
       setElements(prev => [...prev, ...pasted]);
       setAppState({ selectedElementIds: Object.fromEntries(pasted.map(el => [el.id, true])) });
       notifyChange();

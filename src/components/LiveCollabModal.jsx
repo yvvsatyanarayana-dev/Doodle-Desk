@@ -34,6 +34,10 @@ export default function LiveCollabModal({
   startHosting,
   joinSession,
   leaveSession,
+  reconnectSession,
+  pendingConflict,
+  resolveOfflineConflict,
+  offlineQueueError = '',
   sendChatMessage,
   onFollowCollaborator,
   theme = 'dark',
@@ -43,6 +47,7 @@ export default function LiveCollabModal({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [conflictChoices, setConflictChoices] = useState({});
   const chatBottomRef = useRef(null);
 
   useEffect(() => {
@@ -56,6 +61,10 @@ export default function LiveCollabModal({
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    setConflictChoices({});
+  }, [pendingConflict]);
 
   if (!isOpen) return null;
 
@@ -322,8 +331,72 @@ export default function LiveCollabModal({
         <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {connectionError && (
             <div role="alert" style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248, 113, 113, 0.3)', background: 'rgba(248, 113, 113, 0.1)', color: '#fca5a5', fontSize: '12px', lineHeight: 1.45 }}>
-              {connectionError}
+              <div>{connectionError}</div>
+              {!isConnected && roomId && (
+                <button type="button" onClick={reconnectSession} style={{ marginTop: '10px', padding: '7px 11px', borderRadius: '7px', border: '1px solid rgba(248, 113, 113, 0.35)', background: 'rgba(248, 113, 113, 0.12)', color: T.text, fontWeight: 600, cursor: 'pointer' }}>
+                  Reconnect to {roomId}
+                </button>
+              )}
             </div>
+          )}
+          {offlineQueueError && (
+            <div role="alert" style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248, 113, 113, 0.3)', background: 'rgba(248, 113, 113, 0.1)', color: '#fca5a5', fontSize: '12px', lineHeight: 1.45 }}>
+              {offlineQueueError}
+            </div>
+          )}
+          {pendingConflict && (
+            <section aria-label="Offline collaboration conflicts" style={{ padding: '16px', borderRadius: '14px', border: `1px solid ${T.cardBorder}`, background: T.cardBg, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <h3 style={{ margin: '0 0 5px', fontSize: '15px', color: T.text }}>Review offline changes</h3>
+                <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5, color: T.textMuted }}>
+                  These objects changed both here and on another device. Choose which version to keep before syncing.
+                </p>
+              </div>
+              {pendingConflict.conflicts.map((conflict) => (
+                <div key={conflict.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', padding: '10px 12px', borderRadius: '10px', background: T.bgSubtle, border: `1px solid ${T.borderSubtle}` }}>
+                  <span style={{ minWidth: '120px', flex: 1, fontSize: '13px', color: T.text }}>{conflict.label}</span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {['local', 'remote'].map((choice) => (
+                      <button
+                        key={choice}
+                        type="button"
+                        aria-pressed={conflictChoices[conflict.id] === choice}
+                        onClick={() => setConflictChoices((current) => ({ ...current, [conflict.id]: choice }))}
+                        style={{
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: `1px solid ${conflictChoices[conflict.id] === choice ? '#6366f1' : T.btnBorder}`,
+                          background: conflictChoices[conflict.id] === choice ? 'rgba(99, 102, 241, 0.16)' : T.btnBg,
+                          color: T.btnText,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        Keep {choice === 'local' ? 'my version' : 'other version'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                disabled={pendingConflict.conflicts.some(({ id }) => !conflictChoices[id])}
+                onClick={() => resolveOfflineConflict(conflictChoices)}
+                style={{
+                  alignSelf: 'flex-end',
+                  padding: '9px 13px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#6366f1',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: pendingConflict.conflicts.some(({ id }) => !conflictChoices[id]) ? 'not-allowed' : 'pointer',
+                  opacity: pendingConflict.conflicts.some(({ id }) => !conflictChoices[id]) ? 0.55 : 1,
+                }}
+              >
+                Apply choices and sync
+              </button>
+            </section>
           )}
           {/* User Profile Bar */}
           <div
