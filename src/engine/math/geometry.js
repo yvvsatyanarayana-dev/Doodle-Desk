@@ -184,6 +184,21 @@ export function snapToGrid(v, gridSize) {
   return Math.round(v / gridSize) * gridSize;
 }
 
+export function constrainPointToAngle(startX, startY, endX, endY, angleIncrement = Math.PI / 4) {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const distance = Math.hypot(dx, dy);
+  if (distance === 0 || !Number.isFinite(angleIncrement) || angleIncrement <= 0) {
+    return [endX, endY];
+  }
+  const angle = Math.atan2(dy, dx);
+  const constrainedAngle = Math.round(angle / angleIncrement) * angleIncrement;
+  return [
+    startX + Math.cos(constrainedAngle) * distance,
+    startY + Math.sin(constrainedAngle) * distance,
+  ];
+}
+
 // Polygon contains point (ray casting)
 export function polygonContainsPoint(polygon, px, py) {
   let inside = false;

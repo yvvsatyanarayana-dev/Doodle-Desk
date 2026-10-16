@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getTextElementBounds, renderElement } from '../src/engine/renderer/render.js';
 import { normalizeFreedrawElement } from '../src/engine/elements.js';
-import { sketchyFill, sketchyRoundedRect } from '../src/engine/renderer/sketchy.js';
+import { crossHatchFill, sketchyFill, sketchyRoundedRect } from '../src/engine/renderer/sketchy.js';
 import { getElementBounds } from '../src/engine/math/geometry.js';
 import { getResizeHandleAt, hitTestElement, RESIZE_HANDLES } from '../src/engine/hitTest.js';
 
@@ -246,6 +246,46 @@ describe('shape outline rendering', () => {
       expect(pathInstances).toHaveLength(1);
       expect(firstCtx.stroke).toHaveBeenCalledWith(pathInstances[0]);
       expect(secondCtx.stroke).toHaveBeenCalledWith(pathInstances[0]);
+    } finally {
+      if (originalPath2D === undefined) {
+        delete globalThis.Path2D;
+      } else {
+        globalThis.Path2D = originalPath2D;
+      }
+    }
+  });
+
+  it('draws cross-hatch passes at distinct diagonal angles', () => {
+    const originalPath2D = globalThis.Path2D;
+    const pathInstances = [];
+    class TestPath2D {
+      constructor() {
+        this.slopes = [];
+        this.currentPoint = null;
+        pathInstances.push(this);
+      }
+      moveTo(x, y) {
+        this.currentPoint = [x, y];
+      }
+      lineTo(x, y) {
+        this.currentPoint = [x, y];
+      }
+      bezierCurveTo(_cp1x, _cp1y, _cp2x, _cp2y, x, y) {
+        if (this.currentPoint) {
+          this.slopes.push(Math.sign((x - this.currentPoint[0]) * (y - this.currentPoint[1])));
+        }
+        this.currentPoint = [x, y];
+      }
+    }
+    globalThis.Path2D = TestPath2D;
+
+    try {
+      const ctx = createContext();
+      ctx.lineWidth = 2;
+      crossHatchFill(ctx, [[0, 0], [160, 0], [160, 120], [0, 120]], 42, {});
+
+      expect(pathInstances).toHaveLength(2);
+      expect(pathInstances[0].slopes[0]).not.toBe(pathInstances[1].slopes[0]);
     } finally {
       if (originalPath2D === undefined) {
         delete globalThis.Path2D;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getDragMoveElementIds,
   getFrameMoveElementIds,
+  moveElementByOffset,
   moveBoundLinearElement,
 } from '../src/engine/frameMovement.js';
 
@@ -86,5 +87,16 @@ describe('frame movement', () => {
       points: [[0, 0], [100, 20]],
     });
     expect(moveBoundLinearElement(arrow, 12, 8, new Set())).toBeNull();
+  });
+
+  it('moves ordinary elements by an offset when they have no bound endpoint to adjust', () => {
+    const element = { id: 'shape', type: 'rectangle', x: 20, y: 30, width: 40, height: 50 };
+
+    expect(moveElementByOffset(element, 12, -8, new Set(['shape']))).toMatchObject({
+      x: 32,
+      y: 22,
+      width: 40,
+      height: 50,
+    });
   });
 });

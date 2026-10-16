@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   boundsIntersectViewport,
+  constrainPointToAngle,
   getCachedElementBounds,
   getElementBounds,
 } from '../src/engine/math/geometry.js';
@@ -44,5 +45,14 @@ describe('viewport geometry', () => {
     const updated = { ...element, points: [[0, 0], [50, 60]] };
     expect(getCachedElementBounds(updated)).toEqual(getElementBounds(updated));
     expect(getCachedElementBounds(updated).width).toBe(50);
+  });
+
+  it('constrains line endpoints to the nearest 45-degree angle without changing their length', () => {
+    const endpoint = constrainPointToAngle(10, 20, 40, 48);
+
+    expect(endpoint[0] - 10).toBeCloseTo(endpoint[1] - 20);
+    expect(Math.hypot(endpoint[0] - 10, endpoint[1] - 20)).toBeCloseTo(
+      Math.hypot(30, 28),
+    );
   });
 });

@@ -84,6 +84,11 @@ export function moveBoundLinearElement(element, dx, dy, movingElementIds) {
   };
 }
 
+export function moveElementByOffset(element, dx, dy, movingElementIds) {
+  return moveBoundLinearElement(element, dx, dy, movingElementIds)
+    || { ...element, x: element.x + dx, y: element.y + dy };
+}
+
 export function getFrameMoveElementIds(elements, selectedIds) {
   const idsToMove = new Set(selectedIds);
   const selectedFrames = elements.filter((element) => (

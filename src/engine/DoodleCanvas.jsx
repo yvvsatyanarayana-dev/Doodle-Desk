@@ -14,7 +14,7 @@ import {
 import { HistoryManager } from './history.js';
 import {
   getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
-  getElementCenter, snapToGrid, distance
+  getElementCenter, snapToGrid, distance, constrainPointToAngle
 } from './math/geometry.js';
 import {
   buildSceneSpatialIndex,
@@ -23,7 +23,12 @@ import {
   getVisibleSceneElementsDuringDrag,
   getVisibleSceneElements,
 } from './math/sceneSpatialIndex.js';
-import { getDragMoveElementIds, getFrameMoveElementIds, moveBoundLinearElement } from './frameMovement.js';
+import {
+  getDragMoveElementIds,
+  getFrameMoveElementIds,
+  moveBoundLinearElement,
+  moveElementByOffset,
+} from './frameMovement.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
@@ -771,8 +776,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         overlay.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
       }
     }
-    scheduleRender();
-  }, [scheduleRender]);
+    if (x !== 0 || y !== 0) {
+      renderRef.current?.();
+    }
+  }, []);
 
   // ── Canvas resize ──
   const resizeCanvas = useCallback(() => {
@@ -1586,17 +1593,16 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         ia.dragOffset.y += sdy;
       }
 
-      setElements(prev => prev.map(el =>
-        {
+      if (!ia.dragSpatialIndex) {
+        setElements(prev => prev.map(el => {
           if (!allIdsToMove.has(el.id) || el.isDeleted || el.isHidden || el.locked) return el;
-          const movedBoundLine = moveBoundLinearElement(el, sdx, sdy, allIdsToMove);
           return {
-            ...(movedBoundLine || { ...el, x: el.x + sdx, y: el.y + sdy }),
+            ...moveElementByOffset(el, sdx, sdy, allIdsToMove),
             version: (el.version || 1) + 1,
             versionNonce: versionNonce(),
           };
-        }
-      ));
+        }));
+      }
       scheduleRender();
       return;
     }
@@ -1639,8 +1645,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       } else if ([ELEMENT_TYPES.ARROW, ELEMENT_TYPES.LINE].includes(drawing.type)) {
         const startX = drawing.x + drawing.points[0][0];
         const startY = drawing.y + drawing.points[0][1];
-        const endX = ix;
-        const endY = iy;
+        const [endX, endY] = e.shiftKey
+          ? constrainPointToAngle(startX, startY, ix, iy)
+          : [ix, iy];
         const nx = Math.min(startX, endX);
         const ny = Math.min(startY, endY);
         ia.drawingElement = {
@@ -1654,8 +1661,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           ],
         };
       } else {
-        const newW = ix - ia.dragStartX;
-        const newH = e.shiftKey ? Math.sign(iy - ia.dragStartY || 1) * Math.abs(newW) : (iy - ia.dragStartY);
+        let newW = ix - ia.dragStartX;
+        let newH = iy - ia.dragStartY;
+        if (e.shiftKey) {
+          const side = Math.max(Math.abs(newW), Math.abs(newH));
+          newW = Math.sign(newW || 1) * side;
+          newH = Math.sign(newH || 1) * side;
+        }
         ia.drawingElement = normalizeElement({
           ...drawing,
           x: ia.dragStartX,
@@ -1714,6 +1726,24 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (ia.isDragging) {
+      if (ia.dragSpatialIndex && ia.dragMoveIds &&
+          (ia.dragOffset.x !== 0 || ia.dragOffset.y !== 0)) {
+        const { dragSpatialIndex, dragMoveIds, dragOffset } = ia;
+        setElements(prev => prev.map(el => {
+          if (!dragMoveIds.has(el.id) || el.isDeleted || el.isHidden || el.locked) return el;
+          const original = dragSpatialIndex.elementsById.get(el.id) || el;
+          return {
+            ...moveElementByOffset(
+              original,
+              dragOffset.x,
+              dragOffset.y,
+              dragMoveIds,
+            ),
+            version: (el.version || 1) + 1,
+            versionNonce: versionNonce(),
+          };
+        }));
+      }
       ia.isDragging = false;
       ia.hasAltDuplicated = false;
       ia.dragStartPositions = null;
