@@ -109,7 +109,7 @@ function createDefaultWorkspace() {
   };
 }
 
-export function useWorkspaces({ doodleAPI, canvasAPI }) {
+export function useWorkspaces({ doodleAPI, canvasAPI, onDocumentLoad }) {
   const activeAPI = doodleAPI || canvasAPI;
   const [workspaces, setWorkspaces] = useState(() => {
     try {
@@ -154,8 +154,10 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot.workspaces));
       localStorage.setItem(ACTIVE_ID_KEY, snapshot.activeWorkspaceId);
+      return true;
     } catch (e) {
       console.warn('Failed to persist workspaces:', e);
+      return false;
     }
   }, []);
 
@@ -176,68 +178,75 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
   }, [persistWorkspaces]);
 
   // Save current canvas state into the active file inside active workspace
-  const saveActiveWorkspaceSnapshot = useCallback((force = false) => {
-    if (!activeAPI || isSwitchingRef.current) return;
+  const saveActiveWorkspaceSnapshot = useCallback((force = false, persistImmediately = false) => {
+    if (!activeAPI || isSwitchingRef.current) return false;
     try {
       const elements = activeAPI.getSceneElements?.() || [];
       const appState = activeAPI.getAppState?.() || {};
       const binaryFiles = activeAPI.getFiles?.() || {};
 
-      let sig = elements.length;
+      let sig = `${elements.length}|${appState.viewBackgroundColor || ''}|${appState.gridSize ?? ''}|${appState.zoom?.value ?? appState.zoom ?? ''}|${appState.scrollX ?? ''}|${appState.scrollY ?? ''}`;
       for (let i = 0; i < elements.length; i++) {
-        sig += (elements[i].version || 1);
+        const element = elements[i];
+        sig += `|${element.id}:${element.version || 1}:${element.versionNonce || 0}:${element.isDeleted ? 1 : 0}:${element.isHidden ? 1 : 0}`;
       }
+      sig += `|${Object.keys(binaryFiles).sort().join(',')}`;
 
       if (!force && lastSnapshotSigRef.current === sig) {
-        return;
+        return persistImmediately ? persistWorkspaces() : true;
       }
       lastSnapshotSigRef.current = sig;
 
       const currentWsId = activeWorkspaceIdRef.current;
       const currentFileId = activeFileIdRef.current;
 
-      setWorkspaces((prev) =>
-        prev.map((ws) => {
-          if (ws.id !== currentWsId) return ws;
+      const nextWorkspaces = persistenceSnapshotRef.current.workspaces.map((ws) => {
+        if (ws.id !== currentWsId) return ws;
 
-          const updatedFiles = (ws.files || []).map((file) => {
-            if (file.id === currentFileId || (!currentFileId && file.id === ws.activeFileId)) {
-              return {
-                ...file,
-                elements,
-                appState: {
-                  viewBackgroundColor: appState.viewBackgroundColor,
-                  gridSize: appState.gridSize,
-                  zoom: appState.zoom,
-                  scrollX: appState.scrollX,
-                  scrollY: appState.scrollY,
-                },
-                binaryFiles,
-                updatedAt: Date.now(),
-              };
-            }
-            return file;
-          });
+        const updatedFiles = (ws.files || []).map((file) => {
+          if (file.id === currentFileId || (!currentFileId && file.id === ws.activeFileId)) {
+            return {
+              ...file,
+              elements,
+              appState: {
+                viewBackgroundColor: appState.viewBackgroundColor,
+                gridSize: appState.gridSize,
+                zoom: appState.zoom,
+                scrollX: appState.scrollX,
+                scrollY: appState.scrollY,
+              },
+              binaryFiles,
+              updatedAt: Date.now(),
+            };
+          }
+          return file;
+        });
 
-          return {
-            ...ws,
-            files: updatedFiles,
-            elements,
-            appState: {
-              viewBackgroundColor: appState.viewBackgroundColor,
-              gridSize: appState.gridSize,
-              zoom: appState.zoom,
-              scrollX: appState.scrollX,
-              scrollY: appState.scrollY,
-            },
-            updatedAt: Date.now(),
-          };
-        })
-      );
+        return {
+          ...ws,
+          files: updatedFiles,
+          elements,
+          appState: {
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+            zoom: appState.zoom,
+            scrollX: appState.scrollX,
+            scrollY: appState.scrollY,
+          },
+          updatedAt: Date.now(),
+        };
+      });
+      persistenceSnapshotRef.current = {
+        workspaces: nextWorkspaces,
+        activeWorkspaceId: activeWorkspaceIdRef.current,
+      };
+      setWorkspaces(nextWorkspaces);
+      return persistImmediately ? persistWorkspaces() : true;
     } catch (err) {
       console.warn('Failed to snapshot active workspace file:', err);
+      return false;
     }
-  }, [activeAPI]);
+  }, [activeAPI, persistWorkspaces]);
 
   // Periodic workspace snapshot timer (every 6s) to persist state
   useEffect(() => {
@@ -251,7 +260,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
   // Save on page exit / unload
   useEffect(() => {
     const handleUnload = () => {
-      saveActiveWorkspaceSnapshot(true);
+      saveActiveWorkspaceSnapshot(true, true);
     };
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
@@ -313,12 +322,13 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
           if (targetFile.binaryFiles && Object.keys(targetFile.binaryFiles).length > 0) {
             activeAPI.addFiles?.(Object.values(targetFile.binaryFiles));
           }
+          onDocumentLoad?.();
         } finally {
           isSwitchingRef.current = false;
         }
       }, 40);
     },
-    [activeAPI, workspaces, saveActiveWorkspaceSnapshot]
+    [activeAPI, workspaces, saveActiveWorkspaceSnapshot, onDocumentLoad]
   );
 
   // Switch to another workspace smoothly (loads that workspace's active file)
@@ -403,6 +413,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
               },
               commitToHistory: false,
             });
+            onDocumentLoad?.();
           } finally {
             isSwitchingRef.current = false;
           }
@@ -411,7 +422,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
 
       return newFileId;
     },
-    [saveActiveWorkspaceSnapshot, workspaces, activeWorkspace, activeWorkspaceId, activeAPI]
+    [saveActiveWorkspaceSnapshot, workspaces, activeWorkspace, activeWorkspaceId, activeAPI, onDocumentLoad]
   );
 
   // Rename a file
@@ -607,6 +618,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
                 showWelcomeScreen: initialElements.length === 0,
               },
             });
+            onDocumentLoad?.();
           } finally {
             isSwitchingRef.current = false;
           }
@@ -615,7 +627,7 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
 
       return newWsId;
     },
-    [saveActiveWorkspaceSnapshot, activeAPI]
+    [saveActiveWorkspaceSnapshot, activeAPI, onDocumentLoad]
   );
 
   // Rename or re-style a workspace
@@ -686,11 +698,12 @@ export function useWorkspaces({ doodleAPI, canvasAPI }) {
           if (nextFile.binaryFiles) {
             activeAPI.addFiles?.(Object.values(nextFile.binaryFiles));
           }
+          onDocumentLoad?.();
         }
       }
       return true;
     },
-    [workspaces, activeWorkspaceId, activeAPI]
+    [workspaces, activeWorkspaceId, activeAPI, onDocumentLoad]
   );
 
   // Export workspace as JSON file (includes all files in workspace)

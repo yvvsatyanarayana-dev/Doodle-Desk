@@ -47,6 +47,8 @@ import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
 
 export default function App() {
   const doodleCanvasRef = useRef(null);
+  const markDocumentCleanRef = useRef(null);
+  const clearRecoveryRef = useRef(null);
   const [doodleAPI, setDoodleAPI] = useState(null);
   // Native engine API references with full backward-compatibility aliases
   const canvasAPI = doodleAPI;
@@ -158,6 +160,12 @@ export default function App() {
 
   const dragCounterRef = useRef(0);
   const { themeSetting, effectiveTheme, changeTheme } = useTheme();
+  const handleWorkspaceDocumentLoad = useCallback(() => {
+    markDocumentCleanRef.current?.(true);
+  }, []);
+  const handleDocumentSaved = useCallback(() => {
+    clearRecoveryRef.current?.();
+  }, []);
 
   // Workspace management & Multi-board system
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
@@ -181,7 +189,11 @@ export default function App() {
     duplicateFile,
     deleteFile,
     updateComponentInstancesOnBoards,
-  } = useWorkspaces({ doodleAPI });
+  } = useWorkspaces({ doodleAPI, onDocumentLoad: handleWorkspaceDocumentLoad });
+  const saveWorkspaceDocument = useCallback(
+    () => saveActiveWorkspaceSnapshot(true, true),
+    [saveActiveWorkspaceSnapshot],
+  );
 
   const openBoardSearch = useCallback(() => {
     setIsCommandPaletteOpen(false);
@@ -512,9 +524,13 @@ export default function App() {
     handleCopyToClipboard,
     resolveUnsavedModal,
     loadFileFromDisk,
+    markClean,
   } = useFileActions({
     doodleAPI,
+    onSaveWorkspace: saveWorkspaceDocument,
+    onSaved: handleDocumentSaved,
   });
+  markDocumentCleanRef.current = markClean;
 
   const {
     hasRecoverySession,
@@ -526,7 +542,9 @@ export default function App() {
     currentFilePath,
     isDirty,
     onDirectSave: handleSave,
+    savedElements: activeFile?.elements || [],
   });
+  clearRecoveryRef.current = clearRecovery;
 
   // Set canvas paper & grid style with proper canvas scene synchronization
   const handleSetCanvasStyle = useCallback((style) => {
@@ -1340,10 +1358,13 @@ export default function App() {
           }}
           canvasStyle={canvasStyle}
           initialData={{
+            elements: activeFile?.elements || [],
+            files: activeFile?.binaryFiles || {},
             appState: {
+              ...(activeFile?.appState || {}),
               name: 'Untitled Doodle',
-              currentItemFontFamily: FONT_FAMILY?.Doodlefont ?? 5,
-              showWelcomeScreen: true,
+              currentItemFontFamily: activeFile?.appState?.currentItemFontFamily ?? FONT_FAMILY?.Doodlefont ?? 5,
+              showWelcomeScreen: !(activeFile?.elements || []).some((element) => !element.isDeleted),
               activeTool: { type: 'selection' },
             },
           }}

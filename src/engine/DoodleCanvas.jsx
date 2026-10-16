@@ -1,5 +1,5 @@
 import React, {
-  lazy, Suspense, useRef, useEffect, useCallback, useMemo, useState, useImperativeHandle, forwardRef
+  lazy, Suspense, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState, useImperativeHandle, forwardRef
 } from 'react';
 import { renderElement, renderSelectionOverlay, measureText } from './renderer/render.js';
 import {
@@ -23,12 +23,12 @@ import {
   getVisibleSceneElementsDuringDrag,
   getVisibleSceneElements,
 } from './math/sceneSpatialIndex.js';
-import { getDragMoveElementIds, getFrameMoveElementIds } from './frameMovement.js';
+import { getDragMoveElementIds, getFrameMoveElementIds, moveBoundLinearElement } from './frameMovement.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
 import { exportToBlob, exportToSvg } from './io/export.js';
-import { BookOpen, Box, CirclePlay, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop } from 'lucide-react';
+import { BookOpen, Box, CirclePlay, Database, GitCompareArrows, HelpCircle, Layers as LayersIcon, PanelTop } from 'lucide-react';
 import { findShortcutAction, getShortcutBindings } from './keyboardShortcuts.js';
 import { buildSimulationGraph, getSimulationChoices } from './simulation.js';
 import {
@@ -47,6 +47,7 @@ import {
 } from './components/smartComponents.js';
 import { adaptDefaultStrokeColors } from './themeColors.js';
 import { drawDotGrid } from './renderer/paperGrid.js';
+import { buildDataDiagram } from '../utils/dataDiagram.js';
 
 const CanvasContextMenu = lazy(() => import('./components/CanvasContextMenu.jsx').then(module => ({ default: module.CanvasContextMenu })));
 const LayersPanel = lazy(() => import('./components/LayersPanel.jsx').then(module => ({ default: module.LayersPanel })));
@@ -54,6 +55,7 @@ const SmartComponentsPanel = lazy(() => import('./components/SmartComponentsPane
 const BoardPortalPanel = lazy(() => import('./components/BoardPortalPanel.jsx').then(module => ({ default: module.BoardPortalPanel })));
 const SimulationPanel = lazy(() => import('./components/SimulationPanel.jsx').then(module => ({ default: module.SimulationPanel })));
 const ChangeTrackingPanel = lazy(() => import('./components/ChangeTrackingPanel.jsx').then(module => ({ default: module.ChangeTrackingPanel })));
+const DataDiagramModal = lazy(() => import('../components/DataDiagramModal.jsx').then(module => ({ default: module.DataDiagramModal })));
 
 // ──────────────────────────────────────────────
 //  Tool → cursor mapping
@@ -121,6 +123,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const dotGridPatternCache = useRef(null);
   const canvasDprRef = useRef(0);
   const pendingPanRef = useRef({ x: 0, y: 0, frame: null });
+  const panViewportRef = useRef({ active: false, scrollX: 0, scrollY: 0 });
+  const sceneOverlayRef = useRef(null);
+  const sceneOverlayScrollRef = useRef({ scrollX: 0, scrollY: 0 });
   const pendingWheelRef = useRef({
     x: 0,
     y: 0,
@@ -171,6 +176,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const [isComponentsPanelOpen, setIsComponentsPanelOpen] = useState(false);
   const [smartComponents, setSmartComponents] = useState([]);
   const [isPortalPanelOpen, setIsPortalPanelOpen] = useState(false);
+  const [isDataDiagramOpen, setIsDataDiagramOpen] = useState(false);
   const [isSimulationActive, setIsSimulationActive] = useState(false);
   const [simulationCurrentId, setSimulationCurrentId] = useState(null);
   const [simulationPath, setSimulationPath] = useState([]);
@@ -187,7 +193,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const appStateRef = useRef(appState);
   const filesRef = useRef(files);
   elementsRef.current = elements;
-  appStateRef.current = appState;
+  appStateRef.current = panViewportRef.current.active
+    ? {
+      ...appState,
+      scrollX: panViewportRef.current.scrollX,
+      scrollY: panViewportRef.current.scrollY,
+    }
+    : appState;
   filesRef.current = files;
 
   const collaboratorsRef = useRef(new Map());
@@ -210,6 +222,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
   }, [workspaceId, fileId]);
 
+  useLayoutEffect(() => {
+    sceneOverlayScrollRef.current = {
+      scrollX: appStateRef.current.scrollX || 0,
+      scrollY: appStateRef.current.scrollY || 0,
+    };
+    sceneOverlayRef.current?.style.removeProperty('transform');
+  });
+
   // Interaction state (NOT React state for perf — updated via refs)
   const interaction = useRef({
     isDragging: false,
@@ -221,6 +241,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     isTextEditing: false,
     tool: 'selection',
     dragStartX: 0, dragStartY: 0,
+    dragStartClientX: 0, dragStartClientY: 0,
     dragLastX: 0, dragLastY: 0,
     drawingElement: null,
     resizeHandle: null,
@@ -237,6 +258,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     dragBaseBounds: null,
     dragOffset: { x: 0, y: 0 },
     dragSpatialIndex: null,
+    shiftDragAxis: null,
+    pendingShiftDeselectIds: null,
   });
 
   // ── Setters ──
@@ -537,6 +560,20 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         drag.dragOffset,
       )
       : getVisibleSceneElements(getSceneSpatialIndex(sceneElements), viewport, viewportPadding);
+    if (isIndexedDrag) {
+      for (let index = 0; index < visibleElements.length; index += 1) {
+        const element = visibleElements[index];
+        if (element.type !== ELEMENT_TYPES.ARROW && element.type !== ELEMENT_TYPES.LINE) continue;
+        const original = drag.dragSpatialIndex.elementsById.get(element.id);
+        const boundPreview = original && moveBoundLinearElement(
+          original,
+          drag.dragOffset.x,
+          drag.dragOffset.y,
+          drag.dragMoveIds,
+        );
+        if (boundPreview) visibleElements[index] = boundPreview;
+      }
+    }
     for (const el of visibleElements) {
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
@@ -721,13 +758,21 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const { x, y } = pending;
     pending.x = 0;
     pending.y = 0;
-    if (x === 0 && y === 0) return;
-    setAppState(prev => ({
-      scrollX: prev.scrollX + x,
-      scrollY: prev.scrollY + y,
-    }));
+    if (x !== 0 || y !== 0) {
+      const scrollX = (appStateRef.current.scrollX || 0) + x;
+      const scrollY = (appStateRef.current.scrollY || 0) + y;
+      appStateRef.current = { ...appStateRef.current, scrollX, scrollY };
+      panViewportRef.current.scrollX = scrollX;
+      panViewportRef.current.scrollY = scrollY;
+      const overlay = sceneOverlayRef.current;
+      if (overlay) {
+        const offsetX = scrollX - sceneOverlayScrollRef.current.scrollX;
+        const offsetY = scrollY - sceneOverlayScrollRef.current.scrollY;
+        overlay.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+      }
+    }
     scheduleRender();
-  }, [scheduleRender, setAppState]);
+  }, [scheduleRender]);
 
   // ── Canvas resize ──
   const resizeCanvas = useCallback(() => {
@@ -830,6 +875,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (e.button === 1 || (e.button === 0 && interaction.current.spaceDown)) {
       // Middle-click or Space+drag = pan
       interaction.current.isPanning = true;
+      panViewportRef.current = {
+        active: true,
+        scrollX: appStateRef.current.scrollX || 0,
+        scrollY: appStateRef.current.scrollY || 0,
+      };
       interaction.current.dragLastX = e.clientX;
       interaction.current.dragLastY = e.clientY;
       canvasRef.current.style.cursor = 'grabbing';
@@ -850,11 +900,18 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     interaction.current.dragStartX = ix;
     interaction.current.dragStartY = iy;
+    interaction.current.dragStartClientX = e.clientX;
+    interaction.current.dragStartClientY = e.clientY;
     interaction.current.dragLastX = e.clientX;
     interaction.current.dragLastY = e.clientY;
 
     if (tool === 'hand') {
       interaction.current.isPanning = true;
+      panViewportRef.current = {
+        active: true,
+        scrollX: appStateRef.current.scrollX || 0,
+        scrollY: appStateRef.current.scrollY || 0,
+      };
       canvasRef.current.style.cursor = 'grabbing';
       return;
     }
@@ -924,14 +981,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             : [hit];
 
         let nextSelectedIds = { ...selectedIds };
+        let pendingShiftDeselectIds = null;
         if (e.shiftKey) {
-          // Toggle selection
-          const shouldSelect = !isAlreadySelected;
-          for (const m of groupMembers) {
-            if (shouldSelect) nextSelectedIds[m.id] = true;
-            else delete nextSelectedIds[m.id];
+          if (isAlreadySelected) {
+            pendingShiftDeselectIds = groupMembers.map((member) => member.id);
+          } else {
+            for (const member of groupMembers) nextSelectedIds[member.id] = true;
+            setAppState({ selectedElementIds: nextSelectedIds });
           }
-          setAppState({ selectedElementIds: nextSelectedIds });
         } else if (!isAlreadySelected) {
           nextSelectedIds = {};
           for (const m of groupMembers) nextSelectedIds[m.id] = true;
@@ -975,6 +1032,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         interaction.current.dragBaseBounds = minX === Infinity ? null : { minX, minY, maxX, maxY };
         interaction.current.dragOffset = { x: 0, y: 0 };
         interaction.current.dragSpatialIndex = getSceneSpatialIndex(elementsRef.current);
+        interaction.current.shiftDragAxis = null;
+        interaction.current.pendingShiftDeselectIds = pendingShiftDeselectIds;
         return;
       }
 
@@ -1073,19 +1132,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, commitHistory, notifyChange, isSimulationActive, isPrototypeMode, onLinkOpen, beginFrameNameEdit, onToast]);
 
   const onPointerMove = useCallback((e) => {
-    const [sx, sy] = getScenePoint(e);
-    const as = appStateRef.current;
-    const gridSize = as.gridSize;
-    const ix = snap(sx, gridSize);
-    const iy = snap(sy, gridSize);
     const ia = interaction.current;
-
-    // Broadcast pointer to collaborators
-    if (onPointerUpdate) {
-      onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
-    }
-
     if (ia.isPanning) {
+      if (isCollaborating && onPointerUpdate) {
+        const [sx, sy] = getScenePoint(e);
+        onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
+      }
       const dx = e.clientX - ia.dragLastX;
       const dy = e.clientY - ia.dragLastY;
       ia.dragLastX = e.clientX;
@@ -1100,6 +1152,17 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         });
       }
       return;
+    }
+
+    const [sx, sy] = getScenePoint(e);
+    const as = appStateRef.current;
+    const gridSize = as.gridSize;
+    const ix = snap(sx, gridSize);
+    const iy = snap(sy, gridSize);
+
+    // Broadcast pointer to collaborators
+    if (isCollaborating && onPointerUpdate) {
+      onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
     }
 
     if (ia.isRotating) {
@@ -1297,6 +1360,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (ia.isDragging) {
+      if (ia.pendingShiftDeselectIds &&
+          Math.hypot(
+            e.clientX - ia.dragStartClientX,
+            e.clientY - ia.dragStartClientY,
+          ) > 3) {
+        ia.pendingShiftDeselectIds = null;
+      }
+
       // Alt + Drag duplication: duplicate selected elements on drag
       if (e.altKey && !ia.hasAltDuplicated) {
         ia.hasAltDuplicated = true;
@@ -1342,15 +1413,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.dragLastX = e.clientX;
       ia.dragLastY = e.clientY;
 
-      // Shift + Drag: snap to primary axis (horizontal or vertical)
+      // Shift + Drag: constrain movement to the primary axis.
+      let shiftAxis = null;
       if (e.shiftKey) {
         const totalDx = ix - ia.dragStartX;
         const totalDy = iy - ia.dragStartY;
-        if (Math.abs(totalDx) >= Math.abs(totalDy)) {
+        if (!ia.shiftDragAxis && (Math.abs(totalDx) > 1 || Math.abs(totalDy) > 1)) {
+          ia.shiftDragAxis = Math.abs(totalDx) >= Math.abs(totalDy) ? 'horizontal' : 'vertical';
+        }
+        shiftAxis = ia.shiftDragAxis;
+        if (shiftAxis === 'horizontal') {
           sdy = 0;
-        } else {
+        } else if (shiftAxis === 'vertical') {
           sdx = 0;
         }
+      } else {
+        ia.shiftDragAxis = null;
       }
 
       const ids = as?.selectedElementIds || {};
@@ -1449,7 +1527,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
               { diff: tMaxX - newMinX, lineX: tMaxX },
               { diff: tMinX - newMaxX, lineX: tMinX },
             ];
-            for (const t of xTests) {
+            for (const t of (shiftAxis === 'vertical' ? [] : xTests)) {
               if (Math.abs(t.diff) < minDiffX) {
                 minDiffX = Math.abs(t.diff);
                 bestSnapX = {
@@ -1468,7 +1546,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
               { diff: tMaxY - newMinY, lineY: tMaxY },
               { diff: tMinY - newMaxY, lineY: tMinY },
             ];
-            for (const t of yTests) {
+            for (const t of (shiftAxis === 'horizontal' ? [] : yTests)) {
               if (Math.abs(t.diff) < minDiffY) {
                 minDiffY = Math.abs(t.diff);
                 bestSnapY = {
@@ -1509,9 +1587,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
 
       setElements(prev => prev.map(el =>
-        allIdsToMove.has(el.id) && !el.isDeleted && !el.isHidden && !el.locked
-          ? { ...el, x: el.x + sdx, y: el.y + sdy, version: (el.version || 1) + 1, versionNonce: versionNonce() }
-          : el
+        {
+          if (!allIdsToMove.has(el.id) || el.isDeleted || el.isHidden || el.locked) return el;
+          const movedBoundLine = moveBoundLinearElement(el, sdx, sdy, allIdsToMove);
+          return {
+            ...(movedBoundLine || { ...el, x: el.x + sdx, y: el.y + sdy }),
+            version: (el.version || 1) + 1,
+            versionNonce: versionNonce(),
+          };
+        }
       ));
       scheduleRender();
       return;
@@ -1598,7 +1682,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
       canvasRef.current.style.cursor = hit ? 'move' : 'default';
     }
-  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, flushPan, onPointerUpdate, isSimulationActive]);
+  }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, flushPan, onPointerUpdate, isCollaborating, isSimulationActive]);
 
   const onPointerUp = useCallback((e) => {
     try {
@@ -1611,6 +1695,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (ia.isPanning) {
       ia.isPanning = false;
       flushPan();
+      if (panViewportRef.current.active) {
+        panViewportRef.current.active = false;
+        setAppStateRaw(appStateRef.current);
+      }
       canvasRef.current.style.cursor = TOOL_CURSORS[as.activeTool?.type] || 'default';
       return;
     }
@@ -1633,7 +1721,17 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.dragBaseBounds = null;
       ia.dragSpatialIndex = null;
       ia.dragOffset = { x: 0, y: 0 };
+      ia.shiftDragAxis = null;
       ia.alignmentGuides = null;
+      if (ia.pendingShiftDeselectIds) {
+        const deselectIds = new Set(ia.pendingShiftDeselectIds);
+        setAppState((prev) => {
+          const selectedElementIds = { ...(prev?.selectedElementIds || {}) };
+          for (const id of deselectIds) delete selectedElementIds[id];
+          return { selectedElementIds };
+        });
+        ia.pendingShiftDeselectIds = null;
+      }
       commitHistory();
       notifyChange();
       return;
@@ -3766,6 +3864,48 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   };
 
+  const importDataDiagram = useCallback((rows) => {
+    const canvas = canvasRef.current;
+    if (!canvas) throw new Error('The canvas is not ready for importing data.');
+    const generated = buildDataDiagram(rows, { theme });
+    const canvasWidth = canvas.clientWidth;
+    const canvasHeight = canvas.clientHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+    const zoom = Math.min(
+      1.5,
+      Math.max(0.1, Math.min(
+        (canvasWidth - 80) / generated.bounds.width,
+        (canvasHeight - 80) / generated.bounds.height,
+      )),
+    );
+    const offsetX = Math.round(centerX - generated.bounds.width / 2);
+    const offsetY = Math.round(centerY - generated.bounds.height / 2);
+    const newElements = generated.elements.map((element) => ({
+      ...element,
+      x: element.x + offsetX,
+      y: element.y + offsetY,
+    }));
+    const selectedElementIds = Object.fromEntries(
+      newElements
+        .filter((element) => element.type === ELEMENT_TYPES.RECTANGLE)
+        .map((element) => [element.id, true])
+    );
+
+    commitHistory();
+    setElements((previous) => [...previous, ...newElements]);
+    setAppState((previous) => ({
+      selectedElementIds,
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+      zoom: { value: zoom },
+      scrollX: canvasWidth / 2 - centerX * zoom,
+      scrollY: canvasHeight / 2 - centerY * zoom,
+    }));
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Created ${generated.nodeCount} data nodes and ${generated.connectionCount} connections.`);
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
   const saveChangeBaseline = () => {
     try {
       const nextSnapshot = createChangeSnapshot(elementsRef.current);
@@ -3873,6 +4013,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         onContextMenu={onContextMenu}
       />
 
+      <div
+        ref={sceneOverlayRef}
+        className="doodle-scene-overlays"
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      >
       {frameNameEdit && (() => {
         const frame = elements.find(element => element.id === frameNameEdit.id && !element.isDeleted && !element.isHidden);
         if (!frame) return null;
@@ -4019,6 +4164,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           </div>
         );
       })}
+      </div>
 
       {/* Top Toolbar */}
       <TopToolbar
@@ -4107,6 +4253,34 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           <PanelTop size={20} strokeWidth={1.8} />
         </button>
       </div>
+
+      <button
+        type="button"
+        className="doodle-feature-tool-button data-diagram-trigger"
+        onClick={() => {
+          setIsLayersPanelOpen(false);
+          setIsComponentsPanelOpen(false);
+          setIsPortalPanelOpen(false);
+          setIsChangeTrackingOpen(false);
+          setIsSimulationActive(false);
+          setIsDataDiagramOpen(true);
+        }}
+        title="Create an editable diagram from CSV or JSON"
+        aria-label="Create diagram from data"
+      >
+        <Database size={20} strokeWidth={1.8} />
+      </button>
+
+      {isDataDiagramOpen && (
+        <Suspense fallback={null}>
+          <DataDiagramModal
+            isOpen={isDataDiagramOpen}
+            onClose={() => setIsDataDiagramOpen(false)}
+            onImport={importDataDiagram}
+            theme={theme}
+          />
+        </Suspense>
+      )}
 
       {/* Top-Right Stack: Library Button (Settings button portals in below this) */}
       <div className="layer-ui__wrapper__top-right">

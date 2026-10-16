@@ -4,12 +4,20 @@ import { cancelIdleTask, scheduleIdleTask } from '../utils/idleTask.js';
 const RECOVERY_STORAGE_KEY = 'doodle_desktop_recovery_data';
 const RECOVERY_META_KEY = 'doodle_desktop_recovery_meta';
 
-export function useAutoSave({ doodleAPI, canvasAPI, currentFilePath, isDirty, onDirectSave }) {
+export function useAutoSave({
+  doodleAPI,
+  canvasAPI,
+  currentFilePath,
+  isDirty,
+  onDirectSave,
+  savedElements = [],
+}) {
   const activeAPI = doodleAPI || canvasAPI;
   const [autoSaveMode, setAutoSaveMode] = useState('interval'); // 'interval' | 'direct' | 'off'
   const [intervalSec, setIntervalSec] = useState(5);
   const [hasRecoverySession, setHasRecoverySession] = useState(false);
   const [recoveryMeta, setRecoveryMeta] = useState(null);
+  const recoveryCheckCompleteRef = useRef(false);
 
   // Load preferences
   useEffect(() => {
@@ -19,15 +27,24 @@ export function useAutoSave({ doodleAPI, canvasAPI, currentFilePath, isDirty, on
     }
   }, []);
 
-  // Check for crash recovery on mount
+  // Only offer recovery when it differs from the document that was saved.
   useEffect(() => {
+    if (!activeAPI || recoveryCheckCompleteRef.current) return;
+    recoveryCheckCompleteRef.current = true;
     try {
       const savedData = localStorage.getItem(RECOVERY_STORAGE_KEY);
       const savedMetaStr = localStorage.getItem(RECOVERY_META_KEY);
       if (savedData && savedMetaStr) {
         const meta = JSON.parse(savedMetaStr);
-        // Only prompt if there is unsaved work recorded
-        if (meta && meta.elementsCount > 0) {
+        const snapshot = JSON.parse(savedData);
+        const liveElements = activeAPI.getSceneElements?.() || savedElements;
+        const liveFiles = activeAPI.getFiles?.() || {};
+        const recoveryMatchesSavedScene = JSON.stringify(snapshot.elements || []) === JSON.stringify(liveElements || [])
+          && JSON.stringify(snapshot.files || {}) === JSON.stringify(liveFiles);
+        if (recoveryMatchesSavedScene) {
+          localStorage.removeItem(RECOVERY_STORAGE_KEY);
+          localStorage.removeItem(RECOVERY_META_KEY);
+        } else if (meta && meta.elementsCount > 0) {
           setHasRecoverySession(true);
           setRecoveryMeta(meta);
         }
@@ -35,7 +52,7 @@ export function useAutoSave({ doodleAPI, canvasAPI, currentFilePath, isDirty, on
     } catch (e) {
       console.error('Failed to check recovery data:', e);
     }
-  }, []);
+  }, [activeAPI, savedElements]);
 
   const lastSnapshotVersionRef = useRef(null);
   const latestOptionsRef = useRef(null);

@@ -3,13 +3,19 @@ import { serializeAsJSON } from '../engine/elements.js';
 import { loadFromBlob, exportToBlob, exportToSvg } from '../engine/io/export.js';
 import { generateInteractiveHtml } from '../engine/io/exportInteractiveHtml.js';
 
-export function useFileActions({ doodleAPI, canvasAPI }) {
+export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved }) {
   const activeAPI = doodleAPI || canvasAPI;
   const [currentFilePath, setCurrentFilePath] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [pendingCloseAction, setPendingCloseAction] = useState(null); // 'new' | 'open' | 'close' | 'quit'
   const [pendingOpenPath, setPendingOpenPath] = useState(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const lastSceneRef = useRef(null);
+  const handleSaveAsRef = useRef(null);
+
+  useEffect(() => {
+    lastSceneRef.current = activeAPI?.getSceneElementsIncludingDeleted?.() ?? null;
+  }, [activeAPI]);
 
   // Sync document state with Electron Window
   useEffect(() => {
@@ -22,12 +28,19 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
   }, [currentFilePath, isDirty]);
 
   // Mark document dirty on user edits
-  const onSceneChange = useCallback((elements, appState) => {
-    // Only mark dirty if user has actually interacted and elements exist
-    if (!isDirty && elements && elements.length > 0) {
+  const onSceneChange = useCallback((elements) => {
+    if (elements !== lastSceneRef.current) {
+      lastSceneRef.current = elements;
       setIsDirty(true);
     }
-  }, [isDirty]);
+  }, []);
+
+  const markClean = useCallback((clearFilePath = false) => {
+    lastSceneRef.current = activeAPI?.getSceneElementsIncludingDeleted?.() ?? null;
+    if (clearFilePath) setCurrentFilePath(null);
+    setIsDirty(false);
+    onSaved?.();
+  }, [activeAPI, onSaved]);
 
   // Helper to load file content from path
   const loadFileFromDisk = useCallback(async (filePath) => {
@@ -90,13 +103,13 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       }
 
       setCurrentFilePath(filePath);
-      setIsDirty(false);
+      markClean();
       window.electronAPI.addRecentFile(filePath);
     } catch (err) {
       console.error('Failed to load file:', err);
       alert(`Could not open file: ${err.message}`);
     }
-  }, [activeAPI]);
+  }, [activeAPI, markClean]);
 
   // Execute clean New action
   const performNew = useCallback(() => {
@@ -109,8 +122,8 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       },
     });
     setCurrentFilePath(null);
-    setIsDirty(false);
-  }, [activeAPI]);
+    markClean();
+  }, [activeAPI, markClean]);
 
   // New File handler
   const handleNew = useCallback(() => {
@@ -143,11 +156,22 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
 
   // Save File handler
   const handleSave = useCallback(async () => {
-    if (!activeAPI || !window.electronAPI) return false;
+    if (!activeAPI) return false;
 
     if (!currentFilePath) {
-      return await handleSaveAs();
+      if (!onSaveWorkspace) return await handleSaveAsRef.current?.() || false;
+      try {
+        const saved = await onSaveWorkspace();
+        if (!saved) return false;
+        markClean();
+        return true;
+      } catch (err) {
+        console.error('Workspace save failed:', err);
+        alert(`Failed to save: ${err.message}`);
+        return false;
+      }
     }
+    if (!window.electronAPI) return false;
 
     try {
       const elements = activeAPI.getSceneElements();
@@ -157,7 +181,7 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       const json = serializeAsJSON(elements, appState, files, 'local');
       const res = await window.electronAPI.writeFile(currentFilePath, json, false);
       if (res.success) {
-        setIsDirty(false);
+        markClean();
         return true;
       } else {
         throw new Error(res.error);
@@ -167,7 +191,7 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       alert(`Failed to save: ${err.message}`);
       return false;
     }
-  }, [currentFilePath, activeAPI]);
+  }, [currentFilePath, activeAPI, onSaveWorkspace, markClean]);
 
   // Save As handler
   const handleSaveAs = useCallback(async () => {
@@ -189,7 +213,7 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       const res = await window.electronAPI.writeFile(savePath, json, false);
       if (res.success) {
         setCurrentFilePath(savePath);
-        setIsDirty(false);
+        markClean();
         return true;
       } else {
         throw new Error(res.error);
@@ -199,7 +223,8 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
       alert(`Failed to save as: ${err.message}`);
       return false;
     }
-  }, [currentFilePath, activeAPI]);
+  }, [currentFilePath, activeAPI, markClean]);
+  handleSaveAsRef.current = handleSaveAs;
 
   // Save a Copy handler
   const handleSaveCopy = useCallback(async () => {
@@ -576,5 +601,6 @@ export function useFileActions({ doodleAPI, canvasAPI }) {
     handlePrint,
     resolveUnsavedModal,
     loadFileFromDisk,
+    markClean,
   };
 }

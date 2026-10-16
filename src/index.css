@@ -1973,7 +1973,8 @@ textarea.font-mono {
   pointer-events: auto;
 }
 
-.doodle-feature-tools-left .doodle-feature-tool-button {
+.doodle-feature-tools-left .doodle-feature-tool-button,
+.data-diagram-trigger {
   appearance: none !important;
   box-sizing: border-box !important;
   display: flex !important;
@@ -1998,7 +1999,8 @@ textarea.font-mono {
   pointer-events: auto !important;
 }
 
-.doodle-feature-tools-left .doodle-feature-tool-button svg {
+.doodle-feature-tools-left .doodle-feature-tool-button svg,
+.data-diagram-trigger svg {
   display: block !important;
   flex: 0 0 18px !important;
   width: 18px !important;
@@ -2007,19 +2009,29 @@ textarea.font-mono {
   stroke: #f1f5f9 !important;
 }
 
-.doodle-feature-tools-left .doodle-feature-tool-button:hover {
+.doodle-feature-tools-left .doodle-feature-tool-button:hover,
+.data-diagram-trigger:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button {
+.data-diagram-trigger {
+  position: fixed;
+  right: 10px;
+  bottom: 96px;
+  z-index: 501;
+}
+
+[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button,
+[data-theme='light'] .data-diagram-trigger {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08) !important;
   color: #1e1e24 !important;
 }
 
-[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button svg {
+[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button svg,
+[data-theme='light'] .data-diagram-trigger svg {
   color: #1e1e24 !important;
   stroke: #1e1e24 !important;
 }
@@ -5093,15 +5105,20 @@ textarea.font-mono {
 }
 
 @media (max-width: 600px) {
+  .data-diagram-trigger {
+    right: 8px;
+    bottom: 96px;
+  }
+
   .minimap-card {
     right: 8px !important;
-    bottom: 70px !important;
+    bottom: 142px !important;
     max-width: calc(100vw - 16px) !important;
   }
 
   .minimap-toggle-btn {
     right: 8px !important;
-    bottom: 70px !important;
+    bottom: 142px !important;
   }
 
   .cmd-palette-modal {
@@ -5111,6 +5128,11 @@ textarea.font-mono {
 }
 
 @media (max-width: 520px) {
+  .data-diagram-trigger {
+    right: 8px;
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 46px);
+  }
+
   .studio-topbar {
     padding: 0 6px !important;
   }
@@ -6595,7 +6617,7 @@ textarea.font-mono {
    ========================================================================== */
 .minimap-toggle-btn {
   position: absolute;
-  bottom: 100px;
+  bottom: 142px;
   right: 10px;
   width: 34px;
   height: 34px;
@@ -6628,7 +6650,7 @@ textarea.font-mono {
 
 .minimap-card {
   position: absolute;
-  bottom: 100px;
+  bottom: 142px;
   right: 10px;
   background: #141417;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -7973,6 +7995,7 @@ body,
 .doodle-frame-name-input {
   position: absolute;
   z-index: 20;
+  pointer-events: auto;
   box-sizing: border-box;
   padding: 0 8px;
   border: 1px solid #3f3f46;
@@ -7983,6 +8006,48 @@ body,
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1;
   user-select: text;
+}
+
+.pref-modal-content.help-style-dialog.data-diagram-modal {
+  width: min(780px, 94vw) !important;
+  max-width: 780px !important;
+  max-height: 88vh !important;
+  overflow: auto !important;
+}
+
+.data-diagram-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.data-diagram-modal-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.data-diagram-modal-actions .data-diagram-primary-action {
+  border-color: #6366f1;
+  background: #6366f1;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.data-diagram-modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .doodle-frame-name-input:focus {
@@ -9502,7 +9567,7 @@ body,
   .minimap-card,
   .minimap-toggle-btn {
     right: 8px !important;
-    bottom: 54px !important;
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 92px) !important;
   }
 
   .presentation-top-bar {

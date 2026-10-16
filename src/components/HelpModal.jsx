@@ -89,6 +89,7 @@ const guideSections = [
       'PNG is convenient for images, SVG preserves scalable vector artwork, PDF is suited to documents/printing, and interactive HTML preserves clickable prototype or walkthrough behavior.',
       'Use Copy to Clipboard to paste a board image/vector into another application. Print opens print preview and the system print flow.',
       'Import compatible diagrams, images, templates, icon/component libraries, or workspace files through the relevant open/import controls. Keep a .doodle copy as the editable source of truth.',
+      'Use Create diagram from data on the canvas feature toolbar to preview and turn up to 500 CSV or JSON records into editable cards. source/target, from/to, parent, and dependency fields create connectors automatically.',
     ],
   },
   {

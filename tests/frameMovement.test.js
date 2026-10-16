@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getDragMoveElementIds, getFrameMoveElementIds } from '../src/engine/frameMovement.js';
+import {
+  getDragMoveElementIds,
+  getFrameMoveElementIds,
+  moveBoundLinearElement,
+} from '../src/engine/frameMovement.js';
 
 describe('frame movement', () => {
   it('expands a drag to related bindings, containers, groups, and component instances', () => {
@@ -52,5 +56,35 @@ describe('frame movement', () => {
     ];
 
     expect([...getFrameMoveElementIds(elements, ['frame'])]).toEqual(['frame']);
+  });
+
+  it('keeps the moved endpoint of a bound arrow attached when only one node moves', () => {
+    const arrow = {
+      id: 'edge',
+      type: 'arrow',
+      x: 100,
+      y: 40,
+      width: 100,
+      height: 20,
+      points: [[0, 0], [100, 20]],
+      startBinding: { elementId: 'source' },
+      endBinding: { elementId: 'target' },
+    };
+
+    expect(moveBoundLinearElement(arrow, 12, 8, new Set(['source']))).toMatchObject({
+      x: 112,
+      y: 48,
+      width: 88,
+      height: 12,
+      points: [[0, 0], [88, 12]],
+    });
+    expect(moveBoundLinearElement(arrow, 12, 8, new Set(['source', 'target']))).toMatchObject({
+      x: 112,
+      y: 48,
+      width: 100,
+      height: 20,
+      points: [[0, 0], [100, 20]],
+    });
+    expect(moveBoundLinearElement(arrow, 12, 8, new Set())).toBeNull();
   });
 });

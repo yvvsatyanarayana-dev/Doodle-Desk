@@ -44,6 +44,46 @@ export function getDragMoveElementIds(elements, selectedIds) {
   return idsToMove;
 }
 
+export function moveBoundLinearElement(element, dx, dy, movingElementIds) {
+  if (
+    (element.type !== 'arrow' && element.type !== 'line')
+    || !Array.isArray(element.points)
+    || element.points.length < 2
+  ) return null;
+
+  const moveStart = movingElementIds.has(element.startBinding?.elementId);
+  const moveEnd = movingElementIds.has(element.endBinding?.elementId);
+  if (!moveStart && !moveEnd) return null;
+
+  const points = element.points.map(([x, y]) => [x + element.x, y + element.y]);
+  if (moveStart && moveEnd) {
+    for (const point of points) {
+      point[0] += dx;
+      point[1] += dy;
+    }
+  } else if (moveStart) {
+    points[0][0] += dx;
+    points[0][1] += dy;
+  } else {
+    const lastPoint = points[points.length - 1];
+    lastPoint[0] += dx;
+    lastPoint[1] += dy;
+  }
+
+  const minX = Math.min(...points.map(([x]) => x));
+  const minY = Math.min(...points.map(([, y]) => y));
+  const maxX = Math.max(...points.map(([x]) => x));
+  const maxY = Math.max(...points.map(([, y]) => y));
+  return {
+    ...element,
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+    points: points.map(([x, y]) => [x - minX, y - minY]),
+  };
+}
+
 export function getFrameMoveElementIds(elements, selectedIds) {
   const idsToMove = new Set(selectedIds);
   const selectedFrames = elements.filter((element) => (
