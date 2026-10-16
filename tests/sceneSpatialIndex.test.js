@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSceneSpatialIndex,
+  getSceneAlignmentCandidates,
+  getVisibleSceneElementsDuringDrag,
   getVisibleSceneElements,
 } from '../src/engine/math/sceneSpatialIndex.js';
 
@@ -48,5 +50,38 @@ describe('scene spatial index', () => {
     expect(getVisibleSceneElements(spatialIndex, { x: 500000, y: 0, width: 100, height: 100 }))
       .toEqual([elements[50]]);
     expect(spatialIndex.cells.get('976,0')).toHaveLength(1);
+  });
+
+  it('finds alignment candidates in nearby horizontal and vertical strips', () => {
+    const nearbyX = { id: 'nearby-x', x: 96, y: 5000, width: 20, height: 20 };
+    const nearbyY = { id: 'nearby-y', x: 5000, y: 96, width: 20, height: 20 };
+    const far = { id: 'far', x: 5000, y: 5000, width: 20, height: 20 };
+    const spatialIndex = buildSceneSpatialIndex([nearbyX, nearbyY, far]);
+
+    expect(getSceneAlignmentCandidates(spatialIndex, {
+      minX: 100,
+      maxX: 120,
+      minY: 100,
+      maxY: 120,
+    }, 6)).toEqual([nearbyX, nearbyY]);
+  });
+
+  it('renders dragged objects at their preview position without rebuilding their scene index', () => {
+    const behind = { id: 'behind', x: 0, y: 0, width: 20, height: 20 };
+    const moved = { id: 'moved', x: 1000, y: 0, width: 20, height: 20 };
+    const front = { id: 'front', x: 10, y: 10, width: 20, height: 20 };
+    const spatialIndex = buildSceneSpatialIndex([behind, moved, front]);
+
+    expect(getVisibleSceneElementsDuringDrag(
+      spatialIndex,
+      { x: 0, y: 0, width: 50, height: 50 },
+      0,
+      new Set(['moved']),
+      { x: -980, y: 0 },
+    )).toEqual([
+      behind,
+      { ...moved, x: 20, y: 0 },
+      front,
+    ]);
   });
 });

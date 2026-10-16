@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { getFrameMoveElementIds } from '../src/engine/frameMovement.js';
+import { getDragMoveElementIds, getFrameMoveElementIds } from '../src/engine/frameMovement.js';
 
 describe('frame movement', () => {
+  it('expands a drag to related bindings, containers, groups, and component instances', () => {
+    const elements = [
+      { id: 'shape', type: 'rectangle', boundElements: [{ id: 'label' }], groupIds: ['group'] },
+      { id: 'label', type: 'text', containerId: 'shape' },
+      { id: 'group-peer', type: 'ellipse', groupIds: ['group'] },
+      { id: 'component-peer', type: 'rectangle', componentInstanceId: 'instance' },
+    ];
+
+    expect([...getDragMoveElementIds(elements, ['shape', 'component-peer'])]).toEqual([
+      'shape',
+      'component-peer',
+      'label',
+      'group-peer',
+    ]);
+  });
+
   it('moves contents assigned to a frame and unassigned elements inside it', () => {
     const elements = [
       { id: 'frame', type: 'frame', x: 0, y: 0, width: 300, height: 200 },

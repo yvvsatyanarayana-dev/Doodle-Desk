@@ -7,9 +7,6 @@ import { DoodleDeskLogo } from './components/DoodleDeskLogo';
 import { StudioTopBar } from './components/StudioTopBar';
 import { MiniMapNavigator } from './components/MiniMapNavigator';
 import { LiveCollabChatPanel } from './components/LiveCollabChatPanel';
-import { BucketFillOverlay } from './components/BucketFillOverlay';
-import { LassoSelectionOverlay } from './components/LassoSelectionOverlay';
-import { PrecisionRulerOverlay } from './components/PrecisionRulerOverlay';
 import { WebFrameCard, extractElementIdFromLink } from './components/WebFrameCard';
 import { recognizeShape } from './utils/shapeRecognizer';
 import { useWorkspaces } from './hooks/useWorkspaces';
@@ -34,6 +31,10 @@ const DiagramHealthCheck = lazy(() => import('./components/DiagramHealthCheck').
 const PrototypeLinksPanel = lazy(() => import('./components/PrototypeLinksPanel').then((module) => ({ default: module.PrototypeLinksPanel })));
 const ScenarioWalkthroughPlayer = lazy(() => import('./components/ScenarioWalkthroughPlayer').then((module) => ({ default: module.ScenarioWalkthroughPlayer })));
 const SmartBoardSearch = lazy(() => import('./components/SmartBoardSearch').then((module) => ({ default: module.SmartBoardSearch })));
+const LibrarySidebar = lazy(() => import('./components/LibrarySidebar').then((module) => ({ default: module.LibrarySidebar })));
+const BucketFillOverlay = lazy(() => import('./components/BucketFillOverlay').then((module) => ({ default: module.BucketFillOverlay })));
+const LassoSelectionOverlay = lazy(() => import('./components/LassoSelectionOverlay').then((module) => ({ default: module.LassoSelectionOverlay })));
+const PrecisionRulerOverlay = lazy(() => import('./components/PrecisionRulerOverlay').then((module) => ({ default: module.PrecisionRulerOverlay })));
 import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
@@ -41,7 +42,6 @@ import { WelcomeScreen } from './engine/WelcomeScreen.jsx';
 import { CanvasExtraToolsDropdown } from './components/CanvasExtraToolsDropdown';
 import { CanvasTopRightSettings } from './components/CanvasTopRightSettings';
 import { CustomLaserPointer } from './components/CustomLaserPointer';
-import { LibrarySidebar } from './components/LibrarySidebar';
 import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
 import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
 
@@ -1498,14 +1498,18 @@ export default function App() {
       /></Suspense>}
 
       {/* Native Library Sidebar */}
-      <LibrarySidebar
-        isOpen={isLibraryOpen}
-        onClose={() => setIsLibraryOpen(false)}
-        doodleAPI={doodleAPI}
-        theme={effectiveTheme}
-        initialTab={libraryInitialTab}
-        canvasSearchFocusRequest={canvasSearchFocusRequest}
-      />
+      {isLibraryOpen && (
+        <Suspense fallback={null}>
+          <LibrarySidebar
+            isOpen={isLibraryOpen}
+            onClose={() => setIsLibraryOpen(false)}
+            doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+            initialTab={libraryInitialTab}
+            canvasSearchFocusRequest={canvasSearchFocusRequest}
+          />
+        </Suspense>
+      )}
 
       {isBoardSearchOpen && (
         <Suspense fallback={null}>
@@ -1588,14 +1592,22 @@ export default function App() {
       /></Suspense>}
 
 
-      <BucketFillOverlay isActive={isBucketActive} doodleAPI={doodleAPI} />
+      {isBucketActive && (
+        <Suspense fallback={null}>
+          <BucketFillOverlay isActive={isBucketActive} doodleAPI={doodleAPI} />
+        </Suspense>
+      )}
 
       {/* Freeform Lasso Selection Overlay */}
-      <LassoSelectionOverlay
-        isActive={isLassoActive}
-        doodleAPI={doodleAPI}
-        onComplete={() => setIsLassoActive(false)}
-      />
+      {isLassoActive && (
+        <Suspense fallback={null}>
+          <LassoSelectionOverlay
+            isActive={isLassoActive}
+            doodleAPI={doodleAPI}
+            onComplete={() => setIsLassoActive(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Sticky Notes & Quick Cards Modal */}
       {isStickyNotesOpen && <Suspense fallback={null}><StickyNotesModal
@@ -1605,10 +1617,14 @@ export default function App() {
       /></Suspense>}
 
       {/* Precision Ruler & Compass Guide Overlay */}
-      <PrecisionRulerOverlay
-        isActive={isRulerActive}
-        onClose={() => setIsRulerActive(false)}
-      />
+      {isRulerActive && (
+        <Suspense fallback={null}>
+          <PrecisionRulerOverlay
+            isActive={isRulerActive}
+            onClose={() => setIsRulerActive(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Curated Color Palette Studio Modal */}
       {isColorPaletteOpen && <Suspense fallback={null}><ColorPaletteStudioModal

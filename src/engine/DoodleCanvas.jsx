@@ -16,8 +16,14 @@ import {
   getCommonBounds, getElementBounds, getBoundsFromPoints, rotatePoint,
   getElementCenter, snapToGrid, distance
 } from './math/geometry.js';
-import { buildSceneSpatialIndex, getVisibleSceneElements } from './math/sceneSpatialIndex.js';
-import { getFrameMoveElementIds } from './frameMovement.js';
+import {
+  buildSceneSpatialIndex,
+  getSceneAlignmentCandidates,
+  getSceneElementsAtPoint,
+  getVisibleSceneElementsDuringDrag,
+  getVisibleSceneElements,
+} from './math/sceneSpatialIndex.js';
+import { getDragMoveElementIds, getFrameMoveElementIds } from './frameMovement.js';
 import { TopToolbar } from './components/TopToolbar.jsx';
 import { PropertiesPanel } from './components/PropertiesPanel.jsx';
 import { FooterLeft } from './components/FooterLeft.jsx';
@@ -227,6 +233,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     spaceDown: false,
     hasAltDuplicated: false,
     dragStartPositions: null,
+    dragMoveIds: null,
+    dragBaseBounds: null,
+    dragOffset: { x: 0, y: 0 },
+    dragSpatialIndex: null,
   });
 
   // ── Setters ──
@@ -267,6 +277,16 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const commitHistory = useCallback(() => {
     historyRef.current.record(elementsRef.current);
   }, []);
+
+  const getSceneSpatialIndex = (sceneElements) => {
+    if (sceneSpatialIndexRef.current.elements !== sceneElements) {
+      sceneSpatialIndexRef.current = {
+        elements: sceneElements,
+        index: buildSceneSpatialIndex(sceneElements),
+      };
+    }
+    return sceneSpatialIndexRef.current.index;
+  };
 
   const notifyChange = useCallback(() => {
     if (onChange) onChange(elementsRef.current, appStateRef.current);
@@ -504,19 +524,19 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     // Build once per scene version; pan/zoom redraws can query just nearby elements.
     const sceneElements = elementsRef.current;
-    if (sceneSpatialIndexRef.current.elements !== sceneElements) {
-      sceneSpatialIndexRef.current = {
-        elements: sceneElements,
-        index: buildSceneSpatialIndex(sceneElements),
-      };
-    }
 
     // Skip off-screen elements before drawing their paths or fills.
-    const visibleElements = getVisibleSceneElements(
-      sceneSpatialIndexRef.current.index,
-      viewport,
-      viewportPadding,
-    );
+    const drag = interaction.current;
+    const isIndexedDrag = drag.isDragging && drag.dragMoveIds && drag.dragSpatialIndex;
+    const visibleElements = isIndexedDrag
+      ? getVisibleSceneElementsDuringDrag(
+        drag.dragSpatialIndex,
+        viewport,
+        viewportPadding,
+        drag.dragMoveIds,
+        drag.dragOffset,
+      )
+      : getVisibleSceneElements(getSceneSpatialIndex(sceneElements), viewport, viewportPadding);
     for (const el of visibleElements) {
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
@@ -787,7 +807,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       if (e.button === 0) {
         e.preventDefault();
         const [sceneX, sceneY] = getScenePoint(e);
-        const hit = getElementAtPoint(elementsRef.current, sceneX, sceneY, { includeLocked: true });
+        const hit = getElementAtPoint(
+          getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sceneX, sceneY),
+          sceneX,
+          sceneY,
+          { includeLocked: true },
+        );
         const linkedContainer = hit?.containerId
           ? elementsRef.current.find((element) => element.id === hit.containerId && !element.isDeleted && element.link)
           : null;
@@ -875,7 +900,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
 
       // Hit test
-      const rawHit = getElementAtPoint(elementsRef.current, sx, sy, {
+      const rawHit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy, {
         preferFrameIds: Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]),
       });
       if (rawHit?.type === ELEMENT_TYPES.FRAME && isPointOnFrameLabel(rawHit, sx, sy)) {
@@ -928,6 +953,28 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           }
         }
         interaction.current.dragStartPositions = startPositions;
+        const dragMoveIds = getDragMoveElementIds(
+          elementsRef.current,
+          Object.keys(nextSelectedIds).filter((id) => nextSelectedIds[id]),
+        );
+        for (const id of getFrameMoveElementIds(elementsRef.current, dragMoveIds)) {
+          dragMoveIds.add(id);
+        }
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const element of elementsRef.current) {
+          if (!dragMoveIds.has(element.id) || element.isDeleted || element.isHidden || element.locked) continue;
+          minX = Math.min(minX, element.x);
+          minY = Math.min(minY, element.y);
+          maxX = Math.max(maxX, element.x + (element.width || 0));
+          maxY = Math.max(maxY, element.y + (element.height || 0));
+        }
+        interaction.current.dragMoveIds = dragMoveIds;
+        interaction.current.dragBaseBounds = minX === Infinity ? null : { minX, minY, maxX, maxY };
+        interaction.current.dragOffset = { x: 0, y: 0 };
+        interaction.current.dragSpatialIndex = getSceneSpatialIndex(elementsRef.current);
         return;
       }
 
@@ -942,7 +989,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (tool === 'eraser') {
-      const hit = getElementAtPoint(elementsRef.current, sx, sy);
+      const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
       if (hit) {
         setElements(prev => prev.map(el => el.id === hit.id ? { ...el, isDeleted: true } : el));
         commitHistory();
@@ -1281,6 +1328,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           }
           setAppState({ selectedElementIds: newSelectedIds });
           as.selectedElementIds = newSelectedIds;
+          ia.dragMoveIds = null;
+          ia.dragBaseBounds = null;
+          ia.dragOffset = { x: 0, y: 0 };
+          ia.dragSpatialIndex = null;
         }
       }
 
@@ -1303,46 +1354,61 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
 
       const ids = as?.selectedElementIds || {};
-      const allIdsToMove = new Set(Object.keys(ids).filter(id => ids[id]));
+      const allIdsToMove = ia.dragMoveIds || new Set(Object.keys(ids).filter(id => ids[id]));
       const currentElements = elementsRef.current;
 
       // Expand to all boundElements, containerIds, and shared groupIds
-      for (const el of currentElements) {
-        if (allIdsToMove.has(el.id)) {
-          if (el.boundElements) {
-            for (const b of el.boundElements) allIdsToMove.add(b.id);
-          }
-          if (el.containerId) {
-            allIdsToMove.add(el.containerId);
-          }
-          if (el.groupIds?.length) {
-            for (const other of currentElements) {
-              if (other.groupIds?.some(gid => el.groupIds.includes(gid))) {
-                allIdsToMove.add(other.id);
+      if (!ia.dragMoveIds) {
+        for (const el of currentElements) {
+          if (allIdsToMove.has(el.id)) {
+            if (el.boundElements) {
+              for (const b of el.boundElements) allIdsToMove.add(b.id);
+            }
+            if (el.containerId) {
+              allIdsToMove.add(el.containerId);
+            }
+            if (el.groupIds?.length) {
+              for (const other of currentElements) {
+                if (other.groupIds?.some(gid => el.groupIds.includes(gid))) {
+                  allIdsToMove.add(other.id);
+                }
+              }
+            }
+            if (el.componentInstanceId) {
+              for (const other of currentElements) {
+                if (other.componentInstanceId === el.componentInstanceId) allIdsToMove.add(other.id);
               }
             }
           }
-          if (el.componentInstanceId) {
-            for (const other of currentElements) {
-              if (other.componentInstanceId === el.componentInstanceId) allIdsToMove.add(other.id);
-            }
-          }
         }
+        const frameMoveIds = getFrameMoveElementIds(currentElements, allIdsToMove);
+        for (const id of frameMoveIds) allIdsToMove.add(id);
       }
-
-      const frameMoveIds = getFrameMoveElementIds(currentElements, allIdsToMove);
-      for (const id of frameMoveIds) allIdsToMove.add(id);
 
       // Smart Magnetic Alignment & Guide Snapping
       const activeGuides = [];
       if (!e.altKey && allIdsToMove.size > 0) {
-        let movingMinX = Infinity, movingMinY = Infinity, movingMaxX = -Infinity, movingMaxY = -Infinity;
-        for (const el of currentElements) {
-          if (allIdsToMove.has(el.id) && !el.isDeleted) {
-            movingMinX = Math.min(movingMinX, el.x);
-            movingMinY = Math.min(movingMinY, el.y);
-            movingMaxX = Math.max(movingMaxX, el.x + (el.width || 0));
-            movingMaxY = Math.max(movingMaxY, el.y + (el.height || 0));
+        let movingMinX;
+        let movingMinY;
+        let movingMaxX;
+        let movingMaxY;
+        if (ia.dragMoveIds && ia.dragBaseBounds) {
+          movingMinX = ia.dragBaseBounds.minX + ia.dragOffset.x;
+          movingMinY = ia.dragBaseBounds.minY + ia.dragOffset.y;
+          movingMaxX = ia.dragBaseBounds.maxX + ia.dragOffset.x;
+          movingMaxY = ia.dragBaseBounds.maxY + ia.dragOffset.y;
+        } else {
+          movingMinX = Infinity;
+          movingMinY = Infinity;
+          movingMaxX = -Infinity;
+          movingMaxY = -Infinity;
+          for (const el of currentElements) {
+            if (allIdsToMove.has(el.id) && !el.isDeleted) {
+              movingMinX = Math.min(movingMinX, el.x);
+              movingMinY = Math.min(movingMinY, el.y);
+              movingMaxX = Math.max(movingMaxX, el.x + (el.width || 0));
+              movingMaxY = Math.max(movingMaxY, el.y + (el.height || 0));
+            }
           }
         }
 
@@ -1360,7 +1426,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           let bestSnapY = null;
           let minDiffY = SNAP_THRESHOLD;
 
-          for (const target of currentElements) {
+          const alignmentIndex = ia.dragSpatialIndex || getSceneSpatialIndex(currentElements);
+          const targets = getSceneAlignmentCandidates(alignmentIndex, {
+            minX: newMinX,
+            maxX: newMaxX,
+            minY: newMinY,
+            maxY: newMaxY,
+          }, SNAP_THRESHOLD);
+          for (const target of targets) {
             if (allIdsToMove.has(target.id) || target.isDeleted || target.type === ELEMENT_TYPES.FRAME) continue;
             const tMinX = target.x;
             const tMaxX = target.x + (target.width || 0);
@@ -1430,6 +1503,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         }
       }
       ia.alignmentGuides = activeGuides;
+      if (ia.dragMoveIds) {
+        ia.dragOffset.x += sdx;
+        ia.dragOffset.y += sdy;
+      }
 
       setElements(prev => prev.map(el =>
         allIdsToMove.has(el.id) && !el.isDeleted && !el.isHidden && !el.locked
@@ -1518,7 +1595,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           return;
         }
       }
-      const hit = getElementAtPoint(elementsRef.current, sx, sy);
+      const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
       canvasRef.current.style.cursor = hit ? 'move' : 'default';
     }
   }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, flushPan, onPointerUpdate, isSimulationActive]);
@@ -1552,6 +1629,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.isDragging = false;
       ia.hasAltDuplicated = false;
       ia.dragStartPositions = null;
+      ia.dragMoveIds = null;
+      ia.dragBaseBounds = null;
+      ia.dragSpatialIndex = null;
+      ia.dragOffset = { x: 0, y: 0 };
       ia.alignmentGuides = null;
       commitHistory();
       notifyChange();
@@ -1563,7 +1644,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const rect = ia.selectionRect;
       ia.selectionRect = null;
       if (rect && (rect.width > 2 || rect.height > 2)) {
-        const enclosed = getElementsInRect(elementsRef.current, rect.x, rect.y, rect.width, rect.height);
+        const selectionCandidates = getVisibleSceneElements(
+          getSceneSpatialIndex(elementsRef.current),
+          { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        );
+        const enclosed = getElementsInRect(selectionCandidates, rect.x, rect.y, rect.width, rect.height);
         const ids = {};
         for (const el of enclosed) ids[el.id] = true;
         setAppState(prev => ({ selectedElementIds: e.shiftKey ? { ...(prev?.selectedElementIds || {}), ...ids } : ids }));
@@ -2435,7 +2520,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   // ── Double-click to edit text / rename frame / create text ──
   const onDoubleClick = useCallback((e) => {
     const [sx, sy] = getScenePoint(e);
-    const hit = getElementAtPoint(elementsRef.current, sx, sy);
+    const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
 
     if (hit?.type === ELEMENT_TYPES.BOARD_PORTAL) {
       onNavigateBoardPortal?.(hit.portalWorkspaceId, hit.portalFileId);
@@ -2617,7 +2702,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     e.preventDefault();
     if (isPrototypeMode || isSimulationActive) return;
     const [sceneX, sceneY] = getScenePoint(e);
-    const hit = getElementAtPoint(elementsRef.current, sceneX, sceneY, { includeLocked: true });
+    const hit = getElementAtPoint(
+      getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sceneX, sceneY),
+      sceneX,
+      sceneY,
+      { includeLocked: true },
+    );
     const previousSelection = appStateRef.current.selectedElementIds || {};
     let nextSelection = {};
     if (hit) {
