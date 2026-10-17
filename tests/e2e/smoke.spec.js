@@ -73,4 +73,66 @@ test.describe('Doodle Desk Smoke Tests', () => {
     });
     expect(appVersion).toBeDefined();
   });
+
+  test('draws a rectangle and paints it on the canvas', async () => {
+    const canvas = firstWindow.locator('.doodle-engine-container canvas');
+    await expect(canvas).toBeVisible({ timeout: 15000 });
+
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+
+    await firstWindow.getByRole('button', { name: 'Rectangle' }).click();
+    await firstWindow.mouse.move(box.x + 500, box.y + 300);
+    await firstWindow.mouse.down();
+    await firstWindow.mouse.move(box.x + 650, box.y + 430, { steps: 4 });
+    await firstWindow.mouse.up();
+
+    await expect.poll(async () => firstWindow.evaluate(() =>
+      window.__doodleAPI.getSceneElements().filter((element) => element.type === 'rectangle').length
+    )).toBeGreaterThan(0);
+
+    const paintedPixels = await canvas.evaluate((element) => {
+      const context = element.getContext('2d');
+      const scaleX = element.width / element.clientWidth;
+      const scaleY = element.height / element.clientHeight;
+      const left = Math.round(490 * scaleX);
+      const top = Math.round(290 * scaleY);
+      const width = Math.round(170 * scaleX);
+      const height = Math.round(150 * scaleY);
+      const pixels = context.getImageData(left, top, width, height).data;
+      let count = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index] > 45 || pixels[index + 1] > 45 || pixels[index + 2] > 45) count += 1;
+      }
+      return count;
+    });
+    expect(paintedPixels).toBeGreaterThan(100);
+  });
+
+  test('draws freehand strokes and creates editable canvas text', async () => {
+    const canvas = firstWindow.locator('.doodle-engine-container canvas');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+
+    await firstWindow.getByRole('button', { name: 'Draw', exact: true }).click();
+    await firstWindow.mouse.move(box.x + 500, box.y + 500);
+    await firstWindow.mouse.down();
+    await firstWindow.mouse.move(box.x + 550, box.y + 530, { steps: 4 });
+    await firstWindow.mouse.up();
+    await expect.poll(async () => firstWindow.evaluate(() =>
+      window.__doodleAPI.getSceneElements().filter((element) => element.type === 'freedraw').length
+    )).toBeGreaterThan(0);
+
+    await firstWindow.getByRole('button', { name: 'Text', exact: true }).click();
+    await firstWindow.mouse.click(box.x + 700, box.y + 500);
+    const textarea = firstWindow.locator('.doodle-canvas-root textarea');
+    await expect(textarea).toBeVisible();
+    await textarea.fill('Canvas text');
+    await textarea.press('Control+Enter');
+    await expect.poll(async () => firstWindow.evaluate(() =>
+      window.__doodleAPI.getSceneElements().some((element) =>
+        element.type === 'text' && element.text === 'Canvas text'
+      )
+    )).toBe(true);
+  });
 });
