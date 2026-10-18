@@ -15,8 +15,19 @@ permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    name: Prepare Clean Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Stale Release Assets If Re-running Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${{ github.ref_name }}" --yes --cleanup-tag=false || true
+
   release:
     name: Build & Publish (${{ matrix.os }})
+    needs: prepare-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
