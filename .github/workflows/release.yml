@@ -22,8 +22,20 @@ jobs:
       - name: Clean Stale Release Assets If Re-running Tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          # Delete any existing release for this tag via GitHub CLI
           gh release delete "${{ github.ref_name }}" --yes --cleanup-tag=false || true
+
+          # Direct REST API cleanup to guarantee no leftover colliding assets
+          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" \
+            | jq -r '.id // empty')
+          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
+            echo "Purging stale release ID $RELEASE_ID..."
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+          fi
 
   release:
     name: Build & Publish (${{ matrix.os }})
