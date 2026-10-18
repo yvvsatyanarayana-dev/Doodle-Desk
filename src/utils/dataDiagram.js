@@ -336,3 +336,58 @@ export function buildDataDiagram(rows, { originX = 0, originY = 0, theme = 'ligh
     },
   };
 }
+
+export function parseMarkdownToDiagramRows(markdownText, fileName = '') {
+  if (typeof markdownText !== 'string' || !markdownText.trim()) {
+    throw new Error('The selected Markdown file is empty.');
+  }
+
+  const lines = markdownText.split('\n');
+  const rows = [];
+  const headingStack = [];
+  let currentRecord = null;
+  let counter = 1;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const title = headingMatch[2].trim();
+      const id = `node_${counter++}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20)}`;
+
+      while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
+        headingStack.pop();
+      }
+
+      const parent = headingStack.length > 0 ? headingStack[headingStack.length - 1].id : '';
+
+      currentRecord = {
+        id,
+        name: title,
+        parent,
+        level: `H${level}`,
+        details: '',
+      };
+      rows.push(currentRecord);
+      headingStack.push({ level, id, title });
+    } else if (currentRecord && (/^[-*]\s+/.test(line.trim()))) {
+      const bullet = line.trim().replace(/^[-*]\s+/, '');
+      if (currentRecord.details) {
+        currentRecord.details += `; ${bullet}`;
+      } else {
+        currentRecord.details = bullet;
+      }
+    }
+  }
+
+  if (rows.length === 0) {
+    rows.push({
+      id: 'doc_1',
+      name: fileName.replace(/\.[^/.]+$/, '') || 'Document',
+      details: lines.filter((l) => l.trim()).slice(0, 3).join(' ').slice(0, 60),
+    });
+  }
+
+  return rows;
+}
+

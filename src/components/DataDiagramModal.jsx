@@ -1,10 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Database, FileUp, X } from 'lucide-react';
-import { parseDataDiagramFile } from '../utils/dataDiagram.js';
+import { AlertCircle, Database, FileUp, X, FileText, FileCode, Plus, CheckCircle2 } from 'lucide-react';
+import { parseDataDiagramFile, parseMarkdownToDiagramRows } from '../utils/dataDiagram.js';
 
-export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) {
+export function DataDiagramModal({
+  isOpen,
+  onClose,
+  onImport,
+  onInsertDocument,
+  theme = 'dark',
+}) {
   const [fileName, setFileName] = useState('');
+  const [fileType, setFileType] = useState(null); // 'data' | 'markdown' | 'pdf'
   const [rows, setRows] = useState([]);
+  const [markdownContent, setMarkdownContent] = useState('');
+  const [docTitle, setDocTitle] = useState('');
+  const [pdfDataUrl, setPdfDataUrl] = useState('');
   const [error, setError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const inputRef = useRef(null);
@@ -13,7 +23,11 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
   useEffect(() => {
     if (!isOpen) {
       setFileName('');
+      setFileType(null);
       setRows([]);
+      setMarkdownContent('');
+      setDocTitle('');
+      setPdfDataUrl('');
       setError('');
       setIsImporting(false);
     }
@@ -38,7 +52,51 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
     if (!file) return;
     setError('');
     setRows([]);
+    setMarkdownContent('');
+    setPdfDataUrl('');
     setFileName(file.name);
+
+    const lowerName = file.name.toLowerCase();
+
+    // 1. PDF File
+    if (lowerName.endsWith('.pdf')) {
+      setFileType('pdf');
+      setDocTitle(file.name.replace(/\.[^/.]+$/, ''));
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPdfDataUrl(reader.result || '');
+      };
+      reader.onerror = () => {
+        setError('Could not read this PDF document.');
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // 2. Markdown File
+    if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) {
+      setFileType('markdown');
+      try {
+        const contents = await file.text();
+        setMarkdownContent(contents);
+        // Extract title from first heading or file name
+        const headingMatch = contents.match(/^#\s+(.+)$/m);
+        setDocTitle(headingMatch ? headingMatch[1].trim() : file.name.replace(/\.[^/.]+$/, ''));
+        // Parse into diagram rows as well for optional flowchart creation
+        try {
+          const mdRows = parseMarkdownToDiagramRows(contents, file.name);
+          setRows(mdRows);
+        } catch {
+          setRows([]);
+        }
+      } catch (err) {
+        setError(err.message || 'Could not read this Markdown file.');
+      }
+      return;
+    }
+
+    // 3. CSV or JSON Data File
+    setFileType('data');
     try {
       const contents = await file.text();
       setRows(parseDataDiagramFile(contents, file.name));
@@ -56,6 +114,38 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
       onClose();
     } catch (importError) {
       setError(importError.message || 'Could not create a diagram from this file.');
+      setIsImporting(false);
+    }
+  };
+
+  const handleInsertMarkdownCard = () => {
+    if (!markdownContent.trim() || isImporting) return;
+    setIsImporting(true);
+    try {
+      onInsertDocument?.({
+        title: docTitle.trim() || fileName || 'Document Card',
+        docType: 'markdown',
+        markdownText: markdownContent,
+      });
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Could not insert markdown card.');
+      setIsImporting(false);
+    }
+  };
+
+  const handleInsertPdfCard = () => {
+    if (!pdfDataUrl || isImporting) return;
+    setIsImporting(true);
+    try {
+      onInsertDocument?.({
+        title: docTitle.trim() || fileName || 'PDF Document',
+        docType: 'pdf',
+        pdfDataUrl,
+      });
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Could not insert PDF card.');
       setIsImporting(false);
     }
   };
@@ -92,10 +182,10 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
             <span className="help-dialog-icon-badge"><Database size={16} /></span>
             <div>
               <h2 id="data-diagram-title" className="pref-title" style={{ fontSize: 18, margin: 0 }}>
-                Data to Diagram
+                Data & Documents to Diagram
               </h2>
               <p className="pref-subtitle" style={{ margin: '4px 0 0' }}>
-                Turn CSV or JSON records into editable, connected canvas shapes.
+                Turn CSV, JSON, Markdown, or PDF files into canvas diagrams and document cards.
               </p>
             </div>
           </div>
@@ -104,23 +194,32 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
           </button>
         </header>
 
+        {/* Upload Dropzone */}
         <div
+          onClick={() => inputRef.current?.click()}
           style={{
-            padding: 16,
+            padding: 18,
             border: `1px dashed ${borderColor}`,
             borderRadius: 10,
             textAlign: 'center',
+            cursor: 'pointer',
+            background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
+            transition: 'all 0.15s ease',
           }}
         >
-          <FileUp size={22} color={mutedColor} />
-          <p style={{ margin: '8px 0 12px', color: mutedColor, fontSize: 13 }}>
-            Choose a .csv or .json file. Your data stays on this device.
+          <FileUp size={24} color={mutedColor} style={{ margin: '0 auto 6px' }} />
+          <p style={{ margin: '4px 0 6px', fontWeight: 600, fontSize: 13, color: isDark ? '#f4f4f5' : '#18181b' }}>
+            {fileName ? `File chosen: ${fileName}` : 'Choose a .csv, .json, .md, or .pdf file'}
+          </p>
+          <p style={{ margin: 0, color: mutedColor, fontSize: 12 }}>
+            Your data & documents stay 100% private on this device.
           </p>
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.json,text/csv,application/json"
-            aria-label="Choose CSV or JSON data file"
+            accept=".csv,.json,.md,.markdown,.pdf,text/csv,application/json,text/markdown,application/pdf"
+            aria-label="Choose data, markdown, or PDF file"
+            style={{ display: 'none' }}
             onChange={handleFileChange}
           />
         </div>
@@ -132,7 +231,8 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
           </div>
         )}
 
-        {rows.length > 0 && (
+        {/* 1. Preview for CSV / JSON Table Data */}
+        {fileType === 'data' && rows.length > 0 && (
           <div style={{ minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
               <strong style={{ fontSize: 13 }}>{fileName}</strong>
@@ -170,18 +270,126 @@ export function DataDiagramModal({ isOpen, onClose, onImport, theme = 'dark' }) 
           </div>
         )}
 
-        <footer className="data-diagram-modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="data-diagram-primary-action"
-            onClick={handleImport}
-            disabled={!rows.length || isImporting}
+        {/* 2. Preview for Markdown Document */}
+        {fileType === 'markdown' && markdownContent && (
+          <div style={{ minHeight: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FileText size={16} style={{ color: '#10b981' }} />
+                <strong style={{ fontSize: 13 }}>{fileName}</strong>
+              </div>
+              <span style={{ color: '#34d399', fontSize: 12, fontWeight: 600 }}>
+                {markdownContent.split('\n').length} lines · {markdownContent.length} chars
+              </span>
+            </div>
+            <div
+              style={{
+                maxHeight: 180,
+                overflow: 'auto',
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: `1px solid ${borderColor}`,
+                background: isDark ? '#141417' : '#f8fafc',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: isDark ? '#e4e4e7' : '#18181b',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {markdownContent.slice(0, 800) + (markdownContent.length > 800 ? '\n\n... (truncated preview)' : '')}
+            </div>
+            <p style={{ margin: '8px 0 0', color: mutedColor, fontSize: 12 }}>
+              Insert as a live scrollable Markdown Card, or convert its sections directly into connected diagram shapes.
+            </p>
+          </div>
+        )}
+
+        {/* 3. Preview for PDF Document */}
+        {fileType === 'pdf' && pdfDataUrl && (
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: 8,
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
           >
-            <Database size={14} /> Create diagram
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <FileCode size={22} style={{ color: '#ef4444' }} />
+              <div>
+                <strong style={{ fontSize: 13, color: '#f87171' }}>{fileName}</strong>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: mutedColor }}>
+                  PDF document is ready to be embedded as an interactive canvas card.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons Footer */}
+        <footer className="data-diagram-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onClose}>Cancel</button>
+
+          {/* If Markdown: provide both Insert Card and Generate Diagram */}
+          {fileType === 'markdown' && (
+            <>
+              {rows.length > 0 && (
+                <button
+                  type="button"
+                  className="help-dialog-btn secondary"
+                  onClick={handleImport}
+                  disabled={isImporting}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Database size={14} /> Convert to Diagram ({rows.length} nodes)
+                </button>
+              )}
+              <button
+                type="button"
+                className="data-diagram-primary-action"
+                onClick={handleInsertMarkdownCard}
+                disabled={!markdownContent.trim() || isImporting}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Plus size={14} /> Insert Markdown Card
+              </button>
+            </>
+          )}
+
+          {/* If PDF: provide Insert PDF Card */}
+          {fileType === 'pdf' && (
+            <button
+              type="button"
+              className="data-diagram-primary-action"
+              onClick={handleInsertPdfCard}
+              disabled={!pdfDataUrl || isImporting}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Plus size={14} /> Insert PDF Card
+            </button>
+          )}
+
+          {/* If Data (CSV / JSON): standard Create Diagram */}
+          {(!fileType || fileType === 'data') && (
+            <button
+              type="button"
+              className="data-diagram-primary-action"
+              onClick={handleImport}
+              disabled={!rows.length || isImporting}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Database size={14} /> Create diagram
+            </button>
+          )}
         </footer>
       </section>
     </div>
   );
 }
+
+export default DataDiagramModal;

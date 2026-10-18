@@ -1,6 +1,10 @@
 // Canvas renderer — draws all element types to a 2D canvas context
 import {
   sketchyLine, sketchyRect, sketchyRoundedRect, sketchyEllipse, sketchyDiamond,
+  sketchyTriangle, sketchyStar, sketchyHexagon, sketchyOctagon,
+  sketchyCylinder, sketchyCloud, sketchyCapsule, sketchyParallelogram,
+  getTriangleVertices, getStarVertices, getHexagonVertices, getOctagonVertices,
+  getParallelogramVertices, getCylinderPolygon, getCloudPolygon,
   sketchyFill, solidFill, crossHatchFill
 } from './sketchy.js';
 import { STROKE_WIDTHS, ELEMENT_TYPES } from '../elements.js';
@@ -59,6 +63,187 @@ function applyFill(ctx, el, polygon) {
     ctx.setLineDash([]);
     crossHatchFill(ctx, polygon, el.seed || 0, el);
     ctx.restore();
+  }
+}
+
+// Catmull-Rom spline with Chaikin corner-smoothing for fluid, organic handwriting
+function renderSmoothFreedraw(ctx, x, y, pts, baseWidth) {
+  if (pts.length === 1) {
+    ctx.beginPath();
+    ctx.arc(x + pts[0][0], y + pts[0][1], Math.max(1, baseWidth / 2), 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  if (pts.length === 2) {
+    ctx.beginPath();
+    ctx.moveTo(x + pts[0][0], y + pts[0][1]);
+    ctx.lineTo(x + pts[1][0], y + pts[1][1]);
+    ctx.stroke();
+    return;
+  }
+
+  // Pre-filter micro-jitter duplicates
+  const filtered = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = pts[i];
+    const dx = curr[0] - prev[0];
+    const dy = curr[1] - prev[1];
+    if (dx * dx + dy * dy >= 1.0 || i === pts.length - 1) {
+      filtered.push(curr);
+    }
+  }
+
+  // Apply Chaikin corner-cutting to round out mouse stair-steps
+  let renderPts = filtered;
+  if (filtered.length >= 4) {
+    const chaikin = [filtered[0]];
+    for (let i = 0; i < filtered.length - 1; i++) {
+      const p0 = filtered[i];
+      const p1 = filtered[i + 1];
+      chaikin.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
+      chaikin.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
+    }
+    chaikin.push(filtered[filtered.length - 1]);
+    renderPts = chaikin;
+  }
+
+  const n = renderPts.length;
+  ctx.beginPath();
+  ctx.moveTo(x + renderPts[0][0], y + renderPts[0][1]);
+
+  // Catmull-Rom to cubic Bezier curve fitting
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = renderPts[i === 0 ? 0 : i - 1];
+    const p1 = renderPts[i];
+    const p2 = renderPts[i + 1];
+    const p3 = renderPts[i + 2 >= n ? n - 1 : i + 2];
+
+    const cp1x = x + p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = y + p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = x + p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = y + p2[1] - (p3[1] - p1[1]) / 6;
+
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x + p2[0], y + p2[1]);
+  }
+
+  ctx.stroke();
+}
+
+function renderInteractiveTableCanvas(ctx, el) {
+  const { x, y, width: w, height: h, seed = 0, roughness = 1 } = el;
+  const strokeColor = el.strokeColor || '#1e1e1e';
+  const tableData = el.tableData || {};
+  const columns = tableData.columns || [
+    { id: 'col_1', title: 'Words', width: 260 },
+    { id: 'col_2', title: 'Meaning', width: 380 },
+  ];
+  const rows = tableData.rows || [];
+
+  const roundRadius = el.roundness === 'sharp' || el.roundness === 0 ? 0 : 16;
+  const poly = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+
+  // 1. Fill
+  if (roundRadius > 0 && el.backgroundColor && el.backgroundColor !== 'transparent') {
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, roundRadius);
+    else {
+      ctx.moveTo(x + roundRadius, y);
+      ctx.lineTo(x + w - roundRadius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + roundRadius);
+      ctx.lineTo(x + w, y + h - roundRadius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - roundRadius, y + h);
+      ctx.lineTo(x + roundRadius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - roundRadius);
+      ctx.lineTo(x, y + roundRadius);
+      ctx.quadraticCurveTo(x, y, x + roundRadius, y);
+      ctx.closePath();
+    }
+    ctx.clip();
+    applyFill(ctx, el, poly);
+    ctx.restore();
+  } else if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+    applyFill(ctx, el, poly);
+  }
+
+  // 2. Base style for lines
+  applyBaseStyle(ctx, el);
+
+  // 3. Outer box
+  if (roughness > 0 && roundRadius > 0) {
+    sketchyRoundedRect(ctx, x, y, w, h, roundRadius, seed, roughness);
+  } else if (roughness > 0) {
+    sketchyRect(ctx, x, y, w, h, seed, roughness);
+  } else {
+    ctx.beginPath();
+    if (roundRadius > 0 && ctx.roundRect) ctx.roundRect(x, y, w, h, roundRadius);
+    else ctx.rect(x, y, w, h);
+    ctx.stroke();
+  }
+
+  // 4. Header divider
+  const headerHeight = 52;
+  sketchyLine(ctx, x, y + headerHeight, x + w, y + headerHeight, seed + 101, roughness);
+
+  // 5. Column widths & Vertical lines
+  const totalColsWidth = columns.reduce((sum, c) => sum + (c.width || 200), 0);
+  const scaleX = w / (totalColsWidth || 1);
+  let currentX = x;
+
+  columns.forEach((col, cIdx) => {
+    const colW = (col.width || 200) * scaleX;
+    if (cIdx < columns.length - 1) {
+      currentX += colW;
+      sketchyLine(ctx, currentX, y, currentX, y + h, seed + 300 + cIdx * 43, roughness);
+    }
+  });
+
+  // 6. Rows & Row divider lines
+  if (rows.length > 0) {
+    const bodyHeight = h - headerHeight;
+    const rowH = bodyHeight / rows.length;
+
+    for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+      if (rIdx < rows.length - 1) {
+        const rowY = y + headerHeight + (rIdx + 1) * rowH;
+        sketchyLine(ctx, x, rowY, x + w, rowY, seed + 200 + rIdx * 37, roughness);
+      }
+    }
+
+    // 7. Render Text (Headers and Cells)
+    const fontStack = getFontStack(el.fontFamily || 5);
+    ctx.font = `bold 20px ${fontStack}`;
+    ctx.fillStyle = strokeColor;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+
+    // Header text
+    let hX = x;
+    columns.forEach((col) => {
+      const colW = (col.width || 200) * scaleX;
+      ctx.fillText(col.title || '', hX + colW / 2, y + headerHeight / 2);
+      hX += colW;
+    });
+
+    // Cell text
+    ctx.font = `18px ${fontStack}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    rows.forEach((row, rIdx) => {
+      const cellY = y + headerHeight + rIdx * rowH + 12;
+      let cellX = x;
+      columns.forEach((col) => {
+        const colW = (col.width || 200) * scaleX;
+        const text = row.cells?.[col.id] || '';
+        if (text) {
+          ctx.fillText(text, cellX + 16, cellY, colW - 32);
+        }
+        cellX += colW;
+      });
+    });
   }
 }
 
@@ -239,6 +424,102 @@ export function renderElement(ctx, el, imageCache = {}) {
       break;
     }
 
+    case ELEMENT_TYPES.TRIANGLE: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getTriangleVertices(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyTriangle(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.STAR: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getStarVertices(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyStar(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.HEXAGON: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getHexagonVertices(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyHexagon(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.OCTAGON: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getOctagonVertices(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyOctagon(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.PARALLELOGRAM: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getParallelogramVertices(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyParallelogram(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.CAPSULE: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const radius = Math.min(rw, rh) / 2;
+      const poly = [[rx, ry], [rx + rw, ry], [rx + rw, ry + rh], [rx, ry + rh]];
+      if (radius > 0 && el.backgroundColor && el.backgroundColor !== 'transparent') {
+        ctx.save();
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(rx, ry, rw, rh, radius);
+        ctx.clip();
+        applyFill(ctx, el, poly);
+        ctx.restore();
+      }
+      sketchyCapsule(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.CYLINDER: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getCylinderPolygon(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyCylinder(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
+    case ELEMENT_TYPES.CLOUD: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const poly = getCloudPolygon(rx, ry, rw, rh);
+      applyFill(ctx, el, poly);
+      sketchyCloud(ctx, rx, ry, rw, rh, seed, roughness);
+      break;
+    }
+
     case ELEMENT_TYPES.ARROW:
     case ELEMENT_TYPES.LINE: {
       if (!el.points || el.points.length < 2) break;
@@ -300,71 +581,6 @@ export function renderElement(ctx, el, imageCache = {}) {
       }
       break;
     }
-
-// Catmull-Rom spline with Chaikin corner-smoothing for fluid, organic handwriting
-function renderSmoothFreedraw(ctx, x, y, pts, baseWidth) {
-  if (pts.length === 1) {
-    ctx.beginPath();
-    ctx.arc(x + pts[0][0], y + pts[0][1], Math.max(1, baseWidth / 2), 0, Math.PI * 2);
-    ctx.fill();
-    return;
-  }
-
-  if (pts.length === 2) {
-    ctx.beginPath();
-    ctx.moveTo(x + pts[0][0], y + pts[0][1]);
-    ctx.lineTo(x + pts[1][0], y + pts[1][1]);
-    ctx.stroke();
-    return;
-  }
-
-  // Pre-filter micro-jitter duplicates
-  const filtered = [pts[0]];
-  for (let i = 1; i < pts.length; i++) {
-    const prev = filtered[filtered.length - 1];
-    const curr = pts[i];
-    const dx = curr[0] - prev[0];
-    const dy = curr[1] - prev[1];
-    if (dx * dx + dy * dy >= 1.0 || i === pts.length - 1) {
-      filtered.push(curr);
-    }
-  }
-
-  // Apply Chaikin corner-cutting to round out mouse stair-steps
-  let renderPts = filtered;
-  if (filtered.length >= 4) {
-    const chaikin = [filtered[0]];
-    for (let i = 0; i < filtered.length - 1; i++) {
-      const p0 = filtered[i];
-      const p1 = filtered[i + 1];
-      chaikin.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
-      chaikin.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
-    }
-    chaikin.push(filtered[filtered.length - 1]);
-    renderPts = chaikin;
-  }
-
-  const n = renderPts.length;
-  ctx.beginPath();
-  ctx.moveTo(x + renderPts[0][0], y + renderPts[0][1]);
-
-  // Catmull-Rom to cubic Bezier curve fitting
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = renderPts[i === 0 ? 0 : i - 1];
-    const p1 = renderPts[i];
-    const p2 = renderPts[i + 1];
-    const p3 = renderPts[i + 2 >= n ? n - 1 : i + 2];
-
-    const cp1x = x + p1[0] + (p2[0] - p0[0]) / 6;
-    const cp1y = y + p1[1] + (p2[1] - p0[1]) / 6;
-    const cp2x = x + p2[0] - (p3[0] - p1[0]) / 6;
-    const cp2y = y + p2[1] - (p3[1] - p1[1]) / 6;
-
-    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x + p2[0], y + p2[1]);
-  }
-
-  ctx.stroke();
-}
 
     case ELEMENT_TYPES.FREEDRAW: {
       if (!el.points || el.points.length === 0) break;
@@ -437,9 +653,23 @@ function renderSmoothFreedraw(ctx, x, y, pts, baseWidth) {
       break;
     }
 
-    case ELEMENT_TYPES.IFRAME: {
-      // Draw placeholder for iframes/embeds
-      ctx.fillStyle = '#111113';
+    case ELEMENT_TYPES.IFRAME:
+    case 'embeddable': {
+      if (el.docType === 'interactive_table') {
+        if (imageCache?.__isExporting || ctx.__isExporting) {
+          renderInteractiveTableCanvas(ctx, el);
+        }
+        break;
+      }
+
+      // Embeddables (math_graph, code_runner, markdown, pdf, web_frame, etc.)
+      // are rendered live via React DOM overlay. Do NOT draw a canvas black box or placeholder on the interactive canvas.
+      if (!imageCache?.__isExporting && !ctx.__isExporting) {
+        break;
+      }
+
+      // Draw placeholder for iframes/embeds only during static export
+      ctx.fillStyle = el.backgroundColor && el.backgroundColor !== 'transparent' ? el.backgroundColor : '#18181b';
       ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = el.strokeColor || '#d4d4d8';
       ctx.lineWidth = 1.5;
@@ -449,7 +679,7 @@ function renderSmoothFreedraw(ctx, x, y, pts, baseWidth) {
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(el.link || 'Web Frame', x + w / 2, y + h / 2);
+      ctx.fillText(el.title || el.name || el.link || 'Embed Card', x + w / 2, y + h / 2);
       break;
     }
 
@@ -627,10 +857,22 @@ export function wrapText(ctx, text, maxWidth) {
   return resultLines;
 }
 
+// Shared measurement canvas context to avoid allocating a new DOM canvas on every frame / text measurement
+let sharedMeasureCanvas = null;
+let sharedMeasureCtx = null;
+
+function getSharedMeasureCtx() {
+  if (typeof document === 'undefined') return null;
+  if (!sharedMeasureCtx) {
+    sharedMeasureCanvas = document.createElement('canvas');
+    sharedMeasureCtx = sharedMeasureCanvas.getContext ? sharedMeasureCanvas.getContext('2d') : null;
+  }
+  return sharedMeasureCtx;
+}
+
 // Measure text element dimensions
 export function measureText(text, fontSize, fontFamily = 5, maxWidth = null) {
-  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
-  const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
+  const ctx = getSharedMeasureCtx();
   if (!ctx) {
     const lines = (text || '').split('\n');
     let maxLen = 0;
@@ -824,3 +1066,8 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
     ctx.restore();
   }
 }
+
+export function renderElementToCanvas(el, ctx, options = {}) {
+  return renderElement(ctx, el, options.imageCache || {});
+}
+

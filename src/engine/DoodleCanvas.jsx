@@ -61,6 +61,8 @@ const BoardPortalPanel = lazy(() => import('./components/BoardPortalPanel.jsx').
 const SimulationPanel = lazy(() => import('./components/SimulationPanel.jsx').then(module => ({ default: module.SimulationPanel })));
 const ChangeTrackingPanel = lazy(() => import('./components/ChangeTrackingPanel.jsx').then(module => ({ default: module.ChangeTrackingPanel })));
 const DataDiagramModal = lazy(() => import('../components/DataDiagramModal.jsx').then(module => ({ default: module.DataDiagramModal })));
+const PhysicsPlaygroundOverlay = lazy(() => import('../components/PhysicsPlaygroundOverlay.jsx').then(module => ({ default: module.PhysicsPlaygroundOverlay })));
+const Isometric3DArchitectureView = lazy(() => import('../components/Isometric3DArchitectureView.jsx').then(module => ({ default: module.Isometric3DArchitectureView })));
 
 // ──────────────────────────────────────────────
 //  Tool → cursor mapping
@@ -71,6 +73,14 @@ const TOOL_CURSORS = {
   rectangle: 'crosshair',
   ellipse: 'crosshair',
   diamond: 'crosshair',
+  triangle: 'crosshair',
+  star: 'crosshair',
+  hexagon: 'crosshair',
+  octagon: 'crosshair',
+  cylinder: 'crosshair',
+  cloud: 'crosshair',
+  capsule: 'crosshair',
+  parallelogram: 'crosshair',
   arrow: 'crosshair',
   line: 'crosshair',
   freedraw: 'crosshair',
@@ -114,6 +124,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     workspaces = [],
     workspaceId,
     fileId,
+    onToggleSoundStudio,
+    isSoundStudioOpen,
+    isAudioPlaying,
+    pomodoroState,
     children,
   } = props;
 
@@ -187,6 +201,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const [simulationPath, setSimulationPath] = useState([]);
   const [changeSnapshot, setChangeSnapshot] = useState(null);
   const [isChangeTrackingOpen, setIsChangeTrackingOpen] = useState(false);
+  const [isPhysicsModeActive, setIsPhysicsModeActive] = useState(false);
+  const [isIsometric3DActive, setIsIsometric3DActive] = useState(false);
   const [isToolLocked, setIsToolLocked] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuStylesAvailable, setContextMenuStylesAvailable] = useState(false);
@@ -233,6 +249,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       scrollY: appStateRef.current.scrollY || 0,
     };
     sceneOverlayRef.current?.style.removeProperty('transform');
+    if (!interaction.current.isDragging && sceneOverlayRef.current) {
+      sceneOverlayRef.current.querySelectorAll('.doodle-embed-overlay').forEach((node) => {
+        const ang = node.dataset.angle;
+        node.style.transform = ang && Number(ang) !== 0 ? `rotate(${ang}rad)` : '';
+      });
+    }
   });
 
   // Interaction state (NOT React state for perf — updated via refs)
@@ -1110,8 +1132,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       return;
     }
 
-    // Rectangle / Ellipse / Diamond
-    if ([ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND, ELEMENT_TYPES.FRAME, ELEMENT_TYPES.IFRAME, 'frame', 'embeddable', 'image'].includes(tool)) {
+    // Rectangle / Ellipse / Diamond / All Geometric Shapes
+    if ([
+      ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND,
+      ELEMENT_TYPES.TRIANGLE, ELEMENT_TYPES.STAR, ELEMENT_TYPES.HEXAGON,
+      ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
+      ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM,
+      ELEMENT_TYPES.FRAME, ELEMENT_TYPES.IFRAME, 'frame', 'embeddable', 'image'
+    ].includes(tool)) {
       const type = tool === 'image'
         ? ELEMENT_TYPES.IMAGE
         : (tool === 'frame' ? ELEMENT_TYPES.FRAME : (tool === 'embeddable' ? ELEMENT_TYPES.IFRAME : tool));
@@ -1199,7 +1227,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
         if (targetIdx >= 0 && targetIdx < pts.length) {
           const absPts = pts.map(p => [el.x + p[0], el.y + p[1]]);
-          absPts[targetIdx] = [ix, iy];
+          let targetX = ix;
+          let targetY = iy;
+          if (e.shiftKey) {
+            const anchorIdx = targetIdx === 0 ? pts.length - 1 : 0;
+            const [ax, ay] = absPts[anchorIdx];
+            [targetX, targetY] = constrainPointToAngle(ax, ay, ix, iy);
+          }
+          absPts[targetIdx] = [targetX, targetY];
 
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (const [px, py] of absPts) {
@@ -1248,6 +1283,32 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         if (handle.includes('s')) h = Math.max(2, el.height + dy);
         if (handle.includes('w')) { x = el.x + dx; w = Math.max(2, el.width - dx); }
         if (handle.includes('n')) { y = el.y + dy; h = Math.max(2, el.height - dy); }
+      }
+
+      // Shift + Drag Resize: lock aspect ratio for shapes
+      if (e.shiftKey && el.type !== ELEMENT_TYPES.TEXT && el.width > 0 && el.height > 0) {
+        const aspect = el.width / el.height;
+        const isCorner = (handle.includes('e') || handle.includes('w')) && (handle.includes('n') || handle.includes('s'));
+        if (isCorner) {
+          if (w / aspect > h) {
+            h = Math.max(2, w / aspect);
+          } else {
+            w = Math.max(2, h * aspect);
+          }
+          if (e.altKey) {
+            x = (el.x + el.width / 2) - w / 2;
+            y = (el.y + el.height / 2) - h / 2;
+          } else {
+            if (handle.includes('w')) x = el.x + el.width - w;
+            if (handle.includes('n')) y = el.y + el.height - h;
+          }
+        } else if (handle === 'e' || handle === 'w') {
+          h = Math.max(2, w / aspect);
+          y = (el.y + el.height / 2) - h / 2;
+        } else if (handle === 'n' || handle === 's') {
+          w = Math.max(2, h * aspect);
+          x = (el.x + el.width / 2) - w / 2;
+        }
       }
 
       let updatedPoints = undefined;
@@ -1420,18 +1481,23 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.dragLastX = e.clientX;
       ia.dragLastY = e.clientY;
 
+      // Clear pendingShiftDeselectIds as soon as drag movement occurs (>2px)
+      const totalDx = ix - ia.dragStartX;
+      const totalDy = iy - ia.dragStartY;
+      if (Math.hypot(totalDx, totalDy) > 2) {
+        ia.pendingShiftDeselectIds = null;
+      }
+
       // Shift + Drag: constrain movement to the primary axis.
       let shiftAxis = null;
       if (e.shiftKey) {
-        const totalDx = ix - ia.dragStartX;
-        const totalDy = iy - ia.dragStartY;
-        if (!ia.shiftDragAxis && (Math.abs(totalDx) > 1 || Math.abs(totalDy) > 1)) {
-          ia.shiftDragAxis = Math.abs(totalDx) >= Math.abs(totalDy) ? 'horizontal' : 'vertical';
-        }
-        shiftAxis = ia.shiftDragAxis;
-        if (shiftAxis === 'horizontal') {
+        if (Math.abs(totalDx) >= Math.abs(totalDy)) {
+          shiftAxis = 'horizontal';
+          ia.shiftDragAxis = 'horizontal';
           sdy = 0;
-        } else if (shiftAxis === 'vertical') {
+        } else {
+          shiftAxis = 'vertical';
+          ia.shiftDragAxis = 'vertical';
           sdx = 0;
         }
       } else {
@@ -1589,8 +1655,28 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ia.alignmentGuides = activeGuides;
       if (ia.dragMoveIds) {
-        ia.dragOffset.x += sdx;
-        ia.dragOffset.y += sdy;
+        if (shiftAxis === 'horizontal') {
+          ia.dragOffset.x += sdx;
+          ia.dragOffset.y = 0;
+        } else if (shiftAxis === 'vertical') {
+          ia.dragOffset.x = 0;
+          ia.dragOffset.y += sdy;
+        } else {
+          ia.dragOffset.x += sdx;
+          ia.dragOffset.y += sdy;
+        }
+
+        // Live update DOM overlay positions during dragging so embed cards move seamlessly with mouse and selection outline
+        if (sceneOverlayRef.current) {
+          const zVal = as.zoom?.value || 1;
+          ia.dragMoveIds.forEach((id) => {
+            const domNode = sceneOverlayRef.current.querySelector(`[data-embed-id="${id}"]`);
+            if (domNode) {
+              const rot = domNode.dataset.angle && Number(domNode.dataset.angle) !== 0 ? `rotate(${domNode.dataset.angle}rad)` : '';
+              domNode.style.transform = `translate(${ia.dragOffset.x * zVal}px, ${ia.dragOffset.y * zVal}px) ${rot}`;
+            }
+          });
+        }
       }
 
       if (!ia.dragSpatialIndex) {
@@ -1726,6 +1812,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (ia.isDragging) {
+      if (ia.dragMoveIds && sceneOverlayRef.current) {
+        ia.dragMoveIds.forEach((id) => {
+          const domNode = sceneOverlayRef.current.querySelector(`[data-embed-id="${id}"]`);
+          if (domNode) {
+            domNode.style.transform = domNode.dataset.angle && Number(domNode.dataset.angle) !== 0 ? `rotate(${domNode.dataset.angle}rad)` : '';
+          }
+        });
+      }
       if (ia.dragSpatialIndex && ia.dragMoveIds &&
           (ia.dragOffset.x !== 0 || ia.dragOffset.y !== 0)) {
         const { dragSpatialIndex, dragMoveIds, dragOffset } = ia;
@@ -1808,6 +1902,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           norm = { ...norm, width: 90, height: 90, x: norm.x - 45, y: norm.y - 45 };
         } else if (norm.type === ELEMENT_TYPES.DIAMOND) {
           norm = { ...norm, width: 90, height: 90, x: norm.x - 45, y: norm.y - 45 };
+        } else if (norm.type === ELEMENT_TYPES.TRIANGLE) {
+          norm = { ...norm, width: 100, height: 90, x: norm.x - 50, y: norm.y - 45 };
+        } else if (norm.type === ELEMENT_TYPES.STAR) {
+          norm = { ...norm, width: 90, height: 90, x: norm.x - 45, y: norm.y - 45 };
+        } else if (norm.type === ELEMENT_TYPES.HEXAGON) {
+          norm = { ...norm, width: 100, height: 90, x: norm.x - 50, y: norm.y - 45 };
+        } else if (norm.type === ELEMENT_TYPES.OCTAGON) {
+          norm = { ...norm, width: 100, height: 100, x: norm.x - 50, y: norm.y - 50 };
+        } else if (norm.type === ELEMENT_TYPES.CYLINDER) {
+          norm = { ...norm, width: 110, height: 120, x: norm.x - 55, y: norm.y - 60 };
+        } else if (norm.type === ELEMENT_TYPES.CLOUD) {
+          norm = { ...norm, width: 130, height: 85, x: norm.x - 65, y: norm.y - 42 };
+        } else if (norm.type === ELEMENT_TYPES.CAPSULE) {
+          norm = { ...norm, width: 120, height: 60, x: norm.x - 60, y: norm.y - 30 };
+        } else if (norm.type === ELEMENT_TYPES.PARALLELOGRAM) {
+          norm = { ...norm, width: 110, height: 70, x: norm.x - 55, y: norm.y - 35 };
         } else if (norm.type === ELEMENT_TYPES.ARROW || norm.type === ELEMENT_TYPES.LINE) {
           norm = {
             ...norm,
@@ -2059,92 +2169,111 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
 
-  // Auto-arrange tree layout for connected nodes
-  const autoArrangeTreeLayout = useCallback((direction = 'LR') => {
-    const currentEls = elementsRef.current.filter(el => !el.isDeleted);
-    const arrows = currentEls.filter(el => (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) && el.startBinding?.elementId && el.endBinding?.elementId);
-    if (arrows.length === 0) return;
+  // Mind Mapping: Branch sibling node connected to the same parent
+  const branchSiblingNode = useCallback((direction = 'down') => {
+    const as = appStateRef.current;
+    const selectedIds = Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]);
+    if (selectedIds.length === 0) return;
+    const current = elementsRef.current.find(el => el.id === selectedIds[0] && !el.isDeleted && !el.isHidden && !el.locked);
+    if (!current) return;
 
-    const parentMap = new Map();
-    const childrenMap = new Map();
-    const nodeMap = new Map();
+    // Look for parent node via incoming arrow
+    const incomingArrow = elementsRef.current.find(el => 
+      !el.isDeleted && 
+      (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) && 
+      el.endBinding?.elementId === current.id
+    );
 
-    for (const el of currentEls) {
-      if (el.type !== ELEMENT_TYPES.ARROW && el.type !== ELEMENT_TYPES.LINE && el.type !== 'text') {
-        nodeMap.set(el.id, el);
-      }
+    const parent = incomingArrow?.startBinding?.elementId 
+      ? elementsRef.current.find(el => el.id === incomingArrow.startBinding.elementId && !el.isDeleted)
+      : null;
+
+    if (!parent) {
+      branchChildNode('down');
+      return;
     }
 
-    for (const arrow of arrows) {
-      const pId = arrow.startBinding.elementId;
-      const cId = arrow.endBinding.elementId;
-      if (nodeMap.has(pId) && nodeMap.has(cId)) {
-        parentMap.set(cId, pId);
-        if (!childrenMap.has(pId)) childrenMap.set(pId, []);
-        childrenMap.get(pId).push(cId);
-      }
-    }
+    const currentW = current.width || 180;
+    const currentH = current.height || 64;
+    const gapY = 40;
+    const siblingX = current.x;
+    const siblingY = direction === 'up' ? current.y - currentH - gapY : current.y + currentH + gapY;
 
-    const roots = [];
-    for (const [id] of nodeMap) {
-      if (!parentMap.has(id) && childrenMap.has(id)) {
-        roots.push(id);
-      }
-    }
-    if (roots.length === 0) return;
+    const siblingId = 'node_' + generateId();
+    const textId = 'text_' + generateId();
+    const arrowId = 'arrow_' + generateId();
 
-    const isLR = direction === 'LR';
-    const gapX = isLR ? 150 : 90;
-    const gapY = isLR ? 60 : 120;
-    const arrangedPositions = new Map();
+    const siblingShape = {
+      ...current,
+      id: siblingId,
+      x: siblingX,
+      y: siblingY,
+      width: currentW,
+      height: currentH,
+      boundElements: [{ id: textId, type: 'text' }],
+      groupIds: [],
+      frameId: current.frameId || null,
+      seed: Math.floor(Math.random() * 100000),
+      version: 1,
+      versionNonce: versionNonce(),
+    };
 
-    for (const rootId of roots) {
-      const rootNode = nodeMap.get(rootId);
-      const startX = rootNode.x;
-      const startY = rootNode.y;
+    const font = current.fontFamily || (FONT_FAMILY?.Doodlefont ?? 5);
+    const siblingText = {
+      id: textId,
+      type: 'text',
+      x: siblingX + 10,
+      y: siblingY + (currentH / 2) - 12,
+      width: Math.max(20, currentW - 20),
+      height: 24,
+      strokeColor: '#f3f4f6',
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      fontFamily: font,
+      fontSize: 15,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      text: 'New Sibling',
+      originalText: 'New Sibling',
+      containerId: siblingId,
+      version: 1,
+      versionNonce: versionNonce(),
+    };
 
-      const positionNode = (nodeId, level, secondaryPos) => {
-        const node = nodeMap.get(nodeId);
-        const nw = node.width || 180;
-        const nh = node.height || 60;
+    const startX = parent.x + (parent.width || 180);
+    const startY = parent.y + (parent.height || 64) / 2;
+    const endX = siblingX;
+    const endY = siblingY + currentH / 2;
+    const dx = endX - startX;
+    const dy = endY - startY;
 
-        const posX = isLR ? startX + level * (nw + gapX) : secondaryPos;
-        const posY = isLR ? secondaryPos : startY + level * (nh + gapY);
+    const arrowEl = {
+      id: arrowId,
+      type: ELEMENT_TYPES.ARROW,
+      x: startX,
+      y: startY,
+      width: Math.abs(dx),
+      height: Math.abs(dy),
+      strokeColor: '#94a3b8',
+      backgroundColor: 'transparent',
+      strokeWidth: 2,
+      roughness: 1,
+      opacity: 100,
+      points: [[0, 0], [dx, dy]],
+      startBinding: { elementId: parent.id, focus: 0, gap: 1 },
+      endBinding: { elementId: siblingId, focus: 0, gap: 1 },
+      endArrowhead: 'arrow',
+      version: 1,
+      versionNonce: versionNonce(),
+    };
 
-        arrangedPositions.set(nodeId, { x: posX, y: posY });
-
-        const children = childrenMap.get(nodeId) || [];
-        if (children.length === 0) return;
-
-        let childSec = secondaryPos - ((children.length - 1) * (isLR ? nh + gapY : nw + gapX)) / 2;
-        for (const cId of children) {
-          positionNode(cId, level + 1, childSec);
-          childSec += isLR ? nh + gapY : nw + gapX;
-        }
-      };
-
-      positionNode(rootId, 0, isLR ? startY : startX);
-    }
-
-    setElements(prev => prev.map(el => {
-      if (arrangedPositions.has(el.id)) {
-        const pos = arrangedPositions.get(el.id);
-        return { ...el, x: pos.x, y: pos.y, version: (el.version || 1) + 1 };
-      }
-      if (el.containerId && arrangedPositions.has(el.containerId)) {
-        const pos = arrangedPositions.get(el.containerId);
-        const container = nodeMap.get(el.containerId);
-        const origX = container.x;
-        const origY = container.y;
-        return { ...el, x: el.x + (pos.x - origX), y: el.y + (pos.y - origY), version: (el.version || 1) + 1 };
-      }
-      return el;
-    }));
-
+    setElements(prev => [...prev, siblingShape, siblingText, arrowEl]);
+    setAppState({ selectedElementIds: { [siblingId]: true } });
     commitHistory();
     notifyChange();
     scheduleRender();
-  }, [commitHistory, notifyChange, scheduleRender, setElements]);
+  }, [branchChildNode, commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
 
   // Create standardized presentation frame
   const createPresentationFrame = useCallback((aspectRatio = '16:9') => {
@@ -2340,12 +2469,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       branchChildNode('right');
     } else if (action === 'branchChildDown') {
       branchChildNode('down');
-    } else if (action === 'autoArrangeTree') {
-      autoArrangeTreeLayout('LR');
     } else if (action === 'createPresentationFrame') {
       createPresentationFrame('16:9');
     }
-  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, autoArrangeTreeLayout, createPresentationFrame, onToast]);
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, createPresentationFrame, onToast]);
 
   const selectLayer = useCallback((elementId, extendSelection) => {
     const target = elementsRef.current.find(el => el.id === elementId && !el.isDeleted);
@@ -2423,6 +2550,19 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         e.preventDefault();
         branchChildNode(e.shiftKey ? 'down' : 'right');
         return;
+      }
+    }
+
+    // Enter key: Mind Map quick branch sibling node
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !interaction.current.editingElementId) {
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.isContentEditable) {
+        const ids = appStateRef.current?.selectedElementIds || {};
+        const hasSelected = Object.values(ids).some(Boolean);
+        if (hasSelected) {
+          e.preventDefault();
+          branchSiblingNode(e.shiftKey ? 'up' : 'down');
+          return;
+        }
       }
     }
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
@@ -2625,6 +2765,26 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       return;
     }
 
+    // Shift+P: Toggle Physics Playground
+    if (e.shiftKey && (e.key === 'P' || e.key === 'p') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag !== 'input' && activeTag !== 'textarea') {
+        e.preventDefault();
+        setIsPhysicsModeActive(prev => !prev);
+        return;
+      }
+    }
+
+    // Shift+I: Toggle 2.5D Isometric 3D Architecture View
+    if (e.shiftKey && (e.key === 'I' || e.key === 'i') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag !== 'input' && activeTag !== 'textarea') {
+        e.preventDefault();
+        setIsIsometric3DActive(prev => !prev);
+        return;
+      }
+    }
+
     // Arrow keys to nudge selected elements
     const nudgeKeys = { ArrowLeft: [-2, 0], ArrowRight: [2, 0], ArrowUp: [0, -2], ArrowDown: [0, 2] };
     const nudge = nudgeKeys[e.key];
@@ -2665,6 +2825,26 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
     } else if (hit?.type === ELEMENT_TYPES.FRAME) {
       beginFrameNameEdit(hit);
+    } else if (hit && [
+      ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND,
+      ELEMENT_TYPES.TRIANGLE, ELEMENT_TYPES.STAR, ELEMENT_TYPES.HEXAGON,
+      ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
+      ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM
+    ].includes(hit.type)) {
+      const textId = generateId();
+      const as = appStateRef.current;
+      const textEl = createTextElement(hit.x + 10, hit.y + hit.height / 2 - 12, '', {
+        strokeColor: hit.strokeColor || '#ffffff',
+        fontFamily: as.currentItemFontFamily || 5,
+        fontSize: as.currentItemFontSize || 20,
+        textAlign: 'center',
+        verticalAlign: 'middle',
+        width: Math.max(20, hit.width - 20),
+        containerId: hit.id,
+      });
+      const updatedShapes = elementsRef.current.map(el => el.id === hit.id ? { ...el, boundElements: [{ id: textId, type: 'text' }] } : el);
+      setElements([...updatedShapes, textEl]);
+      startTextEditOnElement(textEl);
     } else {
       startTextEdit(sx, sy);
     }
@@ -3092,6 +3272,299 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
   }, [contextMenu, commitHistory, handleAction, notifyChange, scheduleRender, setAppState, setElements, theme, onToast]);
 
+  const handleInsertDocument = useCallback((doc) => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const docWidth = 480;
+    const docHeight = 520;
+    const spawnX = Math.round(centerX - docWidth / 2);
+    const spawnY = Math.round(centerY - docHeight / 2);
+
+    const docElement = {
+      id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: spawnX,
+      y: spawnY,
+      width: docWidth,
+      height: docHeight,
+      strokeColor: '#6366f1',
+      backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      docType: doc.docType || 'markdown',
+      title: doc.title || 'Document Card',
+      markdownText: doc.markdownText || '',
+      pdfDataUrl: doc.pdfDataUrl || '',
+      link: '',
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Added ${doc.docType === 'pdf' ? 'PDF' : 'Markdown'} Document Card`);
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertCodeScratchpad = useCallback(() => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const docWidth = 480;
+    const docHeight = 420;
+    const spawnX = Math.round(centerX - docWidth / 2);
+    const spawnY = Math.round(centerY - docHeight / 2);
+
+    const docElement = {
+      id: `code_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: spawnX,
+      y: spawnY,
+      width: docWidth,
+      height: docHeight,
+      strokeColor: '#6366f1',
+      backgroundColor: theme === 'dark' ? '#141418' : '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      docType: 'code_runner',
+      title: 'JavaScript Scratchpad',
+      codeSnippet: `// Run offline JavaScript directly on the canvas!
+const greeting = "Hello from Doodle Desk";
+const values = [10, 25, 45, 80, 120];
+const total = values.reduce((a, b) => a + b, 0);
+
+console.log(greeting);
+console.log('Total:', total);
+return { total, count: values.length };`,
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.('Added Executable Code Scratchpad Card');
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertMathGraph = useCallback(() => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const docWidth = 480;
+    const docHeight = 420;
+    const spawnX = Math.round(centerX - docWidth / 2);
+    const spawnY = Math.round(centerY - docHeight / 2);
+
+    const docElement = {
+      id: `math_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: spawnX,
+      y: spawnY,
+      width: docWidth,
+      height: docHeight,
+      strokeColor: '#06b6d4',
+      backgroundColor: theme === 'dark' ? '#141418' : '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      docType: 'math_graph',
+      title: 'Math & Function Plotter',
+      formulaStr: 'a * sin(b * x)',
+      latexStr: 'f(x) = a \\cdot \\sin(b \\cdot x)',
+      params: { a: 2, b: 1, c: 0 },
+      xRange: [-10, 10],
+      yRange: [-4, 4],
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.('Added Math & Function Graph Card');
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertInteractiveTable = useCallback((options = {}) => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const initialColumns = options.columns || [
+      { id: 'col_1', title: '', width: 200 },
+      { id: 'col_2', title: '', width: 220 },
+      { id: 'col_3', title: '', width: 220 },
+    ];
+    const initialRows = options.rows || [
+      { id: 'row_1', cells: { col_1: '', col_2: '', col_3: '' } },
+      { id: 'row_2', cells: { col_1: '', col_2: '', col_3: '' } },
+    ];
+
+    const totalWidth = initialColumns.reduce((sum, c) => sum + (c.width || 200), 0);
+    const totalHeight = 52 + initialRows.length * 56;
+    const spawnX = Math.round(centerX - totalWidth / 2);
+    const spawnY = Math.round(centerY - totalHeight / 2);
+
+    const docElement = {
+      id: `table_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: spawnX,
+      y: spawnY,
+      width: totalWidth,
+      height: totalHeight,
+      strokeColor: theme === 'dark' ? '#ffffff' : '#1e1e1e',
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100,
+      docType: 'interactive_table',
+      title: 'Table',
+      tableData: {
+        columns: initialColumns,
+        rows: initialRows,
+        showHeader: true,
+        autoArrange: true,
+      },
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.('Added Interactive Table');
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertLiveDataCard = useCallback((options = {}) => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const docElement = {
+      id: `livedata_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: Math.round(centerX - 170),
+      y: Math.round(centerY - 105),
+      width: 340,
+      height: 210,
+      strokeColor: theme === 'dark' ? '#818cf8' : '#6366f1',
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 2,
+      roughness: 1,
+      opacity: 100,
+      docType: 'live_data',
+      title: options.title || 'Production API Gateway',
+      url: options.url || 'https://api.doodledesk.local/v1/gateway/health',
+      pollInterval: options.interval || 5,
+      metricField: options.metricField || 'status',
+      isLive: true,
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.('Added Live Data & Webhook Monitor');
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertReactiveSlider = useCallback((options = {}) => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const docElement = {
+      id: `slider_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: Math.round(centerX - 150),
+      y: Math.round(centerY - 60),
+      width: 300,
+      height: 120,
+      strokeColor: theme === 'dark' ? '#818cf8' : '#6366f1',
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 2,
+      roughness: 1,
+      opacity: 100,
+      docType: 'reactive_slider',
+      title: 'Variable Slider',
+      varName: options.varName || 'X',
+      min: options.min !== undefined ? options.min : 0,
+      max: options.max !== undefined ? options.max : 100,
+      step: options.step !== undefined ? options.step : 1,
+      value: options.value !== undefined ? options.value : 50,
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    commitHistory();
+    notifyChange();
+    scheduleRender();
+    onToast?.('Added Reactive Variable Slider');
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
   // ── Imperative Doodle Engine API ──
   useImperativeHandle(ref, () => {
     const api = {
@@ -3233,211 +3706,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       },
 
       // Mind Mapping: Branch child node with connecting arrow
-      branchChildNode: (direction = 'right') => {
-        const as = appStateRef.current;
-        const selectedIds = Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]);
-        if (selectedIds.length === 0) return;
-        const parent = elementsRef.current.find(el => el.id === selectedIds[0] && !el.isDeleted);
-        if (!parent) return;
-
-        const isLR = direction === 'right' || direction === 'left';
-        const isUp = direction === 'up';
-        const isLeft = direction === 'left';
-
-        const parentW = parent.width || 180;
-        const parentH = parent.height || 64;
-        const gapX = 130;
-        const gapY = 85;
-
-        const childX = isLR ? (isLeft ? parent.x - parentW - gapX : parent.x + parentW + gapX) : parent.x;
-        const childY = isLR ? parent.y : (isUp ? parent.y - parentH - gapY : parent.y + parentH + gapY);
-
-        const childId = 'node_' + generateId();
-        const textId = 'text_' + generateId();
-        const arrowId = 'arrow_' + generateId();
-
-        const childShape = {
-          ...parent,
-          id: childId,
-          x: childX,
-          y: childY,
-          width: parentW,
-          height: parentH,
-          boundElements: [{ id: textId, type: 'text' }],
-          groupIds: [],
-          frameId: parent.frameId || null,
-          seed: Math.floor(Math.random() * 100000),
-          version: 1,
-          versionNonce: versionNonce(),
-        };
-
-        const font = parent.fontFamily || (FONT_FAMILY?.Doodlefont ?? 5);
-        const childText = {
-          id: textId,
-          type: 'text',
-          x: childX + 10,
-          y: childY + (parentH / 2) - 12,
-          width: Math.max(20, parentW - 20),
-          height: 24,
-          strokeColor: '#f3f4f6',
-          backgroundColor: 'transparent',
-          fillStyle: 'solid',
-          strokeWidth: 1,
-          fontFamily: font,
-          fontSize: 15,
-          textAlign: 'center',
-          verticalAlign: 'middle',
-          text: 'New Topic',
-          originalText: 'New Topic',
-          containerId: childId,
-          version: 1,
-          versionNonce: versionNonce(),
-        };
-
-        const pCenterX = parent.x + parentW / 2;
-        const pCenterY = parent.y + parentH / 2;
-        const cCenterX = childX + parentW / 2;
-        const cCenterY = childY + parentH / 2;
-
-        let startX, startY, endX, endY;
-        if (direction === 'right') {
-          startX = parent.x + parentW;
-          startY = pCenterY;
-          endX = childX;
-          endY = cCenterY;
-        } else if (direction === 'down') {
-          startX = pCenterX;
-          startY = parent.y + parentH;
-          endX = cCenterX;
-          endY = childY;
-        } else if (direction === 'left') {
-          startX = parent.x;
-          startY = pCenterY;
-          endX = childX + parentW;
-          endY = cCenterY;
-        } else {
-          startX = pCenterX;
-          startY = parent.y;
-          endX = cCenterX;
-          endY = childY + parentH;
-        }
-
-        const dx = endX - startX;
-        const dy = endY - startY;
-
-        const arrowEl = {
-          id: arrowId,
-          type: ELEMENT_TYPES.ARROW,
-          x: startX,
-          y: startY,
-          width: Math.abs(dx),
-          height: Math.abs(dy),
-          strokeColor: '#94a3b8',
-          backgroundColor: 'transparent',
-          strokeWidth: 2,
-          roughness: 1,
-          opacity: 100,
-          points: [[0, 0], [dx, dy]],
-          startBinding: { elementId: parent.id, focus: 0, gap: 1 },
-          endBinding: { elementId: childId, focus: 0, gap: 1 },
-          endArrowhead: 'arrow',
-          version: 1,
-          versionNonce: versionNonce(),
-        };
-
-        setElements(prev => [...prev, childShape, childText, arrowEl]);
-        setAppState({ selectedElementIds: { [childId]: true } });
-        commitHistory();
-        notifyChange();
-        scheduleRender();
-      },
-
-      // Auto-arrange tree layout for connected nodes
-      autoArrangeTreeLayout: (direction = 'LR') => {
-        const currentEls = elementsRef.current.filter(el => !el.isDeleted);
-        const arrows = currentEls.filter(el => (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) && el.startBinding?.elementId && el.endBinding?.elementId);
-        if (arrows.length === 0) return;
-
-        const parentMap = new Map();
-        const childrenMap = new Map();
-        const nodeMap = new Map();
-
-        for (const el of currentEls) {
-          if (el.type !== ELEMENT_TYPES.ARROW && el.type !== ELEMENT_TYPES.LINE && el.type !== 'text') {
-            nodeMap.set(el.id, el);
-          }
-        }
-
-        for (const arrow of arrows) {
-          const pId = arrow.startBinding.elementId;
-          const cId = arrow.endBinding.elementId;
-          if (nodeMap.has(pId) && nodeMap.has(cId)) {
-            parentMap.set(cId, pId);
-            if (!childrenMap.has(pId)) childrenMap.set(pId, []);
-            childrenMap.get(pId).push(cId);
-          }
-        }
-
-        const roots = [];
-        for (const [id] of nodeMap) {
-          if (!parentMap.has(id) && childrenMap.has(id)) {
-            roots.push(id);
-          }
-        }
-        if (roots.length === 0) return;
-
-        const isLR = direction === 'LR';
-        const gapX = isLR ? 150 : 90;
-        const gapY = isLR ? 60 : 120;
-        const arrangedPositions = new Map();
-
-        for (const rootId of roots) {
-          const rootNode = nodeMap.get(rootId);
-          const startX = rootNode.x;
-          const startY = rootNode.y;
-
-          const positionNode = (nodeId, level, secondaryPos) => {
-            const node = nodeMap.get(nodeId);
-            const nw = node.width || 180;
-            const nh = node.height || 60;
-
-            const posX = isLR ? startX + level * (nw + gapX) : secondaryPos;
-            const posY = isLR ? secondaryPos : startY + level * (nh + gapY);
-
-            arrangedPositions.set(nodeId, { x: posX, y: posY });
-
-            const children = childrenMap.get(nodeId) || [];
-            if (children.length === 0) return;
-
-            let childSec = secondaryPos - ((children.length - 1) * (isLR ? nh + gapY : nw + gapX)) / 2;
-            for (const cId of children) {
-              positionNode(cId, level + 1, childSec);
-              childSec += isLR ? nh + gapY : nw + gapX;
-            }
-          };
-
-          positionNode(rootId, 0, isLR ? startY : startX);
-        }
-
-        setElements(prev => prev.map(el => {
-          if (arrangedPositions.has(el.id)) {
-            const pos = arrangedPositions.get(el.id);
-            return { ...el, x: pos.x, y: pos.y, version: (el.version || 1) + 1 };
-          }
-          if (el.containerId && arrangedPositions.has(el.containerId)) {
-            const pos = arrangedPositions.get(el.containerId);
-            const container = nodeMap.get(el.containerId);
-            const origX = container.x;
-            const origY = container.y;
-            return { ...el, x: el.x + (pos.x - origX), y: el.y + (pos.y - origY), version: (el.version || 1) + 1 };
-          }
-          return el;
-        }));
-
-        commitHistory();
-        notifyChange();
-        scheduleRender();
-      },
+      branchChildNode: (direction = 'right') => branchChildNode(direction),
+      branchSiblingNode: (direction = 'down') => branchSiblingNode(direction),
 
       // Create standardized presentation frame
       createPresentationFrame: (aspectRatio = '16:9') => {
@@ -3586,6 +3856,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         };
         img.src = dataURL;
       },
+      insertDocumentCard: handleInsertDocument,
+      insertCodeScratchpadCard: handleInsertCodeScratchpad,
+      insertMathGraphCard: handleInsertMathGraph,
+      insertInteractiveTable: handleInsertInteractiveTable,
+      insertLiveDataCard: handleInsertLiveDataCard,
+      insertReactiveSlider: handleInsertReactiveSlider,
+      togglePhysicsPlayground: () => setIsPhysicsModeActive(prev => !prev),
+      toggleIsometric3D: () => setIsIsometric3DActive(prev => !prev),
       toBlob: () => exportToBlob(),
     };
 
@@ -3598,6 +3876,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     canvasToScene,
     commitHistory,
     getSelectedElements,
+    handleInsertDocument,
+    handleInsertCodeScratchpad,
+    handleInsertMathGraph,
+    handleInsertInteractiveTable,
+    handleInsertLiveDataCard,
+    handleInsertReactiveSlider,
     notifyChange,
     scheduleRender,
     setAppState,
@@ -4169,12 +4453,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       {renderEmbeddable && elements.filter((el) => (el.type === ELEMENT_TYPES.IFRAME || el.type === 'embeddable' || el.type === 'iframe') && !el.isDeleted && !el.isHidden).map((el) => {
         const [left, top] = sceneBoundsToCanvas(el.x, el.y);
         const z = appState.zoom?.value || 1;
-        const inset = 4 / z;
+        const inset = el.docType === 'interactive_table' ? 0 : 4 / z;
         const width = Math.max(0, Math.abs(el.width) - inset * 2);
         const height = Math.max(0, Math.abs(el.height) - inset * 2);
         return (
           <div
             key={el.id}
+            data-embed-id={el.id}
+            data-angle={el.angle || 0}
             className="doodle-embed-overlay"
             style={{
               position: 'absolute',
@@ -4184,13 +4470,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
               height: `${height * z}px`,
               overflow: 'visible',
               borderRadius: '8px',
-              pointerEvents: 'none',
+              pointerEvents: (el.docType === 'code_runner' || el.docType === 'math_graph' || el.docType === 'markdown' || el.docType === 'pdf' || el.docType === 'interactive_table') ? 'auto' : 'none',
               zIndex: 2,
               transform: el.angle ? `rotate(${el.angle}rad)` : undefined,
               transformOrigin: 'center center',
             }}
           >
-            {renderEmbeddable(el, appState)}
+            {renderEmbeddable(el, { ...appState, theme })}
           </div>
         );
       })}
@@ -4295,8 +4581,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           setIsSimulationActive(false);
           setIsDataDiagramOpen(true);
         }}
-        title="Create an editable diagram from CSV or JSON"
-        aria-label="Create diagram from data"
+        title="Create an editable diagram or card from CSV, JSON, Markdown, or PDF"
+        aria-label="Create diagram from data or documents"
       >
         <Database size={20} strokeWidth={1.8} />
       </button>
@@ -4307,6 +4593,29 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             isOpen={isDataDiagramOpen}
             onClose={() => setIsDataDiagramOpen(false)}
             onImport={importDataDiagram}
+            onInsertDocument={handleInsertDocument}
+            theme={theme}
+          />
+        </Suspense>
+      )}
+
+      {isPhysicsModeActive && (
+        <Suspense fallback={null}>
+          <PhysicsPlaygroundOverlay
+            isActive={isPhysicsModeActive}
+            onClose={() => setIsPhysicsModeActive(false)}
+            doodleAPI={typeof window !== 'undefined' ? window.__doodleAPI : null}
+            theme={theme}
+          />
+        </Suspense>
+      )}
+
+      {isIsometric3DActive && (
+        <Suspense fallback={null}>
+          <Isometric3DArchitectureView
+            isActive={isIsometric3DActive}
+            onClose={() => setIsIsometric3DActive(false)}
+            doodleAPI={typeof window !== 'undefined' ? window.__doodleAPI : null}
             theme={theme}
           />
         </Suspense>

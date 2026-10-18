@@ -37,6 +37,15 @@ import {
   generateWireframe,
 } from '../templates/templatePresets';
 import { findBoardMatches, replaceBoardMatch, replaceBoardMatches } from '../engine/findReplace.js';
+import {
+  getTriangleVertices,
+  getStarVertices,
+  getHexagonVertices,
+  getOctagonVertices,
+  getParallelogramVertices,
+  getCylinderPolygon,
+  getCloudPolygon,
+} from '../engine/renderer/sketchy.js';
 
 const STORAGE_KEY = 'doodle_user_library_items_v1';
 const TEMPLATES_STORAGE_KEY = 'doodle_custom_templates_v1';
@@ -256,7 +265,7 @@ function CanvasFindReplace({ doodleAPI, themeStyles, isDark, focusRequest }) {
 }
 
 // Visual SVG Shape & Frame Preview Component
-function ShapePreview({ elements = [] }) {
+function ShapePreview({ elements = [], isDark = true }) {
   if (!elements || elements.length === 0) {
     return (
       <div style={{ width: '60px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -294,7 +303,10 @@ function ShapePreview({ elements = [] }) {
       }}
     >
       {elements.map((el, i) => {
-        const stroke = el.strokeColor || '#9ca3af';
+        let stroke = el.strokeColor || (isDark ? '#e5e7eb' : '#27272a');
+        if (!isDark && (stroke === '#ffffff' || stroke === '#fff' || stroke === '#e5e7eb' || stroke === '#f3f4f6')) {
+          stroke = '#27272a';
+        }
         const fill = el.backgroundColor && el.backgroundColor !== 'transparent' ? el.backgroundColor : 'none';
         const strokeW = el.strokeWidth ? Math.min(el.strokeWidth, 2) : 1.5;
         const isDashed = el.strokeStyle === 'dashed' || el.strokeStyle === 'dotted';
@@ -346,6 +358,140 @@ function ShapePreview({ elements = [] }) {
           );
         }
 
+        if (el.type === 'triangle') {
+          const pts = getTriangleVertices(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'star') {
+          const pts = getStarVertices(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'hexagon') {
+          const pts = getHexagonVertices(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'octagon') {
+          const pts = getOctagonVertices(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'parallelogram') {
+          const pts = getParallelogramVertices(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'capsule') {
+          const radius = Math.min(el.width || 0, el.height || 0) / 2;
+          return (
+            <rect
+              key={i}
+              x={el.x}
+              y={el.y}
+              width={el.width}
+              height={el.height}
+              rx={radius}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'cylinder') {
+          const rx = (el.width || 0) / 2;
+          const ry = Math.min((el.height || 0) * 0.35, 34) / 2;
+          const cx = el.x + rx;
+          const bottomY = el.y + (el.height || 0) - ry;
+          return (
+            <g key={i}>
+              <path
+                d={`M ${el.x} ${el.y + ry} L ${el.x} ${bottomY} A ${rx} ${ry} 0 0 0 ${el.x + (el.width || 0)} ${bottomY} L ${el.x + (el.width || 0)} ${el.y + ry} Z`}
+                fill={fill}
+                stroke={stroke}
+                strokeWidth={strokeW}
+              />
+              <ellipse
+                cx={cx}
+                cy={el.y + ry}
+                rx={rx}
+                ry={ry}
+                fill={fill}
+                stroke={stroke}
+                strokeWidth={strokeW}
+              />
+            </g>
+          );
+        }
+
+        if (el.type === 'cloud') {
+          const pts = getCloudPolygon(el.x, el.y, el.width || 0, el.height || 0).map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
+        if (el.type === 'polygon' && Array.isArray(el.points)) {
+          const pts = el.points.map(([px, py]) => `${el.x + px},${el.y + py}`).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={pts}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeW}
+            />
+          );
+        }
+
         if (el.type === 'line' || el.type === 'arrow') {
           return (
             <line
@@ -386,6 +532,260 @@ function ShapePreview({ elements = [] }) {
 // Built-in Shapes & Frames (NOT templates — reusable visual components)
 const BUILTIN_SHAPES_AND_FRAMES = [
   {
+    id: 'shape-triangle',
+    name: 'Triangle',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-triangle',
+        type: 'triangle',
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 104,
+        strokeColor: '#e5e7eb',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-star',
+    name: 'Star (5-pt)',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-star',
+        type: 'star',
+        x: 0,
+        y: 0,
+        width: 110,
+        height: 110,
+        strokeColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-hexagon',
+    name: 'Hexagon',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-hexagon',
+        type: 'hexagon',
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 104,
+        strokeColor: '#e5e7eb',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-octagon',
+    name: 'Octagon',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-octagon',
+        type: 'octagon',
+        x: 0,
+        y: 0,
+        width: 110,
+        height: 110,
+        strokeColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-cylinder',
+    name: 'Database Cylinder',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-cylinder',
+        type: 'cylinder',
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 95,
+        strokeColor: '#9ca3af',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-cloud',
+    name: 'Cloud Boundary',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-cloud',
+        type: 'cloud',
+        x: 0,
+        y: 0,
+        width: 150,
+        height: 95,
+        strokeColor: '#9ca3af',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-capsule',
+    name: 'Capsule / Pill',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-capsule',
+        type: 'capsule',
+        x: 0,
+        y: 0,
+        width: 130,
+        height: 60,
+        strokeColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-parallelogram',
+    name: 'Parallelogram',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-parallelogram',
+        type: 'parallelogram',
+        x: 0,
+        y: 0,
+        width: 130,
+        height: 75,
+        strokeColor: '#e5e7eb',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+    ],
+  },
+  {
+    id: 'shape-decision-diamond',
+    name: 'Decision Diamond',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-dia-box',
+        type: 'diamond',
+        x: 0,
+        y: 0,
+        width: 130,
+        height: 90,
+        strokeColor: '#e5e7eb',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        roughness: 1,
+      },
+      {
+        id: 'sh-dia-txt',
+        type: 'text',
+        x: 35,
+        y: 35,
+        width: 60,
+        height: 20,
+        text: 'Decision ?',
+        fontSize: 14,
+        strokeColor: '#f3f4f6',
+      },
+    ],
+  },
+  {
+    id: 'shape-sticky-yellow',
+    name: 'Yellow Sticky Note',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-stk-bg',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 130,
+        height: 120,
+        strokeColor: '#ca8a04',
+        backgroundColor: '#fef08a',
+        fillStyle: 'solid',
+        strokeWidth: 1.5,
+        roughness: 1,
+      },
+      {
+        id: 'sh-stk-tx',
+        type: 'text',
+        x: 14,
+        y: 16,
+        width: 100,
+        height: 36,
+        text: 'Quick Note',
+        fontSize: 15,
+        strokeColor: '#713f12',
+      },
+    ],
+  },
+  {
+    id: 'shape-process-step',
+    name: 'Process Step',
+    category: 'Shapes',
+    elements: [
+      {
+        id: 'sh-step-box',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 70,
+        strokeColor: '#9ca3af',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        fillStyle: 'solid',
+        strokeWidth: 1.5,
+        roughness: 1,
+        roundness: { type: 3 },
+      },
+      {
+        id: 'sh-step-txt',
+        type: 'text',
+        x: 20,
+        y: 24,
+        width: 100,
+        height: 22,
+        text: 'Process Step',
+        fontSize: 14,
+        strokeColor: '#f3f4f6',
+      },
+    ],
+  },
+  {
     id: 'shape-frame-mobile',
     name: 'Mobile Frame',
     category: 'Frames',
@@ -417,8 +817,8 @@ const BUILTIN_SHAPES_AND_FRAMES = [
         strokeWidth: 1,
         roughness: 0,
         roundness: { type: 3 },
-      }
-    ]
+      },
+    ],
   },
   {
     id: 'shape-frame-window',
@@ -485,169 +885,8 @@ const BUILTIN_SHAPES_AND_FRAMES = [
         backgroundColor: '#10b981',
         fillStyle: 'solid',
         strokeWidth: 1,
-      }
-    ]
-  },
-  {
-    id: 'shape-sticky-yellow',
-    name: 'Yellow Sticky Note',
-    category: 'Shapes',
-    elements: [
-      {
-        id: 'sh-stk-bg',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 130,
-        height: 120,
-        strokeColor: '#ca8a04',
-        backgroundColor: '#fef08a',
-        fillStyle: 'solid',
-        strokeWidth: 1.5,
-        roughness: 1,
       },
-      {
-        id: 'sh-stk-tx',
-        type: 'text',
-        x: 14,
-        y: 16,
-        width: 100,
-        height: 36,
-        text: 'Quick Note',
-        fontSize: 15,
-        strokeColor: '#713f12',
-      }
-    ]
-  },
-  {
-    id: 'shape-decision-diamond',
-    name: 'Decision Diamond',
-    category: 'Shapes',
-    elements: [
-      {
-        id: 'sh-dia-box',
-        type: 'diamond',
-        x: 0,
-        y: 0,
-        width: 130,
-        height: 90,
-        strokeColor: '#e5e7eb',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        fillStyle: 'solid',
-        strokeWidth: 2,
-        roughness: 1,
-      },
-      {
-        id: 'sh-dia-txt',
-        type: 'text',
-        x: 35,
-        y: 35,
-        width: 60,
-        height: 20,
-        text: 'Decision ?',
-        fontSize: 14,
-        strokeColor: '#f3f4f6',
-      }
-    ]
-  },
-  {
-    id: 'shape-db-cylinder',
-    name: 'Database Cylinder',
-    category: 'Shapes',
-    elements: [
-      {
-        id: 'sh-db-b',
-        type: 'rectangle',
-        x: 0,
-        y: 16,
-        width: 120,
-        height: 80,
-        strokeColor: '#9ca3af',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        fillStyle: 'solid',
-        strokeWidth: 1.5,
-        roughness: 1,
-        roundness: { type: 3 },
-      },
-      {
-        id: 'sh-db-t',
-        type: 'ellipse',
-        x: 0,
-        y: 0,
-        width: 120,
-        height: 32,
-        strokeColor: '#9ca3af',
-        backgroundColor: 'rgba(255, 255, 255, 0.12)',
-        fillStyle: 'solid',
-        strokeWidth: 1.5,
-        roughness: 1,
-      },
-      {
-        id: 'sh-db-txt',
-        type: 'text',
-        x: 25,
-        y: 45,
-        width: 70,
-        height: 20,
-        text: 'Database',
-        fontSize: 13,
-        strokeColor: '#e5e7eb',
-      }
-    ]
-  },
-  {
-    id: 'shape-process-step',
-    name: 'Process Step',
-    category: 'Shapes',
-    elements: [
-      {
-        id: 'sh-step-box',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 140,
-        height: 70,
-        strokeColor: '#9ca3af',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        fillStyle: 'solid',
-        strokeWidth: 1.5,
-        roughness: 1,
-        roundness: { type: 3 },
-      },
-      {
-        id: 'sh-step-txt',
-        type: 'text',
-        x: 20,
-        y: 24,
-        width: 100,
-        height: 22,
-        text: 'Process Step',
-        fontSize: 14,
-        strokeColor: '#f3f4f6',
-      }
-    ]
-  },
-  {
-    id: 'shape-cloud-boundary',
-    name: 'Cloud Boundary',
-    category: 'Shapes',
-    elements: [
-      {
-        id: 'sh-c-box',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 150,
-        height: 80,
-        strokeColor: '#9ca3af',
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-        fillStyle: 'solid',
-        strokeWidth: 1.5,
-        strokeStyle: 'dashed',
-        roughness: 1,
-        roundness: { type: 3 },
-      }
-    ]
+    ],
   },
   {
     id: 'shape-ui-card',
@@ -706,8 +945,8 @@ const BUILTIN_SHAPES_AND_FRAMES = [
         strokeWidth: 1,
         roughness: 0,
         roundness: { type: 3 },
-      }
-    ]
+      },
+    ],
   },
 ];
 
@@ -1152,7 +1391,7 @@ export function LibrarySidebar({
       newSelectedIds[newId] = true;
 
       let stroke = el.strokeColor;
-      if (!isDark && (stroke === '#ffffff' || stroke === '#fff')) {
+      if (!isDark && (stroke === '#ffffff' || stroke === '#fff' || stroke === '#e5e7eb' || stroke === '#f3f4f6')) {
         stroke = '#1e1e1e';
       } else if (isDark && (stroke === '#1e1e1e' || stroke === '#000000' || stroke === '#000')) {
         stroke = '#ffffff';
@@ -2018,7 +2257,7 @@ export function LibrarySidebar({
                               borderRadius: '6px',
                             }}
                           >
-                            <ShapePreview elements={tpl.elements} />
+                            <ShapePreview elements={tpl.elements} isDark={isDark} />
                           </div>
                         )}
                       </div>
@@ -2218,7 +2457,7 @@ export function LibrarySidebar({
                   >
                     {/* Visual Shape / Frame SVG Preview */}
                     <div style={{ flex: 1, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
-                      <ShapePreview elements={item.elements} />
+                      <ShapePreview elements={item.elements} isDark={isDark} />
                     </div>
 
                     {/* Shape / Frame Label */}

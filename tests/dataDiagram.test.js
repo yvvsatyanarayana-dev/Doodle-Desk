@@ -65,4 +65,33 @@ describe('dataDiagram', () => {
       .toThrow(`up to ${MAX_DATA_DIAGRAM_RECORDS} records`);
     expect(() => buildDataDiagram([])).toThrow('at least one record');
   });
+
+  it('converts markdown documents into hierarchical diagram rows with parent links', async () => {
+    const { parseMarkdownToDiagramRows } = await import('../src/utils/dataDiagram.js');
+    const markdown = `# Architecture Overview
+- High availability
+
+## Backend Services
+- Auth service
+- Database service
+
+### Auth Service
+- JWT verification
+`;
+    const rows = parseMarkdownToDiagramRows(markdown, 'architecture.md');
+    expect(rows.length).toBe(3);
+    expect(rows[0].name).toBe('Architecture Overview');
+    expect(rows[0].parent).toBe('');
+    expect(rows[0].details).toContain('High availability');
+
+    expect(rows[1].name).toBe('Backend Services');
+    expect(rows[1].parent).toBe(rows[0].id);
+
+    expect(rows[2].name).toBe('Auth Service');
+    expect(rows[2].parent).toBe(rows[1].id);
+
+    const diagram = buildDataDiagram(rows);
+    expect(diagram.nodeCount).toBe(3);
+    expect(diagram.connectionCount).toBe(2);
+  });
 });

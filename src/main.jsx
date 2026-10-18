@@ -8,6 +8,9 @@ import './index.css';
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
     console.error('Unhandled runtime error intercepted:', event.error || event.message);
+    if (event.error && event.error.stack) {
+      console.error('ERROR_STACK:', event.error.stack);
+    }
   });
 
   window.addEventListener('unhandledrejection', (event) => {

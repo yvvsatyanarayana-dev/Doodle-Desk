@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Keyboard, FolderOpen } from 'lucide-react';
+import { RotateCcw, Check, Monitor, Sun, Moon, Settings, X, Keyboard, FolderOpen, RefreshCw, ExternalLink, CheckCircle2, AlertCircle, ArrowUpCircle } from 'lucide-react';
 import { ThemedConfirmDialog } from '../components/ThemedConfirmDialog';
 import {
   formatShortcutEvent,
@@ -32,6 +32,37 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
   const [shortcutBindings, setShortcutBindings] = useState(() => getShortcutBindings());
   const [recordingShortcut, setRecordingShortcut] = useState(null);
   const [shortcutError, setShortcutError] = useState('');
+  const [appVersion, setAppVersion] = useState('1.0.0');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState(null);
+
+  useEffect(() => {
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then((v) => {
+        if (v) setAppVersion(v);
+      }).catch(() => {});
+    }
+  }, []);
+
+  const handleManualCheckUpdates = async () => {
+    if (!window.electronAPI?.checkForUpdates) return;
+    setIsCheckingUpdate(true);
+    setUpdateFeedback(null);
+    try {
+      const result = await window.electronAPI.checkForUpdates();
+      setIsCheckingUpdate(false);
+      if (result?.status === 'dev-mode') {
+        setUpdateFeedback({ text: 'Dev mode: Updates connect via GitHub Releases in production.', color: '#818cf8' });
+      } else if (result?.status === 'not-available') {
+        setUpdateFeedback({ text: `Doodle Desk v${appVersion} is up to date!`, color: '#10b981' });
+      } else if (result?.status === 'available') {
+        setUpdateFeedback({ text: `Update v${result.version} available! Downloading in background...`, color: '#818cf8' });
+      }
+    } catch (err) {
+      setIsCheckingUpdate(false);
+      setUpdateFeedback({ text: err.message || 'Check failed', color: '#f43f5e' });
+    }
+  };
 
   // Sync settings when opened
   useEffect(() => {
@@ -424,6 +455,66 @@ export function PreferencesModal({ isOpen, onClose, currentTheme, onThemeChange 
                 />
                 <span className="pref-slider"></span>
               </label>
+            </div>
+          </div>
+
+          {/* Software Updates & Releases (GitHub Actions Update Receiver) */}
+          <div className="pref-sidebar-section">
+            <h4 className="pref-sidebar-section-title">Software Updates & Releases</h4>
+            <div className="pref-sidebar-row">
+              <span className="pref-sidebar-label">Installed Version</span>
+              <span className="pref-update-badge">v{appVersion}</span>
+            </div>
+
+            <div className="pref-sidebar-row">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span className="pref-sidebar-label">Automatic Updates</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #71717a)' }}>
+                  Check GitHub Releases automatically on launch
+                </span>
+              </div>
+              <label className="pref-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.autoCheckUpdates !== false}
+                  onChange={e => updateSetting('autoCheckUpdates', e.target.checked)}
+                />
+                <span className="pref-slider"></span>
+              </label>
+            </div>
+
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="pref-update-btn"
+                  onClick={handleManualCheckUpdates}
+                  disabled={isCheckingUpdate}
+                >
+                  <RefreshCw size={13} className={isCheckingUpdate ? 'spin' : ''} />
+                  <span>{isCheckingUpdate ? 'Checking GitHub...' : 'Check for Updates'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="pref-update-btn"
+                  onClick={() => {
+                    if (window.electronAPI?.openExternal) {
+                      window.electronAPI.openExternal('https://github.com/yvvsatyanarayana-dev/Doodle-Desk/releases');
+                    }
+                  }}
+                  title="View GitHub Releases"
+                >
+                  <ExternalLink size={13} />
+                  <span>GitHub Releases</span>
+                </button>
+              </div>
+
+              {updateFeedback && (
+                <div style={{ fontSize: '0.74rem', color: updateFeedback.color || '#818cf8', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                  <span>{updateFeedback.text}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

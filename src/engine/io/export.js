@@ -2,6 +2,10 @@
 import { renderElement } from '../renderer/render.js';
 import { getCommonBounds } from '../math/geometry.js';
 import { serializeAsJSON, ELEMENT_TYPES } from '../elements.js';
+import {
+  getTriangleVertices, getStarVertices, getHexagonVertices, getOctagonVertices,
+  getParallelogramVertices, getCylinderPolygon, getCloudPolygon
+} from '../renderer/sketchy.js';
 
 const EXPORT_PADDING = 32;
 
@@ -39,6 +43,7 @@ export async function exportToCanvas(elements, appState = {}, files = {}, option
 
   // Build image cache
   const imageCache = await buildImageCache(active, files);
+  imageCache.__isExporting = true;
 
   for (const el of active) {
     renderElement(ctx, el, imageCache);
@@ -89,7 +94,7 @@ export async function exportToSvg(elements, appState = {}, files = {}, options =
   return parts.join('\n');
 }
 
-function elementToSvg(el, files = {}, { adaptiveInk = false } = {}) {
+export function elementToSvg(el, files = {}, { adaptiveInk = false } = {}) {
   const opacity = (el.opacity ?? 100) / 100;
   const stroke = el.strokeColor || '#1e1e1e';
   const fill = el.backgroundColor && el.backgroundColor !== 'transparent' ? el.backgroundColor : 'none';
@@ -144,6 +149,52 @@ function elementToSvg(el, files = {}, { adaptiveInk = false } = {}) {
       const uy = edgeLen > 0 ? (halfH / edgeLen) * cr : 0;
       const d = `M ${cx + ux} ${y + uy} L ${x + rw - ux} ${cy - uy} Q ${x + rw} ${cy} ${x + rw - ux} ${cy + uy} L ${cx + ux} ${y + rh - uy} Q ${cx} ${y + rh} ${cx - ux} ${y + rh - uy} L ${x + ux} ${cy + uy} Q ${x} ${cy} ${x + ux} ${cy - uy} L ${cx - ux} ${y + uy} Q ${cx} ${y} ${cx + ux} ${y + uy} Z`;
       return `<path d="${d}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.TRIANGLE: {
+      const pts = getTriangleVertices(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.STAR: {
+      const pts = getStarVertices(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.HEXAGON: {
+      const pts = getHexagonVertices(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.OCTAGON: {
+      const pts = getOctagonVertices(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.PARALLELOGRAM: {
+      const pts = getParallelogramVertices(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.CAPSULE: {
+      const r = Math.min(Math.abs(w), Math.abs(h)) / 2;
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" ry="${r}" ${attrs}/>`;
+    }
+
+    case ELEMENT_TYPES.CYLINDER: {
+      const rw = Math.max(0.1, Math.abs(w));
+      const rh = Math.max(0.1, Math.abs(h));
+      const lidH = Math.min(rh * 0.35, 34);
+      const rx = rw / 2;
+      const ry = lidH / 2;
+      const cx2 = x + rx;
+      const bodyPath = `M ${x} ${y + ry} L ${x} ${y + rh - ry} A ${rx} ${ry} 0 0 0 ${x + rw} ${y + rh - ry} L ${x + rw} ${y + ry} Z`;
+      return `<g><path d="${bodyPath}" ${attrs}/><ellipse cx="${cx2}" cy="${y + ry}" rx="${rx}" ry="${ry}" ${attrs}/></g>`;
+    }
+
+    case ELEMENT_TYPES.CLOUD: {
+      const pts = getCloudPolygon(x, y, w, h).map(([px, py]) => `${px},${py}`).join(' ');
+      return `<polygon points="${pts}" ${attrs}/>`;
     }
 
     case ELEMENT_TYPES.ARROW:

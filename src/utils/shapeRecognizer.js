@@ -107,6 +107,36 @@ export function recognizeShape(freedrawElement) {
     };
   }
 
+  // 1b. ARROW DETECTION: Line with barbed arrowhead gesture
+  if (pts.length >= 8) {
+    const tipIdx = Math.floor(pts.length * 0.78);
+    const tipPt = pts[tipIdx];
+    const stemDx = tipPt[0] - startPt[0];
+    const stemDy = tipPt[1] - startPt[1];
+    const stemLen = Math.hypot(stemDx, stemDy);
+    if (stemLen > 24) {
+      const barbDx = endPt[0] - tipPt[0];
+      const barbDy = endPt[1] - tipPt[1];
+      const barbLen = Math.hypot(barbDx, barbDy);
+      if (barbLen > 6 && barbLen < stemLen * 0.55) {
+        const dot = (stemDx * barbDx + stemDy * barbDy) / (stemLen * barbLen);
+        if (dot < -0.2) {
+          const w = Math.abs(tipPt[0] - startPt[0]) || 2;
+          const h = Math.abs(tipPt[1] - startPt[1]) || 2;
+          return {
+            type: 'arrow',
+            x: startPt[0],
+            y: startPt[1],
+            width: w,
+            height: h,
+            points: [[0, 0], [tipPt[0] - startPt[0], tipPt[1] - startPt[1]]],
+            endArrowhead: 'arrow',
+          };
+        }
+      }
+    }
+  }
+
   // Calculate bounding box
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   pts.forEach(([px, py]) => {
@@ -293,6 +323,87 @@ export function recognizeShape(freedrawElement) {
   }
 
   // =========================================================================
+  // 4b. STAR DETECTION: 5-pointed alternating star gesture
+  // =========================================================================
+  if (allQuadrants && pts.length >= 16) {
+    const radDistances = pts.map(([px, py]) => Math.hypot(px - cx, py - cy));
+    let localPeaks = 0;
+    for (let i = 2; i < radDistances.length - 2; i++) {
+      if (
+        radDistances[i] > radDistances[i - 1] &&
+        radDistances[i] > radDistances[i + 1] &&
+        radDistances[i] > bboxDiag * 0.22
+      ) {
+        localPeaks++;
+      }
+    }
+    if (localPeaks >= 4 && localPeaks <= 6) {
+      return {
+        type: 'star',
+        x: minX,
+        y: minY,
+        width,
+        height,
+      };
+    }
+  }
+
+  // =========================================================================
+  // 4c. HEXAGON DETECTION: 6-corner polygon
+  // =========================================================================
+  if (
+    simplified &&
+    (simplified.length === 6 || simplified.length === 7) &&
+    allQuadrants &&
+    avgRadialError > 0.08
+  ) {
+    return {
+      type: 'hexagon',
+      x: minX,
+      y: minY,
+      width,
+      height,
+    };
+  }
+
+  // =========================================================================
+  // 4d. CAPSULE / PILL DETECTION: Elongated rounded container
+  // =========================================================================
+  if (allQuadrants && (aspect > 1.85 || aspect < 0.54) && avgRadialError > 0.12) {
+    return {
+      type: 'capsule',
+      x: minX,
+      y: minY,
+      width,
+      height,
+    };
+  }
+
+  // =========================================================================
+  // 4e. CYLINDER (DATABASE) DETECTION: Elliptical top with vertical sides
+  // =========================================================================
+  if (allQuadrants && aspect >= 0.55 && aspect <= 1.45 && pts.length >= 20) {
+    const topPts = pts.filter(([, py]) => py < minY + height * 0.35);
+    const botPts = pts.filter(([, py]) => py > maxY - height * 0.35);
+    if (topPts.length >= 6 && botPts.length >= 5) {
+      const topAvgY = topPts.reduce((s, [, py]) => s + py, 0) / topPts.length;
+      const botAvgY = botPts.reduce((s, [, py]) => s + py, 0) / botPts.length;
+      if (botAvgY - topAvgY > height * 0.5) {
+        const topCurv = topPts.some(([px]) => Math.abs(px - cx) < width * 0.2);
+        if (topCurv && avgRadialError > 0.18) {
+          return {
+            type: 'cylinder',
+            x: minX,
+            y: minY,
+            width,
+            height,
+          };
+        }
+      }
+    }
+  }
+
+  // =========================================================================
   // 5. TRIANGLE DETECTION
   // Closed polygon with 3 distinct corners
   // =========================================================================
@@ -385,18 +496,11 @@ export function recognizeShape(freedrawElement) {
       }
 
       return {
-        type: 'line',
-        x: apex[0],
-        y: apex[1],
+        type: 'triangle',
+        x: minX,
+        y: minY,
         width,
         height,
-        points: [
-          [0, 0],
-          [base2[0] - apex[0], base2[1] - apex[1]],
-          [base1[0] - apex[0], base1[1] - apex[1]],
-          [0, 0],
-        ],
-        backgroundColor: freedrawElement.backgroundColor || 'transparent',
       };
     }
   }

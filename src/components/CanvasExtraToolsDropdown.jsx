@@ -8,6 +8,18 @@ import {
   StickyNote,
   Ruler,
   Palette,
+  FileText,
+  Sparkles,
+  Terminal,
+  Activity,
+  Orbit,
+  Box,
+  Table,
+  Radio,
+  Sliders,
+  Film,
+  Camera,
+  BookOpen,
 } from 'lucide-react';
 
 /**
@@ -22,6 +34,8 @@ import {
  * - Bucket fill (B)
  * - Lasso selection
  * - Mermaid to Doodle
+ * - Interactive Table
+ * - Interactive Table Flashcards
  */
 function CanvasExtraToolsDropdownComponent({
   doodleAPI,
@@ -42,14 +56,28 @@ function CanvasExtraToolsDropdownComponent({
   onOpenCommandPalette,
   onOpenTemplates,
   onOpenMermaid,
+  onOpenInsertDocument,
+  onOpenWireframeToCode,
+  onToggleSoundStudio,
+  onInsertCodeScratchpad,
+  onInsertMathGraph,
+  onInsertInteractiveTable,
+  onOpenFlashcards,
+  onInsertLiveDataCard,
+  onInsertReactiveSlider,
+  onOpenAnimationStudio,
+  onOpenKnowledgeConstellation,
+  onOpenNapkinScanner,
+  onTogglePhysicsPlayground,
+  onToggleIsometric3D,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState({ top: 56, left: 100 });
+  const [dropdownPos, setDropdownPos] = useState({ top: 64, left: 100 });
   const menuRef = useRef(null);
   const triggerRef = useRef(null);
 
-  // Position calculation relative to extra tools button
+  // Position calculation relative to extra tools button (moved down with comfortable gap)
   const updatePosition = useCallback(() => {
     const trigger = document.querySelector('[data-collab-laser-launcher]') || document.querySelector('.App-toolbar__extra-tools-trigger');
     if (!trigger) return;
@@ -58,7 +86,7 @@ function CanvasExtraToolsDropdownComponent({
     const rect = trigger.getBoundingClientRect();
     const targetLeft = Math.max(8, Math.min(window.innerWidth - 240, rect.right - 230));
     setDropdownPos({
-      top: Math.min(window.innerHeight - 300, rect.bottom + 6),
+      top: rect.bottom + 14,
       left: targetLeft,
     });
   }, []);
@@ -246,21 +274,23 @@ function CanvasExtraToolsDropdownComponent({
         top: `${dropdownPos.top}px`,
         left: `${dropdownPos.left}px`,
         maxWidth: 'calc(100vw - 16px)',
-        maxHeight: 'calc(100vh - 75px)',
+        maxHeight: 'min(380px, calc(100vh - 110px))',
         overflowY: 'auto',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
         zIndex: 10000,
       }}
     >
       {/* Frame tool (F) */}
       <div className="canvas-tool-menu-item" onClick={handleSelectFrame}>
-        <Frame size={15} className="canvas-tool-menu-icon" />
+        <Frame size={15} className="canvas-tool-menu-icon" style={{ color: '#f59e0b' }} />
         <span className="canvas-tool-menu-label">Frame tool</span>
         <span className="canvas-tool-menu-shortcut">F</span>
       </div>
 
       {/* Web Embed */}
       <div className="canvas-tool-menu-item" onClick={handleSelectEmbed}>
-        <Code size={15} className="canvas-tool-menu-icon" />
+        <Code size={15} className="canvas-tool-menu-icon" style={{ color: '#06b6d4' }} />
         <span className="canvas-tool-menu-label">Web Embed</span>
       </div>
 
@@ -269,7 +299,7 @@ function CanvasExtraToolsDropdownComponent({
         className={`canvas-tool-menu-item ${isDrawToShapeActive ? 'selected' : ''}`}
         onClick={handleSelectDrawToShape}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="canvas-tool-menu-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="canvas-tool-menu-icon" style={{ color: '#ec4899' }}>
           <circle cx="9" cy="9" r="6" />
           <rect x="9" y="9" width="11" height="11" rx="2" />
         </svg>
@@ -282,7 +312,7 @@ function CanvasExtraToolsDropdownComponent({
         className={`canvas-tool-menu-item ${isLaserActive ? 'selected' : ''}`}
         onClick={handleSelectLaser}
       >
-        <Wand2 size={15} className="canvas-tool-menu-icon" />
+        <Wand2 size={15} className="canvas-tool-menu-icon" style={{ color: '#ef4444' }} />
         <span className="canvas-tool-menu-label">Laser pointer</span>
         <span className="canvas-tool-menu-shortcut">K</span>
       </div>
@@ -292,7 +322,7 @@ function CanvasExtraToolsDropdownComponent({
         className={`canvas-tool-menu-item ${isBucketActive ? 'selected' : ''}`}
         onClick={handleSelectBucket}
       >
-        <PaintBucket size={15} className="canvas-tool-menu-icon" />
+        <PaintBucket size={15} className="canvas-tool-menu-icon" style={{ color: '#f97316' }} />
         <span className="canvas-tool-menu-label">Bucket fill</span>
         <span className="canvas-tool-menu-shortcut">B</span>
       </div>
@@ -302,7 +332,7 @@ function CanvasExtraToolsDropdownComponent({
         className={`canvas-tool-menu-item ${isLassoActive ? 'selected' : ''}`}
         onClick={handleSelectLasso}
       >
-        <LassoSelect size={15} className="canvas-tool-menu-icon" />
+        <LassoSelect size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
         <span className="canvas-tool-menu-label">Lasso selection</span>
       </div>
 
@@ -314,7 +344,7 @@ function CanvasExtraToolsDropdownComponent({
           onOpenStickyNotes?.();
         }}
       >
-        <StickyNote size={15} className="canvas-tool-menu-icon" />
+        <StickyNote size={15} className="canvas-tool-menu-icon" style={{ color: '#eab308' }} />
         <span className="canvas-tool-menu-label">Sticky Notes & Cards</span>
         <span className="canvas-tool-menu-shortcut">N</span>
       </div>
@@ -327,7 +357,7 @@ function CanvasExtraToolsDropdownComponent({
           onToggleRuler?.();
         }}
       >
-        <Ruler size={15} className="canvas-tool-menu-icon" />
+        <Ruler size={15} className="canvas-tool-menu-icon" style={{ color: '#14b8a6' }} />
         <span className="canvas-tool-menu-label">Precision Ruler & Compass</span>
         <span className="canvas-tool-menu-shortcut">Shift+R</span>
       </div>
@@ -340,7 +370,7 @@ function CanvasExtraToolsDropdownComponent({
           onOpenColorPalette?.();
         }}
       >
-        <Palette size={15} className="canvas-tool-menu-icon" />
+        <Palette size={15} className="canvas-tool-menu-icon" style={{ color: '#f43f5e' }} />
         <span className="canvas-tool-menu-label">Color Palette Studio</span>
         <span className="canvas-tool-menu-shortcut">Shift+C</span>
       </div>
@@ -348,12 +378,230 @@ function CanvasExtraToolsDropdownComponent({
       {/* Divider */}
       <div className="canvas-tool-menu-divider" />
 
+      {/* Document Card (Markdown / PDF) */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          onOpenInsertDocument?.();
+        }}
+      >
+        <FileText size={15} className="canvas-tool-menu-icon" style={{ color: '#38bdf8' }} />
+        <span className="canvas-tool-menu-label">Document Card (Markdown & PDF)</span>
+      </div>
+
+      {/* Wireframe to Code */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          onOpenWireframeToCode?.();
+        }}
+      >
+        <Sparkles size={15} className="canvas-tool-menu-icon" style={{ color: '#a78bfa' }} />
+        <span className="canvas-tool-menu-label">Wireframe to React & Tailwind</span>
+      </div>
+
+      {/* Interactive Table */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onInsertInteractiveTable) {
+            onInsertInteractiveTable();
+          } else {
+            activeAPI?.insertInteractiveTable?.();
+          }
+        }}
+      >
+        <Table size={15} className="canvas-tool-menu-icon" style={{ color: '#2dd4bf' }} />
+        <span className="canvas-tool-menu-label">Interactive Table</span>
+      </div>
+
+      {/* Interactive Table Flashcards */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenFlashcards) {
+            onOpenFlashcards();
+          } else {
+            const elements = activeAPI?.getSceneElements?.() || [];
+            const tableEl = elements.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
+            if (tableEl && typeof window !== 'undefined' && typeof window.__openTableFlashcards === 'function') {
+              window.__openTableFlashcards(tableEl);
+            } else {
+              activeAPI?.insertInteractiveTable?.();
+              setTimeout(() => {
+                const updated = activeAPI?.getSceneElements?.() || [];
+                const newTable = updated.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
+                if (newTable && typeof window !== 'undefined' && typeof window.__openTableFlashcards === 'function') {
+                  window.__openTableFlashcards(newTable);
+                }
+              }, 120);
+            }
+          }
+        }}
+      >
+        <BookOpen size={15} className="canvas-tool-menu-icon" style={{ color: '#fbbf24' }} />
+        <span className="canvas-tool-menu-label">Interactive Table Flashcards</span>
+        <span className="canvas-tool-menu-shortcut">Study</span>
+      </div>
+
+      {/* Executable Code Scratchpad */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onInsertCodeScratchpad) {
+            onInsertCodeScratchpad();
+          } else {
+            activeAPI?.insertCodeScratchpadCard?.();
+          }
+        }}
+      >
+        <Terminal size={15} className="canvas-tool-menu-icon" style={{ color: '#10b981' }} />
+        <span className="canvas-tool-menu-label">Code Scratchpad (JS Runner)</span>
+      </div>
+
+      {/* Math Formula & Function Graph */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onInsertMathGraph) {
+            onInsertMathGraph();
+          } else {
+            activeAPI?.insertMathGraphCard?.();
+          }
+        }}
+      >
+        <Activity size={15} className="canvas-tool-menu-icon" style={{ color: '#f43f5e' }} />
+        <span className="canvas-tool-menu-label">Math Graph & Function Plotter</span>
+      </div>
+
+      {/* Physics & Gravity Playground */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onTogglePhysicsPlayground) {
+            onTogglePhysicsPlayground();
+          } else {
+            activeAPI?.togglePhysicsPlayground?.();
+          }
+        }}
+      >
+        <Orbit size={15} className="canvas-tool-menu-icon" style={{ color: '#818cf8' }} />
+        <span className="canvas-tool-menu-label">Physics & Gravity Mode</span>
+        <span className="canvas-tool-menu-shortcut">Shift+P</span>
+      </div>
+
+      {/* 2.5D Isometric 3D Architecture View */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onToggleIsometric3D) {
+            onToggleIsometric3D();
+          } else {
+            activeAPI?.toggleIsometric3D?.();
+          }
+        }}
+      >
+        <Box size={15} className="canvas-tool-menu-icon" style={{ color: '#3b82f6' }} />
+        <span className="canvas-tool-menu-label">2.5D Isometric 3D View</span>
+        <span className="canvas-tool-menu-shortcut">Shift+I</span>
+      </div>
+
       {/* Mermaid to Doodle */}
       <div className="canvas-tool-menu-item" onClick={handleSelectMermaid}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="canvas-tool-menu-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" className="canvas-tool-menu-icon" style={{ color: '#f59e0b' }}>
           <path d="M12 2L15 9L22 9L16.5 13.5L18.5 20.5L12 16L5.5 20.5L7.5 13.5L2 9L9 9Z" />
         </svg>
         <span className="canvas-tool-menu-label">Mermaid to Doodle</span>
+      </div>
+
+      <div className="canvas-tool-menu-divider" />
+
+      {/* Live Data & Webhook Monitor */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onInsertLiveDataCard) {
+            onInsertLiveDataCard();
+          } else {
+            activeAPI?.insertLiveDataCard?.();
+          }
+        }}
+      >
+        <Radio size={15} className="canvas-tool-menu-icon" style={{ color: '#06b6d4' }} />
+        <span className="canvas-tool-menu-label">Live Data & Webhook Monitor</span>
+      </div>
+
+      {/* Reactive Variable Slider */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onInsertReactiveSlider) {
+            onInsertReactiveSlider();
+          } else {
+            activeAPI?.insertReactiveSlider?.();
+          }
+        }}
+      >
+        <Sliders size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">Reactive Variable Slider</span>
+      </div>
+
+      {/* Whiteboard Animation Studio */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenAnimationStudio) {
+            onOpenAnimationStudio();
+          } else if (typeof window !== 'undefined' && window.__doodleOpenAnimationStudio) {
+            window.__doodleOpenAnimationStudio();
+          }
+        }}
+      >
+        <Film size={15} className="canvas-tool-menu-icon" style={{ color: '#f43f5e' }} />
+        <span className="canvas-tool-menu-label">Whiteboard Animation Studio</span>
+      </div>
+
+      {/* 3D Knowledge Constellation */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenKnowledgeConstellation) {
+            onOpenKnowledgeConstellation();
+          } else if (typeof window !== 'undefined' && window.__doodleOpenKnowledgeConstellation) {
+            window.__doodleOpenKnowledgeConstellation();
+          }
+        }}
+      >
+        <Orbit size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">3D Knowledge Constellation</span>
+      </div>
+
+      {/* Napkin-to-Vector Scanner */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenNapkinScanner) {
+            onOpenNapkinScanner();
+          } else if (typeof window !== 'undefined' && window.__doodleOpenNapkinScanner) {
+            window.__doodleOpenNapkinScanner();
+          }
+        }}
+      >
+        <Camera size={15} className="canvas-tool-menu-icon" style={{ color: '#34d399' }} />
+        <span className="canvas-tool-menu-label">Napkin-to-Vector Scanner</span>
       </div>
     </div>
   );

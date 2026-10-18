@@ -144,17 +144,35 @@ function createWindow(initialFilePath = null) {
 
   // Load Vite Dev Server in development or built files in production
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  if (isDev) {
+  if (isDev && !process.env.SERVE_DIST) {
     win.loadURL('http://localhost:5173');
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  win.once('ready-to-show', () => {
-    win.show();
-    if (initialFilePath) {
-      win.webContents.send('file:open-path', initialFilePath);
+  const showWindow = () => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+      if (initialFilePath) {
+        win.webContents.send('file:open-path', initialFilePath);
+      }
     }
+  };
+
+  // Show as soon as DOM is ready to reveal instant HTML skeleton in sub-100ms
+  win.webContents.once('dom-ready', showWindow);
+  win.once('ready-to-show', showWindow);
+
+  // Failsafe: ensure window becomes visible even if ready-to-show is delayed or missed
+  const showFallbackTimer = setTimeout(showWindow, 800);
+
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Failed to load window content:', errorCode, errorDescription, validatedURL);
+    showWindow();
+  });
+
+  win.on('closed', () => {
+    clearTimeout(showFallbackTimer);
   });
 
   return win;

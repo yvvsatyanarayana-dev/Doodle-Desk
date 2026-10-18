@@ -107,12 +107,13 @@ export function sketchyRect(ctx, x, y, w, h, seed, roughness = 1) {
 }
 
 /**
- * Helper to draw a sketchy hand-drawn arc (used in rounded rectangle corners).
+ * Helper to draw a sketchy hand-drawn arc (used in rounded rectangle corners & cylinder bases).
  */
-function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, roughness = 1) {
+export function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, roughness = 1, ry = null) {
   if (r <= 0.5) return;
+  const actualRy = ry !== null ? ry : r;
   const passes = roughness >= 2 ? 2 : 1;
-  const steps = 8;
+  const steps = 12;
   const sweep = endAngle - startAngle;
 
   for (let pass = 0; pass < passes; pass++) {
@@ -121,9 +122,10 @@ function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, roughness = 
     ctx.beginPath();
     for (let i = 0; i <= steps; i++) {
       const a = startAngle + (i / steps) * sweep;
-      const jr = r + (rng() - 0.5) * jAmt;
-      const px = cx + Math.cos(a) * jr;
-      const py = cy + Math.sin(a) * jr;
+      const jrX = r + (rng() - 0.5) * jAmt;
+      const jrY = actualRy + (rng() - 0.5) * jAmt;
+      const px = cx + Math.cos(a) * jrX;
+      const py = cy + Math.sin(a) * jrY;
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -214,6 +216,133 @@ export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1)
     ctx.closePath();
     ctx.stroke();
   }
+}
+
+/**
+ * Generate an SVG path data string ('d') for a sketchy hand-drawn line.
+ * Matches sketchyLine with double-pass bowed curve and corner overshoots.
+ */
+export function generateSketchyLinePath(x1, y1, x2, y2, seed = 0, roughness = 1) {
+  if (roughness < 0.1) {
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5) return '';
+
+  const ux = dx / len;
+  const uy = dy / len;
+  const perpX = -uy;
+  const perpY = ux;
+
+  const maxOvershoot = roughness === 1 ? Math.min(len * 0.06, 3.8) : Math.min(len * 0.1, 7.2);
+  const maxBow = roughness === 1 ? Math.min(len * 0.028, 2.2) : Math.min(len * 0.05, 4.4);
+  const passes = roughness >= 2 ? 3 : 2;
+
+  let d = '';
+
+  for (let pass = 0; pass < passes; pass++) {
+    const rng = pseudoRandom(seed + pass * 17923 + 31);
+
+    const startOvershoot = (rng() * 0.7 + 0.3) * maxOvershoot * (pass === 0 ? 1 : 0.6);
+    const endOvershoot = (rng() * 0.7 + 0.3) * maxOvershoot * (pass === 0 ? 0.7 : 1);
+
+    const startJitter = (rng() - 0.5) * (roughness === 1 ? 0.7 : 1.6);
+    const endJitter = (rng() - 0.5) * (roughness === 1 ? 0.7 : 1.6);
+
+    const sx = x1 - ux * startOvershoot + perpX * startJitter;
+    const sy = y1 - uy * startOvershoot + perpY * startJitter;
+    const ex = x2 + ux * endOvershoot + perpX * endJitter;
+    const ey = y2 + uy * endOvershoot + perpY * endJitter;
+
+    const bowSign = pass % 2 === 0 ? 1 : -1;
+    const bowAmt = bowSign * (0.5 + rng() * 0.6) * maxBow;
+
+    const t1 = 0.33, t2 = 0.67;
+    const cp1x = sx + (ex - sx) * t1 + perpX * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
+    const cp1y = sy + (ey - sy) * t1 + perpY * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
+    const cp2x = sx + (ex - sx) * t2 + perpX * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
+    const cp2y = sy + (ey - sy) * t2 + perpY * (bowAmt * 0.95 + (rng() - 0.5) * (roughness * 0.5));
+
+    d += `M ${sx.toFixed(1)} ${sy.toFixed(1)} C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${ex.toFixed(1)} ${ey.toFixed(1)} `;
+  }
+
+  return d.trim();
+}
+
+/**
+ * Generate an SVG path data string ('d') for a sketchy rounded rectangle.
+ * Matches sketchyRoundedRect with organic corner arcs and jittered edges.
+ */
+export function generateSketchyRoundedRectPath(x, y, w, h, radius, seed = 0, roughness = 1) {
+  const r = Math.min(radius, Math.min(w, h) / 2);
+  if (r <= 0.5) {
+    return [
+      generateSketchyLinePath(x, y, x + w, y, seed, roughness),
+      generateSketchyLinePath(x + w, y, x + w, y + h, seed + 101, roughness),
+      generateSketchyLinePath(x + w, y + h, x, y + h, seed + 202, roughness),
+      generateSketchyLinePath(x, y + h, x, y, seed + 303, roughness),
+    ].join(' ');
+  }
+
+  if (roughness < 0.1) {
+    return `M ${x + r} ${y} L ${x + w - r} ${y} Q ${x + w} ${y} ${x + w} ${y + r} L ${x + w} ${y + h - r} Q ${x + w} ${y + h} ${x + w - r} ${y + h} L ${x + r} ${y + h} Q ${x} ${y + h} ${x} ${y + h - r} L ${x} ${y + r} Q ${x} ${y} ${x + r} ${y} Z`;
+  }
+
+  const passes = roughness >= 2 ? 2 : 1;
+  const steps = 8;
+  let d = '';
+
+  for (let pass = 0; pass < passes; pass++) {
+    const rng = pseudoRandom(seed + pass * 731);
+    const jAmt = roughness * 0.5;
+
+    d += `M ${(x + w - r).toFixed(1)} ${y.toFixed(1)} `;
+
+    // Corner 1: top-right arc (-PI/2 to 0)
+    for (let i = 1; i <= steps; i++) {
+      const a = -Math.PI / 2 + (i / steps) * (Math.PI / 2);
+      const jr = r + (rng() - 0.5) * jAmt;
+      d += `L ${(x + w - r + Math.cos(a) * jr).toFixed(1)} ${(y + r + Math.sin(a) * jr).toFixed(1)} `;
+    }
+
+    // Right edge
+    d += `L ${(x + w + (rng() - 0.5) * jAmt).toFixed(1)} ${(y + h - r).toFixed(1)} `;
+
+    // Corner 2: bottom-right arc (0 to PI/2)
+    for (let i = 1; i <= steps; i++) {
+      const a = (i / steps) * (Math.PI / 2);
+      const jr = r + (rng() - 0.5) * jAmt;
+      d += `L ${(x + w - r + Math.cos(a) * jr).toFixed(1)} ${(y + h - r + Math.sin(a) * jr).toFixed(1)} `;
+    }
+
+    // Bottom edge
+    d += `L ${(x + r).toFixed(1)} ${(y + h + (rng() - 0.5) * jAmt).toFixed(1)} `;
+
+    // Corner 3: bottom-left arc (PI/2 to PI)
+    for (let i = 1; i <= steps; i++) {
+      const a = Math.PI / 2 + (i / steps) * (Math.PI / 2);
+      const jr = r + (rng() - 0.5) * jAmt;
+      d += `L ${(x + r + Math.cos(a) * jr).toFixed(1)} ${(y + h - r + Math.sin(a) * jr).toFixed(1)} `;
+    }
+
+    // Left edge
+    d += `L ${(x + (rng() - 0.5) * jAmt).toFixed(1)} ${(y + r).toFixed(1)} `;
+
+    // Corner 4: top-left arc (PI to 3*PI/2)
+    for (let i = 1; i <= steps; i++) {
+      const a = Math.PI + (i / steps) * (Math.PI / 2);
+      const jr = r + (rng() - 0.5) * jAmt;
+      d += `L ${(x + r + Math.cos(a) * jr).toFixed(1)} ${(y + r + Math.sin(a) * jr).toFixed(1)} `;
+    }
+
+    // Top edge back to start
+    d += `L ${(x + w - r).toFixed(1)} ${(y + (rng() - 0.5) * jAmt).toFixed(1)} Z `;
+  }
+
+  return d.trim();
 }
 
 /**
@@ -444,4 +573,230 @@ export function crossHatchFill(ctx, paths, seed, cacheOwner = null) {
   const gap = Math.max(9, (ctx.lineWidth || 2) * 5);
   drawHachure(ctx, paths, seed, 1, cacheOwner, -Math.PI / 4, gap, 0.52);
   drawHachure(ctx, paths, seed + 500, 1, cacheOwner, Math.PI / 4, gap, 0.52);
+}
+
+// ── Polygon & Multi-Shape Handlers ──
+
+export function getTriangleVertices(x, y, w, h) {
+  const cx = x + w / 2;
+  return [
+    [cx, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+}
+
+export function getStarVertices(x, y, w, h, points = 5) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const outerRx = Math.abs(w) / 2;
+  const outerRy = Math.abs(h) / 2;
+  const innerRx = outerRx * 0.42;
+  const innerRy = outerRy * 0.42;
+  const total = points * 2;
+  const vertices = [];
+  const startAngle = -Math.PI / 2;
+
+  for (let i = 0; i < total; i++) {
+    const angle = startAngle + (i * Math.PI) / points;
+    const isOuter = i % 2 === 0;
+    const rx = isOuter ? outerRx : innerRx;
+    const ry = isOuter ? outerRy : innerRy;
+    vertices.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
+  }
+  return vertices;
+}
+
+export function getHexagonVertices(x, y, w, h) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const rx = Math.abs(w) / 2;
+  const ry = Math.abs(h) / 2;
+  const vertices = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (i * Math.PI) / 3;
+    vertices.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
+  }
+  return vertices;
+}
+
+export function getOctagonVertices(x, y, w, h) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const rx = Math.abs(w) / 2;
+  const ry = Math.abs(h) / 2;
+  const vertices = [];
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * Math.PI) / 4 + Math.PI / 8;
+    vertices.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
+  }
+  return vertices;
+}
+
+export function getParallelogramVertices(x, y, w, h) {
+  const skew = Math.min(w * 0.25, 28);
+  return [
+    [x + skew, y],
+    [x + w, y],
+    [x + w - skew, y + h],
+    [x, y + h],
+  ];
+}
+
+export function getCylinderPolygon(x, y, w, h) {
+  const rw = Math.max(0.1, Math.abs(w));
+  const rh = Math.max(0.1, Math.abs(h));
+  const lidH = Math.min(rh * 0.35, 34);
+  const rx = rw / 2;
+  const ry = lidH / 2;
+  const cx = x + rx;
+  const steps = 16;
+  const poly = [];
+
+  // Top lid (full ellipse)
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    poly.push([cx + Math.cos(a) * rx, y + ry + Math.sin(a) * ry]);
+  }
+  // Right side down
+  poly.push([x + rw, y + rh - ry]);
+  // Bottom half ellipse
+  for (let i = 0; i <= steps / 2; i++) {
+    const a = (i / (steps / 2)) * Math.PI;
+    poly.push([cx + Math.cos(a) * rx, y + rh - ry + Math.sin(a) * ry]);
+  }
+  // Left side up
+  poly.push([x, y + ry]);
+  return poly;
+}
+
+export function getCloudPolygon(x, y, w, h) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const rx = w / 2;
+  const ry = h / 2;
+  const steps = 24;
+  const poly = [];
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    // Radial puff modulation
+    const puff = 1 + 0.12 * Math.sin(a * 6);
+    poly.push([cx + Math.cos(a) * rx * puff, cy + Math.sin(a) * ry * puff]);
+  }
+  return poly;
+}
+
+/**
+ * Draw hand-drawn sketchy closed polygon.
+ */
+export function sketchyPolygon(ctx, vertices, seed, roughness = 1) {
+  if (!vertices || vertices.length < 2) return;
+  if (roughness < 0.1) {
+    ctx.beginPath();
+    ctx.moveTo(vertices[0][0], vertices[0][1]);
+    for (let i = 1; i < vertices.length; i++) {
+      ctx.lineTo(vertices[i][0], vertices[i][1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    return;
+  }
+  const len = vertices.length;
+  for (let i = 0; i < len; i++) {
+    const v0 = vertices[i];
+    const v1 = vertices[(i + 1) % len];
+    sketchyLine(ctx, v0[0], v0[1], v1[0], v1[1], seed + i * 101, roughness);
+  }
+}
+
+export function sketchyTriangle(ctx, x, y, w, h, seed, roughness = 1) {
+  const vertices = getTriangleVertices(x, y, w, h);
+  sketchyPolygon(ctx, vertices, seed, roughness);
+}
+
+export function sketchyStar(ctx, x, y, w, h, seed, roughness = 1, points = 5) {
+  const vertices = getStarVertices(x, y, w, h, points);
+  sketchyPolygon(ctx, vertices, seed, roughness);
+}
+
+export function sketchyHexagon(ctx, x, y, w, h, seed, roughness = 1) {
+  const vertices = getHexagonVertices(x, y, w, h);
+  sketchyPolygon(ctx, vertices, seed, roughness);
+}
+
+export function sketchyOctagon(ctx, x, y, w, h, seed, roughness = 1) {
+  const vertices = getOctagonVertices(x, y, w, h);
+  sketchyPolygon(ctx, vertices, seed, roughness);
+}
+
+export function sketchyParallelogram(ctx, x, y, w, h, seed, roughness = 1) {
+  const vertices = getParallelogramVertices(x, y, w, h);
+  sketchyPolygon(ctx, vertices, seed, roughness);
+}
+
+export function sketchyCapsule(ctx, x, y, w, h, seed, roughness = 1) {
+  const radius = Math.min(Math.abs(w), Math.abs(h)) / 2;
+  sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness);
+}
+
+/**
+ * Draw a clean, authentic sketchy Database Cylinder:
+ * 1. Top lid ellipse
+ * 2. Left vertical edge
+ * 3. Right vertical edge
+ * 4. Matching curved bottom arc
+ */
+export function sketchyCylinder(ctx, x, y, w, h, seed, roughness = 1) {
+  const rw = Math.max(0.1, Math.abs(w));
+  const rh = Math.max(0.1, Math.abs(h));
+  const lidH = Math.min(rh * 0.35, 34);
+  const rx = rw / 2;
+  const ry = lidH / 2;
+  const cx = x + rx;
+
+  // 1. Top lid ellipse
+  sketchyEllipse(ctx, cx, y + ry, rx, ry, seed, roughness);
+
+  // 2. Left vertical edge
+  sketchyLine(ctx, x, y + ry, x, y + rh - ry, seed + 101, roughness);
+
+  // 3. Right vertical edge
+  sketchyLine(ctx, x + rw, y + ry, x + rw, y + rh - ry, seed + 202, roughness);
+
+  // 4. Bottom curved arc (matching lower half of ellipse)
+  if (roughness < 0.1) {
+    ctx.beginPath();
+    ctx.ellipse(cx, y + rh - ry, rx, ry, 0, 0, Math.PI);
+    ctx.stroke();
+  } else {
+    drawSketchyArc(ctx, cx, y + rh - ry, rx, 0, Math.PI, seed + 303, roughness, ry);
+  }
+}
+
+/**
+ * Draw a sketchy Cloud shape with perimeter puffy arcs.
+ */
+export function sketchyCloud(ctx, x, y, w, h, seed, roughness = 1) {
+  const lobes = 7;
+  const rx = Math.abs(w) / 2;
+  const ry = Math.abs(h) / 2;
+  const cx = x + rx;
+  const cy = y + ry;
+
+  for (let i = 0; i < lobes; i++) {
+    const a1 = (i / lobes) * Math.PI * 2;
+    const a2 = ((i + 1) / lobes) * Math.PI * 2;
+    const lobeAngle = (a1 + a2) / 2;
+    const lobeCx = cx + Math.cos(lobeAngle) * (rx * 0.72);
+    const lobeCy = cy + Math.sin(lobeAngle) * (ry * 0.72);
+    const lobeR = (rx + ry) / (lobes * 0.85);
+
+    if (roughness < 0.1) {
+      ctx.beginPath();
+      ctx.arc(lobeCx, lobeCy, lobeR, a1 - 0.2, a2 + 0.2);
+      ctx.stroke();
+    } else {
+      drawSketchyArc(ctx, lobeCx, lobeCy, lobeR, a1 - 0.2, a2 + 0.2, seed + i * 83, roughness);
+    }
+  }
 }

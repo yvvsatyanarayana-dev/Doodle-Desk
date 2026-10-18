@@ -6,7 +6,7 @@ const { createWindow, getAllWindows, getFocusedWindow, setIsQuitting } = require
 const { setupMenu, rebuildMenu } = require('./menu');
 const { getSettings, getSetting, setSetting, resetSettings, addRecentFile, getRecentFiles, clearRecentFiles } = require('./store');
 const { isSupportedFile, parseFilePathFromArgv, queueFileToOpen, getQueuedFiles, registerProtocol } = require('./fileAssociation');
-const { setupAutoUpdater, checkUpdate } = require('./updater');
+const { setupAutoUpdater, checkUpdate, getLastStatus, quitAndInstall } = require('./updater');
 
 // Process-level crash & rejection prevention
 process.on('uncaughtException', (err) => {
@@ -146,6 +146,17 @@ app.on('open-url', (event, url) => {
 });
 
 app.whenReady().then(() => {
+  // 1. Instantly spawn the primary window to minimize perceived startup time
+  const initialFiles = [...getQueuedFiles(), ...parseFilePathFromArgv(process.argv)];
+  if (initialFiles.length > 0) {
+    for (const file of initialFiles) {
+      createWindow(file);
+    }
+  } else {
+    createWindow();
+  }
+
+  // 2. Initialize protocols, menus, and background services in parallel
   registerProtocol();
   try {
     getDoodleVaultPath();
@@ -230,16 +241,6 @@ app.whenReady().then(() => {
     session.defaultSession.setSpellCheckerEnabled(Boolean(savedSpellcheck));
   } catch (e) {
     console.warn('Failed to configure spellchecker:', e);
-  }
-
-  // Check initial argv for files
-  const initialFiles = [...getQueuedFiles(), ...parseFilePathFromArgv(process.argv)];
-  if (initialFiles.length > 0) {
-    for (const file of initialFiles) {
-      createWindow(file);
-    }
-  } else {
-    createWindow();
   }
 
   // Silent update check after launch
@@ -1000,7 +1001,15 @@ ipcMain.handle('store:clear-recents', () => {
 // Updater IPC
 ipcMain.handle('updater:check', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  checkUpdate(true, win);
+  return checkUpdate(true, win);
+});
+
+ipcMain.handle('updater:get-status', () => {
+  return getLastStatus();
+});
+
+ipcMain.handle('updater:quit-and-install', () => {
+  quitAndInstall();
 });
 
 // Native Notification

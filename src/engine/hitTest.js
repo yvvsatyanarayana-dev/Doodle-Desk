@@ -5,6 +5,10 @@ import {
 } from './math/geometry.js';
 import { ELEMENT_TYPES, STROKE_WIDTHS } from './elements.js';
 import { getTextElementBounds } from './renderer/render.js';
+import {
+  getTriangleVertices, getStarVertices, getHexagonVertices, getOctagonVertices,
+  getParallelogramVertices, getCylinderPolygon, getCloudPolygon
+} from './renderer/sketchy.js';
 
 const HIT_TOLERANCE = 8; // pixels
 
@@ -82,6 +86,48 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
       }
       if (el.backgroundColor && el.backgroundColor !== 'transparent') {
         return polygonContainsPoint(corners, lx, ly);
+      }
+      return false;
+    }
+
+    case ELEMENT_TYPES.TRIANGLE:
+    case ELEMENT_TYPES.STAR:
+    case ELEMENT_TYPES.HEXAGON:
+    case ELEMENT_TYPES.OCTAGON:
+    case ELEMENT_TYPES.PARALLELOGRAM:
+    case ELEMENT_TYPES.CYLINDER:
+    case ELEMENT_TYPES.CLOUD: {
+      let poly;
+      if (el.type === ELEMENT_TYPES.TRIANGLE) poly = getTriangleVertices(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.STAR) poly = getStarVertices(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.HEXAGON) poly = getHexagonVertices(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.OCTAGON) poly = getOctagonVertices(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.PARALLELOGRAM) poly = getParallelogramVertices(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.CYLINDER) poly = getCylinderPolygon(x, y, w, h);
+      else if (el.type === ELEMENT_TYPES.CLOUD) poly = getCloudPolygon(x, y, w, h);
+
+      if (poly) {
+        for (let i = 0; i < poly.length; i++) {
+          const next = (i + 1) % poly.length;
+          if (distanceToSegment(lx, ly, poly[i][0], poly[i][1], poly[next][0], poly[next][1]) <= tol) {
+            return true;
+          }
+        }
+        if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+          return polygonContainsPoint(poly, lx, ly);
+        }
+      }
+      return false;
+    }
+
+    case ELEMENT_TYPES.CAPSULE: {
+      const onLeft = Math.abs(lx - x) <= tol && ly >= y && ly <= y + h;
+      const onRight = Math.abs(lx - (x + w)) <= tol && ly >= y && ly <= y + h;
+      const onTop = Math.abs(ly - y) <= tol && lx >= x && lx <= x + w;
+      const onBottom = Math.abs(ly - (y + h)) <= tol && lx >= x && lx <= x + w;
+      if (onLeft || onRight || onTop || onBottom) return true;
+      if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+        return isPointInRect(lx, ly, x, y, w, h);
       }
       return false;
     }

@@ -50,13 +50,15 @@ win:
 
 nsis:
   include: build/uninstall.nsh
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
   perMachine: false
+  allowElevation: false
   deleteAppDataOnUninstall: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Doodle Desk
+  runAfterFinish: true
+  differentialPackage: false
 
 mac:
   target:

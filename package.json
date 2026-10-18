@@ -1,7 +1,7 @@
 {
   "name": "doodle-desk",
   "productName": "Doodle Desk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Production-quality offline desktop diagramming editor",
   "main": "electron/main.js",
   "author": "Satyanarayana",

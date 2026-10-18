@@ -26,8 +26,16 @@ export default defineConfig({
     cssMinify: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          lucide: ['lucide-react'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
+            return 'react-vendor';
+          }
+          if (id.includes('node_modules/peerjs')) {
+            return 'peerjs';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'lucide';
+          }
         },
       },
     },

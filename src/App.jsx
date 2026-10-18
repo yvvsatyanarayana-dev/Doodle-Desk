@@ -35,6 +35,14 @@ const LibrarySidebar = lazy(() => import('./components/LibrarySidebar').then((mo
 const BucketFillOverlay = lazy(() => import('./components/BucketFillOverlay').then((module) => ({ default: module.BucketFillOverlay })));
 const LassoSelectionOverlay = lazy(() => import('./components/LassoSelectionOverlay').then((module) => ({ default: module.LassoSelectionOverlay })));
 const PrecisionRulerOverlay = lazy(() => import('./components/PrecisionRulerOverlay').then((module) => ({ default: module.PrecisionRulerOverlay })));
+const WireframeToCodeModal = lazy(() => import('./components/WireframeToCodeModal').then((module) => ({ default: module.WireframeToCodeModal })));
+const InsertDocumentModal = lazy(() => import('./components/InsertDocumentModal').then((module) => ({ default: module.InsertDocumentModal })));
+const AmbientSoundStudio = lazy(() => import('./components/AmbientSoundStudio').then((module) => ({ default: module.AmbientSoundStudio })));
+import { InteractiveTableFlashcardsModal } from './components/InteractiveTableFlashcardsModal';
+import { WhiteboardAnimationStudio } from './components/WhiteboardAnimationStudio';
+import { NeuralKnowledgeConstellationModal } from './components/NeuralKnowledgeConstellationModal';
+import { NapkinToVectorScannerModal } from './components/NapkinToVectorScannerModal';
+import { ambientAudio, playChime } from './utils/ambientAudioEngine';
 import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
@@ -42,6 +50,7 @@ import { WelcomeScreen } from './engine/WelcomeScreen.jsx';
 import { CanvasExtraToolsDropdown } from './components/CanvasExtraToolsDropdown';
 import { CanvasTopRightSettings } from './components/CanvasTopRightSettings';
 import { CustomLaserPointer } from './components/CustomLaserPointer';
+import { UpdateReceiverToast } from './components/UpdateReceiverToast';
 import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
 import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
 
@@ -107,6 +116,75 @@ export default function App() {
   const [walkthroughPath, setWalkthroughPath] = useState([]);
   const [, setCanvasSelection] = useState({});
   const [isFocusModeActive, setIsFocusModeActive] = useState(false);
+
+  // Powerhouse features: Wireframe-to-code, Document Cards, Ambient Soundscapes & Pomodoro
+  const [isWireframeToCodeOpen, setIsWireframeToCodeOpen] = useState(false);
+  const [isInsertDocumentOpen, setIsInsertDocumentOpen] = useState(false);
+  const [isSoundStudioOpen, setIsSoundStudioOpen] = useState(false);
+  const [activeFlashcardTable, setActiveFlashcardTable] = useState(null);
+  const [isAnimationStudioOpen, setIsAnimationStudioOpen] = useState(false);
+  const [isKnowledgeConstellationOpen, setIsKnowledgeConstellationOpen] = useState(false);
+  const [isNapkinScannerOpen, setIsNapkinScannerOpen] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [pomodoroState, setPomodoroState] = useState({
+    isRunning: false,
+    timeLeft: 1500,
+    mode: 'focus',
+    formattedTime: '25:00',
+  });
+
+  // Keep audio playing status synchronized
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIsAudioPlaying(typeof ambientAudio?.isPlaying === 'function' ? ambientAudio.isPlaying() : false);
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Pomodoro countdown timer tick
+  useEffect(() => {
+    if (!pomodoroState.isRunning) return undefined;
+    const interval = setInterval(() => {
+      setPomodoroState((prev) => {
+        if (!prev.isRunning) return prev;
+        if (prev.timeLeft <= 1) {
+          playChime();
+          const nextMode = prev.mode === 'focus' ? 'break' : 'focus';
+          const nextDuration = nextMode === 'break' ? 300 : 1500;
+          const mins = Math.floor(nextDuration / 60);
+          const secs = nextDuration % 60;
+          return {
+            isRunning: false,
+            mode: nextMode,
+            timeLeft: nextDuration,
+            formattedTime: `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
+          };
+        }
+        const nextTime = prev.timeLeft - 1;
+        const mins = Math.floor(nextTime / 60);
+        const secs = nextTime % 60;
+        return {
+          ...prev,
+          timeLeft: nextTime,
+          formattedTime: `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
+        };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pomodoroState.isRunning]);
+
+  const handlePomodoroAction = useCallback((action) => {
+    if (action === 'toggle') {
+      setPomodoroState((prev) => ({ ...prev, isRunning: !prev.isRunning }));
+    } else if (action === 'reset') {
+      setPomodoroState({
+        isRunning: false,
+        timeLeft: 1500,
+        mode: 'focus',
+        formattedTime: '25:00',
+      });
+    }
+  }, []);
 
   const showToast = useCallback((message) => {
     setToastMessage(message);
@@ -199,6 +277,45 @@ export default function App() {
     setIsCommandPaletteOpen(false);
     setIsBoardSearchOpen(true);
   }, []);
+
+  const handleInsertDocument = useCallback((doc) => {
+    if (!doodleAPI) return;
+    const currentElements = doodleAPI.getSceneElements?.() || [];
+    const appState = doodleAPI.getAppState?.() || {};
+    const zoom = appState.zoom?.value || 1;
+    const scrollX = appState.scrollX || 0;
+    const scrollY = appState.scrollY || 0;
+    const spawnX = Math.round(-scrollX + (window.innerWidth / (2 * zoom)) - 240);
+    const spawnY = Math.round(-scrollY + (window.innerHeight / (2 * zoom)) - 260);
+
+    const docElement = {
+      id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: spawnX,
+      y: spawnY,
+      width: 480,
+      height: 520,
+      strokeColor: '#6366f1',
+      backgroundColor: effectiveTheme === 'dark' ? '#18181b' : '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      docType: doc.docType || 'markdown',
+      title: doc.title || 'Document Card',
+      markdownText: doc.markdownText || '',
+      pdfDataUrl: doc.pdfDataUrl || '',
+      link: '',
+      isDeleted: false,
+    };
+
+    doodleAPI.updateScene?.({
+      elements: [...currentElements, docElement],
+      commitToHistory: true,
+    });
+    showToast(`Added ${doc.docType === 'pdf' ? 'PDF' : 'Markdown'} Document Card`);
+  }, [doodleAPI, effectiveTheme, showToast]);
 
   const navigateToBoardSearchResult = useCallback((result) => {
     if (!doodleAPI) return;
@@ -456,6 +573,17 @@ export default function App() {
     window.__doodleIsLassoActive = isLassoActive;
     window.__doodleToggleLasso = handleToggleLasso;
     window.__doodleOpenHelp = () => setIsHelpModalOpen(true);
+    window.__openTableFlashcards = (table) => setActiveFlashcardTable(table);
+    window.__doodleOpenAnimationStudio = () => setIsAnimationStudioOpen(true);
+    window.__doodleOpenKnowledgeConstellation = () => setIsKnowledgeConstellationOpen(true);
+    window.__doodleOpenNapkinScanner = () => setIsNapkinScannerOpen(true);
+
+    return () => {
+      delete window.__openTableFlashcards;
+      delete window.__doodleOpenAnimationStudio;
+      delete window.__doodleOpenKnowledgeConstellation;
+      delete window.__doodleOpenNapkinScanner;
+    };
   }, [
     isDrawToShapeActive,
     handleToggleDrawToShape,
@@ -1307,6 +1435,11 @@ export default function App() {
         onOpenLiveChat={() => setIsLiveChatOpen(true)}
         sendChatMessage={sendCollabChatMessage}
         onFollowCollaborator={handleFollowCollaborator}
+        onExportCode={() => setIsWireframeToCodeOpen(true)}
+        onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+        isSoundStudioOpen={isSoundStudioOpen}
+        isAudioPlaying={isAudioPlaying}
+        pomodoroState={pomodoroState}
       />
 
       {/* Drag & Drop Visual Indicator */}
@@ -1357,6 +1490,10 @@ export default function App() {
             switchFile(targetFileId, targetWorkspaceId);
           }}
           canvasStyle={canvasStyle}
+          onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+          isSoundStudioOpen={isSoundStudioOpen}
+          isAudioPlaying={isAudioPlaying}
+          pomodoroState={pomodoroState}
           initialData={{
             elements: activeFile?.elements || [],
             files: activeFile?.binaryFiles || {},
@@ -1418,6 +1555,33 @@ export default function App() {
         onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
         isFocusModeActive={isFocusModeActive}
+        onOpenInsertDocument={() => setIsInsertDocumentOpen(true)}
+        onOpenWireframeToCode={() => setIsWireframeToCodeOpen(true)}
+        onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+        onInsertCodeScratchpad={() => doodleAPI?.insertCodeScratchpadCard?.()}
+        onInsertMathGraph={() => doodleAPI?.insertMathGraphCard?.()}
+        onInsertInteractiveTable={() => doodleAPI?.insertInteractiveTable?.()}
+        onOpenFlashcards={() => {
+          const elements = doodleAPI?.getSceneElements?.() || [];
+          const tableEl = elements.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
+          if (tableEl) {
+            setActiveFlashcardTable(tableEl);
+          } else {
+            doodleAPI?.insertInteractiveTable?.();
+            setTimeout(() => {
+              const updated = doodleAPI?.getSceneElements?.() || [];
+              const newTable = updated.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
+              if (newTable) setActiveFlashcardTable(newTable);
+            }, 120);
+          }
+        }}
+        onInsertLiveDataCard={() => doodleAPI?.insertLiveDataCard?.()}
+        onInsertReactiveSlider={() => doodleAPI?.insertReactiveSlider?.()}
+        onOpenAnimationStudio={() => setIsAnimationStudioOpen(true)}
+        onOpenKnowledgeConstellation={() => setIsKnowledgeConstellationOpen(true)}
+        onOpenNapkinScanner={() => setIsNapkinScannerOpen(true)}
+        onTogglePhysicsPlayground={() => doodleAPI?.togglePhysicsPlayground?.()}
+        onToggleIsometric3D={() => doodleAPI?.toggleIsometric3D?.()}
       />
 
       {isLaserActive && (
@@ -1488,6 +1652,15 @@ export default function App() {
         onOpenBoardSearch={openBoardSearch}
         onOpenPrototypeLinks={() => setIsPrototypeLinksOpen(true)}
         onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
+        onOpenWireframeToCode={() => setIsWireframeToCodeOpen(true)}
+        onOpenInsertDocument={() => setIsInsertDocumentOpen(true)}
+        onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+        onInsertCodeScratchpad={() => doodleAPI?.insertCodeScratchpadCard?.()}
+        onInsertMathGraph={() => doodleAPI?.insertMathGraphCard?.()}
+        onInsertInteractiveTable={() => doodleAPI?.insertInteractiveTable?.()}
+        onOpenTableFlashcards={(table) => setActiveFlashcardTable(table)}
+        onTogglePhysicsPlayground={() => doodleAPI?.togglePhysicsPlayground?.()}
+        onToggleIsometric3D={() => doodleAPI?.toggleIsometric3D?.()}
         onOpenWorkspaces={() => {
           saveActiveWorkspaceSnapshot(true);
           setIsWorkspaceModalOpen(true);
@@ -1586,6 +1759,9 @@ export default function App() {
           )}
         </div>
       )}
+
+      {/* Software Update Receiver Toast & Notifications */}
+      <UpdateReceiverToast />
 
       {/* Preferences Modal */}
       {isPreferencesOpen && <Suspense fallback={null}><PreferencesModal
@@ -1840,6 +2016,84 @@ export default function App() {
             theme={effectiveTheme}
           />
         </Suspense>
+      )}
+
+      {/* Wireframe to React & Tailwind Code Modal */}
+      {isWireframeToCodeOpen && (
+        <Suspense fallback={null}>
+          <WireframeToCodeModal
+            isOpen={isWireframeToCodeOpen}
+            onClose={() => setIsWireframeToCodeOpen(false)}
+            selectedElements={doodleAPI?.getSelectedElements?.() || []}
+            allElements={doodleAPI?.getSceneElements?.() || []}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {/* Insert Document Modal (Markdown / PDF) */}
+      {isInsertDocumentOpen && (
+        <Suspense fallback={null}>
+          <InsertDocumentModal
+            isOpen={isInsertDocumentOpen}
+            onClose={() => setIsInsertDocumentOpen(false)}
+            onInsertDocument={handleInsertDocument}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {/* Focus & Ambient Soundscapes Studio */}
+      {isSoundStudioOpen && (
+        <Suspense fallback={null}>
+          <AmbientSoundStudio
+            isOpen={isSoundStudioOpen}
+            onClose={() => setIsSoundStudioOpen(false)}
+            theme={effectiveTheme}
+            pomodoroState={pomodoroState}
+            onPomodoroTick={handlePomodoroAction}
+          />
+        </Suspense>
+      )}
+
+      {/* Interactive Table Flashcards Practice Environment */}
+      {activeFlashcardTable && (
+        <InteractiveTableFlashcardsModal
+          isOpen={Boolean(activeFlashcardTable)}
+          onClose={() => setActiveFlashcardTable(null)}
+          tableElement={activeFlashcardTable}
+          isDark={effectiveTheme === 'dark'}
+        />
+      )}
+
+      {/* Whiteboard Animation & Storyboard Studio */}
+      {isAnimationStudioOpen && (
+        <WhiteboardAnimationStudio
+          isOpen={isAnimationStudioOpen}
+          onClose={() => setIsAnimationStudioOpen(false)}
+          doodleAPI={doodleAPI}
+          isDark={effectiveTheme === 'dark'}
+        />
+      )}
+
+      {/* 3D Neural Knowledge Constellation & Backlinks */}
+      {isKnowledgeConstellationOpen && (
+        <NeuralKnowledgeConstellationModal
+          isOpen={isKnowledgeConstellationOpen}
+          onClose={() => setIsKnowledgeConstellationOpen(false)}
+          doodleAPI={doodleAPI}
+          isDark={effectiveTheme === 'dark'}
+        />
+      )}
+
+      {/* Napkin & Sketch-to-Vector Camera Scanner */}
+      {isNapkinScannerOpen && (
+        <NapkinToVectorScannerModal
+          isOpen={isNapkinScannerOpen}
+          onClose={() => setIsNapkinScannerOpen(false)}
+          doodleAPI={doodleAPI}
+          isDark={effectiveTheme === 'dark'}
+        />
       )}
 
       {/* Global Themed Alert & Dialog */}

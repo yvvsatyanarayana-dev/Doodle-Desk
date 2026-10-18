@@ -1,4 +1,4 @@
-﻿/* Authentic Doodle Desk Hand-Drawn Fonts */
+/* Authentic Doodle Desk Hand-Drawn Fonts */
 @font-face {
   font-family: 'Doodlefont';
   src: url('/fonts/Doodlefont/Doodlefont-Regular.woff2') format('woff2'),
@@ -10887,4 +10887,539 @@ label.force-tool-unselected,
     max-height: 220px;
     overflow-y: auto;
   }
+}
+
+/* ==========================================================
+   WIREFRAME CODE GENERATOR THEMED SCROLLBARS & MODAL STYLING
+   ========================================================== */
+.wireframe-code-scroll::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.wireframe-code-scroll::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.wireframe-code-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 999px !important;
+}
+
+.wireframe-code-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38) !important;
+}
+
+[data-theme='light'] .wireframe-code-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.22) !important;
+}
+
+[data-theme='light'] .wireframe-code-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.38) !important;
+}
+
+/* Wireframe to Code Workstation Dialog */
+.wireframe-to-code-dialog {
+  max-width: 1040px !important;
+  width: min(1040px, 94vw) !important;
+  height: min(780px, 90vh) !important;
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  padding: 20px 24px !important;
+  color: #f4f4f5 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+[data-theme='light'] .wireframe-to-code-dialog {
+  background: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+  color: #18181b !important;
+}
+
+/* Topbar soundscapes icon & buttons in Light Theme */
+[data-theme='light'] .studio-soundscapes-btn,
+.theme--light .studio-soundscapes-btn,
+[data-theme='light'] .studio-icon-btn,
+.theme--light .studio-icon-btn {
+  color: #3f3f46 !important;
+}
+
+[data-theme='light'] .studio-soundscapes-btn:hover,
+.theme--light .studio-soundscapes-btn:hover,
+[data-theme='light'] .studio-icon-btn:hover,
+.theme--light .studio-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #09090b !important;
+}
+
+[data-theme='light'] .studio-soundscapes-btn.active,
+.theme--light .studio-soundscapes-btn.active,
+[data-theme='light'] .studio-icon-btn.active,
+.theme--light .studio-icon-btn.active {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: #09090b !important;
+}
+
+/* ==========================================================
+   PHYSICS PLAYGROUND DOCK (CONCISE & APP THEME MATCHING)
+   ========================================================== */
+.physics-playground-dock,
+.physics-playground-dock * {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.physics-playground-dock {
+  position: fixed !important;
+  bottom: 22px !important;
+  top: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 100002 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 3px 6px !important;
+  background: #141417 !important;
+  border: 1px solid #27272a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  color: #e4e4e7 !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+}
+
+[data-theme='light'] .physics-playground-dock,
+.theme--light .physics-playground-dock {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  color: #18181b !important;
+}
+
+.physics-btn {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: transparent !important;
+  color: #a1a1aa !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+}
+
+.physics-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .physics-btn:hover,
+.theme--light .physics-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
+}
+
+.physics-btn.is-active {
+  background: rgba(99, 102, 241, 0.2) !important;
+  color: #818cf8 !important;
+  font-weight: 600 !important;
+}
+
+[data-theme='light'] .physics-btn.is-active,
+.theme--light .physics-btn.is-active {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: #4f46e5 !important;
+  font-weight: 600 !important;
+}
+
+.physics-dock-divider {
+  width: 1px !important;
+  height: 16px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  margin: 0 2px !important;
+  flex-shrink: 0 !important;
+}
+
+[data-theme='light'] .physics-dock-divider,
+.theme--light .physics-dock-divider {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ==========================================================
+   2.5D ISOMETRIC 3D ARCHITECTURE VIEW STYLING
+   ========================================================== */
+.isometric-3d-overlay,
+.isometric-3d-overlay * {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.isometric-3d-overlay {
+  animation: isometricFadeIn 0.25s ease-out;
+}
+
+@keyframes isometricFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+
+
+
+/* Canvas Extra Tools Dropdown scrollbar suppression */
+.canvas-extra-tools-popover::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Interactive Table Card (Notion & Obsidian Style) */
+.interactive-table-card {
+  box-sizing: border-box;
+}
+
+.table-row-gutter:hover span {
+  display: none !important;
+}
+
+.table-row-gutter:hover button {
+  display: flex !important;
+}
+
+/* Live Data & Next-Gen Powerhouse Canvas Tools */
+.pulse-anim {
+  animation: pulseBeacon 1.8s infinite ease-in-out;
+}
+
+@keyframes pulseBeacon {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+.spin-anim {
+  animation: spinSlow 0.9s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Napkin & Sketch-to-Vector Scanner Theme-Aligned Scrollbar */
+.napkin-scanner-scroll {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent !important;
+}
+
+.napkin-scanner-scroll::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.napkin-scanner-scroll::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.napkin-scanner-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-radius: 9999px !important;
+}
+
+.napkin-scanner-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45) !important;
+}
+
+[data-theme='light'] .napkin-scanner-scroll,
+.theme--light .napkin-scanner-scroll {
+  scrollbar-color: rgba(0, 0, 0, 0.28) transparent !important;
+}
+
+[data-theme='light'] .napkin-scanner-scroll::-webkit-scrollbar-thumb,
+.theme--light .napkin-scanner-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-theme='light'] .napkin-scanner-scroll::-webkit-scrollbar-thumb:hover,
+.theme--light .napkin-scanner-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.48) !important;
+}
+
+
+/* ==========================================================================
+   Doodle Desk Update Receiver Toast & Preferences
+   ========================================================================== */
+
+.doodle-update-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  max-width: 380px;
+  min-width: 300px;
+  background: rgba(18, 18, 24, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 12px 14px;
+  animation: slideInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  color: #f4f5f8;
+}
+
+[data-theme='light'] .doodle-update-toast,
+.theme--light .doodle-update-toast {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  color: #09090b;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.update-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-toast-content.column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.update-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-toast-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a1a1aa;
+}
+
+[data-theme='light'] .update-toast-icon,
+.theme--light .update-toast-icon {
+  background: rgba(0, 0, 0, 0.05);
+  color: #71717a;
+}
+
+.update-toast-icon.spin {
+  animation: spinSlow 2s linear infinite;
+  color: #818cf8;
+}
+
+.update-toast-icon.highlight {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.update-toast-icon.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.update-toast-icon.error {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.update-toast-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-toast-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-toast-desc {
+  font-size: 0.72rem;
+  color: #a1a1aa;
+  line-height: 1.35;
+}
+
+[data-theme='light'] .update-toast-desc,
+.theme--light .update-toast-desc {
+  color: #71717a;
+}
+
+.update-toast-close {
+  background: transparent;
+  border: none;
+  color: #71717a;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.update-toast-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+[data-theme='light'] .update-toast-close:hover,
+.theme--light .update-toast-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000000;
+}
+
+.update-toast-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+[data-theme='light'] .update-toast-progress-track,
+.theme--light .update-toast-progress-track {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.update-toast-progress-bar {
+  height: 100%;
+  background: #6366f1;
+  border-radius: 9999px;
+  transition: width 0.2s ease;
+}
+
+.update-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.update-toast-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.update-toast-btn.primary {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #059669;
+}
+
+.update-toast-btn.primary:hover {
+  background: #059669;
+}
+
+.update-toast-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e4e4e7;
+}
+
+[data-theme='light'] .update-toast-btn.secondary,
+.theme--light .update-toast-btn.secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #27272a;
+}
+
+.update-toast-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Preferences update section */
+.pref-update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 9999px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  color: #818cf8;
+}
+
+.pref-update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: var(--bg-card, #18181b);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pref-update-btn:hover {
+  border-color: #818cf8;
+  color: #818cf8;
+}
+
+.pref-update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

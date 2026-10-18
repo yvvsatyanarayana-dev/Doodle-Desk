@@ -8,12 +8,14 @@ import {
   Check,
   Globe,
   Route,
+  Sparkles,
 } from 'lucide-react';
 
 export default function ExportDropdown({
   onExport,
   onExportPdf,
   onCopyToClipboard,
+  onExportCode,
   onClose,
   theme = 'dark',
   isDark = theme !== 'light',
@@ -64,9 +66,9 @@ export default function ExportDropdown({
     fontSize: '10px',
     fontWeight: 700,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
     color: T.textMuted,
-    padding: '4px 8px 2px',
+    padding: '5px 8px 3px',
   };
 
   const itemBtnStyle = {
@@ -86,18 +88,37 @@ export default function ExportDropdown({
     transition: 'background 0.12s ease',
   };
 
-  const badgeStyle = {
+  const badgeBaseStyle = {
     fontSize: '10px',
     fontWeight: 600,
-    color: T.textMuted,
-    background: isLightTheme ? '#f1f5f9' : 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid ' + (isLightTheme ? '#e2e8f0' : 'rgba(255, 255, 255, 0.08)'),
     padding: '2px 6px',
     borderRadius: '4px',
     letterSpacing: '0.03em',
+    borderWidth: '1px',
+    borderStyle: 'solid',
   };
 
+  // Helper to generate format-specific colorful badges
+  const getBadgeStyle = (colorHex) => ({
+    ...badgeBaseStyle,
+    color: colorHex,
+    background: isLightTheme ? `${colorHex}14` : `${colorHex}1e`,
+    borderColor: isLightTheme ? `${colorHex}35` : `${colorHex}45`,
+  });
+
   const hoverBg = isLightTheme ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.06)';
+
+  // Distinct theme color tokens for each format
+  const colors = {
+    png: isLightTheme ? '#059669' : '#10b981', // Emerald
+    svg: isLightTheme ? '#d97706' : '#f59e0b', // Amber
+    pdf: isLightTheme ? '#dc2626' : '#f87171', // Rose / Red
+    scenario: isLightTheme ? '#0891b2' : '#22d3ee', // Cyan
+    player: isLightTheme ? '#2563eb' : '#60a5fa', // Blue
+    jsx: isLightTheme ? '#7c3aed' : '#c084fc', // Purple / Violet
+    copyPng: isLightTheme ? '#0d9488' : '#2dd4bf', // Teal
+    copySvg: isLightTheme ? '#ea580c' : '#fb923c', // Orange
+  };
 
   return (
     <div
@@ -106,7 +127,7 @@ export default function ExportDropdown({
         border: '1px solid ' + T.border,
         borderRadius: '14px',
         boxShadow: T.shadow,
-        width: '250px',
+        width: '264px',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -151,10 +172,11 @@ export default function ExportDropdown({
       </div>
 
       {/* ── Body ───────────────────────────── */}
-      <div style={{ padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>
         {/* Section 1: Files */}
         <div style={sectionLabel}>Save As File</div>
 
+        {/* 1. PNG Image */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -163,12 +185,13 @@ export default function ExportDropdown({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <ImageIcon size={14} style={{ color: T.textSecondary }} />
+            <ImageIcon size={14} style={{ color: colors.png }} />
             <span>Export PNG Image...</span>
           </div>
-          <span style={badgeStyle}>PNG</span>
+          <span style={getBadgeStyle(colors.png)}>PNG</span>
         </button>
 
+        {/* 2. SVG Vector */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -177,12 +200,13 @@ export default function ExportDropdown({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Code size={14} style={{ color: T.textSecondary }} />
+            <Code size={14} style={{ color: colors.svg }} />
             <span>Export SVG Vector...</span>
           </div>
-          <span style={badgeStyle}>SVG</span>
+          <span style={getBadgeStyle(colors.svg)}>SVG</span>
         </button>
 
+        {/* 3. PDF Document */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -191,12 +215,13 @@ export default function ExportDropdown({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <FileText size={14} style={{ color: T.textSecondary }} />
+            <FileText size={14} style={{ color: colors.pdf }} />
             <span>Export PDF Document...</span>
           </div>
-          <span style={badgeStyle}>PDF</span>
+          <span style={getBadgeStyle(colors.pdf)}>PDF</span>
         </button>
 
+        {/* 4. Playable Scenario Walkthrough */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -206,12 +231,13 @@ export default function ExportDropdown({
           title="Export a self-contained, choice-driven walkthrough of your framed prototype"
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Route size={14} style={{ color: '#888888' }} />
+            <Route size={14} style={{ color: colors.scenario }} />
             <span>Playable Scenario Walkthrough...</span>
           </div>
-          <span style={{ ...badgeStyle, color: '#888888', borderColor: 'rgba(129, 140, 248, 0.3)' }}>HTML</span>
+          <span style={getBadgeStyle(colors.scenario)}>HTML</span>
         </button>
 
+        {/* 5. Interactive Presentation Player */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -221,10 +247,26 @@ export default function ExportDropdown({
           title="Export a self-contained presentation player that works in any browser"
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Globe size={14} style={{ color: T.textSecondary }} />
+            <Globe size={14} style={{ color: colors.player }} />
             <span>Interactive Presentation Player...</span>
           </div>
-          <span style={badgeStyle}>HTML</span>
+          <span style={getBadgeStyle(colors.player)}>HTML</span>
+        </button>
+
+        {/* 6. React & Tailwind Component */}
+        <button
+          type="button"
+          style={itemBtnStyle}
+          onClick={() => handleExportFile(() => onExportCode?.())}
+          onMouseEnter={(e) => (e.currentTarget.style.background = hoverBg)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title="Synthesize clean React + Tailwind CSS code from wireframe sketches"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Sparkles size={14} style={{ color: colors.jsx }} />
+            <span>React & Tailwind Component...</span>
+          </div>
+          <span style={getBadgeStyle(colors.jsx)}>JSX</span>
         </button>
 
         {/* Divider */}
@@ -239,6 +281,7 @@ export default function ExportDropdown({
         {/* Section 2: Clipboard */}
         <div style={sectionLabel}>Quick Clipboard</div>
 
+        {/* 7. Copy PNG to Clipboard */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -250,13 +293,14 @@ export default function ExportDropdown({
             {copiedType === 'png' ? (
               <Check size={14} style={{ color: '#10b981' }} />
             ) : (
-              <Copy size={14} style={{ color: T.textSecondary }} />
+              <Copy size={14} style={{ color: colors.copyPng }} />
             )}
             <span>{copiedType === 'png' ? 'Copied to Clipboard!' : 'Copy PNG to Clipboard'}</span>
           </div>
-          <span style={badgeStyle}>Image</span>
+          <span style={getBadgeStyle(colors.copyPng)}>Image</span>
         </button>
 
+        {/* 8. Copy SVG to Clipboard */}
         <button
           type="button"
           style={itemBtnStyle}
@@ -268,11 +312,11 @@ export default function ExportDropdown({
             {copiedType === 'svg' ? (
               <Check size={14} style={{ color: '#10b981' }} />
             ) : (
-              <Copy size={14} style={{ color: T.textSecondary }} />
+              <Copy size={14} style={{ color: colors.copySvg }} />
             )}
             <span>{copiedType === 'svg' ? 'Copied to Clipboard!' : 'Copy SVG to Clipboard'}</span>
           </div>
-          <span style={badgeStyle}>Vector</span>
+          <span style={getBadgeStyle(colors.copySvg)}>Vector</span>
         </button>
       </div>
     </div>

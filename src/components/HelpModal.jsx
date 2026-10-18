@@ -46,7 +46,7 @@ const guideSections = [
       'AI Smart Auto-Layout is available from the left-side tools and command palette. Choose a horizontal flow, vertical sequence, grid, radial layout, or tidy-up; configure spacing/options and whether to apply to the selection, then apply and inspect the result.',
       'Mermaid to Doodle converts supported Mermaid diagram text into editable native canvas shapes. Choose a preset or enter syntax, check the live preview and any validation message, then insert the diagram. Ctrl+Enter inserts when the input is valid.',
       'Use Diagram Templates for prebuilt flowcharts, system architecture, mind maps, sprint Kanban boards, and mobile wireframes. Templates are inserted as editable canvas objects.',
-      'For mind maps, select a node to add a child branch or use the auto-arrange action. For flowcharts, keyboard navigation and context-menu actions can help create and organize connected steps.',
+      'For mind maps, select a node to add a child or sibling branch with Tab or Enter, or use AI Smart Auto-Layout to organize connected steps.',
     ],
   },
   {

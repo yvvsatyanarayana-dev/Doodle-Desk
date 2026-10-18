@@ -35,6 +35,16 @@ import {
   ClipboardCheck,
   Replace,
   Link2,
+  Code2,
+  Headphones,
+  Terminal,
+  Activity,
+  Orbit,
+  Box,
+  Table,
+  Brain,
+  Film,
+  Camera,
 } from 'lucide-react';
 import {
   generateFlowchart,
@@ -76,6 +86,15 @@ export function CommandPalette({
   onOpenBoardSearch,
   onOpenPrototypeLinks,
   onToggleFocusMode,
+  onOpenWireframeToCode,
+  onOpenInsertDocument,
+  onToggleSoundStudio,
+  onInsertCodeScratchpad,
+  onInsertMathGraph,
+  onInsertInteractiveTable,
+  onOpenTableFlashcards,
+  onTogglePhysicsPlayground,
+  onToggleIsometric3D,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [query, setQuery] = useState('');
@@ -442,6 +461,20 @@ export function CommandPalette({
         onClose();
       },
     },
+    {
+      id: 'check_updates',
+      title: 'Check for Updates... (GitHub Releases)',
+      category: 'Settings',
+      icon: <Download size={14} />,
+      action: () => {
+        onClose();
+        if (window.electronAPI?.checkForUpdates) {
+          window.electronAPI.checkForUpdates();
+        } else {
+          onOpenPreferences?.();
+        }
+      },
+    },
 
     // AI & Advanced Mind Mapping
     {
@@ -510,13 +543,187 @@ export function CommandPalette({
       },
     },
     {
-      id: 'mindmap_auto_arrange',
-      title: 'Auto-Arrange Tree Hierarchy (Left-to-Right)',
+      id: 'mindmap_branch_sibling',
+      title: 'Mind Map: Branch Sibling Node (Down)',
       category: 'Mind Map & Flow',
-      icon: <Layers size={14} />,
+      icon: <GitBranch size={14} />,
+      shortcut: 'Enter',
       action: () => {
-        activeAPI?.autoArrangeTreeLayout?.('LR');
+        activeAPI?.branchSiblingNode?.('down');
         onClose();
+      },
+    },
+    {
+      id: 'export_wireframe_code',
+      title: 'Export Wireframe to React & Tailwind Code (JSX / HTML)...',
+      category: 'Export & Code',
+      icon: <Code2 size={14} />,
+      action: () => {
+        onClose();
+        onOpenWireframeToCode?.();
+      },
+    },
+    {
+      id: 'insert_document_card',
+      title: 'Insert Document Card (Scrollable Markdown / PDF)...',
+      category: 'Cards & Documents',
+      icon: <FileText size={14} />,
+      action: () => {
+        onClose();
+        onOpenInsertDocument?.();
+      },
+    },
+    {
+      id: 'ambient_soundscapes',
+      title: 'Focus Soundscapes & Pomodoro Timer (Rain, Ocean, Cafe, Noise)...',
+      category: 'Focus & Soundscapes',
+      icon: <Headphones size={14} />,
+      action: () => {
+        onClose();
+        onToggleSoundStudio?.();
+      },
+    },
+    {
+      id: 'insert_code_scratchpad',
+      title: 'Insert Executable Code Scratchpad (Run JS on Canvas)...',
+      category: 'Cards & Code',
+      icon: <Terminal size={14} />,
+      action: () => {
+        onClose();
+        if (onInsertCodeScratchpad) onInsertCodeScratchpad();
+        else activeAPI?.insertCodeScratchpadCard?.();
+      },
+    },
+    {
+      id: 'insert_math_graph',
+      title: 'Insert Math Formula & 2D Curve Graph Plotter...',
+      category: 'Cards & Math',
+      icon: <Activity size={14} />,
+      action: () => {
+        onClose();
+        if (onInsertMathGraph) onInsertMathGraph();
+        else activeAPI?.insertMathGraphCard?.();
+      },
+    },
+    {
+      id: 'insert_interactive_table',
+      title: 'Insert Interactive Table (Auto-Arranging Canvas Shape)...',
+      category: 'Shapes & Tables',
+      icon: <Table size={14} />,
+      action: () => {
+        onClose();
+        if (onInsertInteractiveTable) onInsertInteractiveTable();
+        else activeAPI?.insertInteractiveTable?.();
+      },
+    },
+    {
+      id: 'study_table_flashcards',
+      title: 'Practice Interactive Table as Flashcards (Q&A Study Mode)...',
+      category: 'Shapes & Tables',
+      icon: <Brain size={14} />,
+      action: () => {
+        onClose();
+        const elements = activeAPI?.getSceneElements?.() || [];
+        const selected = activeAPI?.getSelectedElements?.() || [];
+        const table = selected.find((el) => el.docType === 'interactive_table') || elements.find((el) => el.docType === 'interactive_table' && !el.isDeleted);
+        if (table) {
+          if (onOpenTableFlashcards) onOpenTableFlashcards(table);
+          else if (activeAPI?.openTableFlashcards) activeAPI.openTableFlashcards(table);
+          else if (typeof window !== 'undefined' && window.__openTableFlashcards) {
+            window.__openTableFlashcards(table);
+          } else {
+            activeAPI?.setSelectedElements?.({ [table.id]: true });
+          }
+        } else {
+          activeAPI?.insertInteractiveTable?.();
+          setTimeout(() => {
+            const updated = activeAPI?.getSceneElements?.() || [];
+            const newTable = updated.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
+            if (newTable && typeof window !== 'undefined' && window.__openTableFlashcards) {
+              window.__openTableFlashcards(newTable);
+            }
+          }, 120);
+        }
+      },
+    },
+    {
+      id: 'insert_live_data_card',
+      title: 'Insert Live Data & Webhook Monitor Card (Real-Time API Polling)...',
+      category: 'Shapes & Tables',
+      icon: <Radio size={14} />,
+      action: () => {
+        onClose();
+        activeAPI?.insertLiveDataCard?.();
+      },
+    },
+    {
+      id: 'insert_reactive_slider',
+      title: 'Insert Reactive Variable Slider (Interactive Parameters)...',
+      category: 'Creative Tools',
+      icon: <Sliders size={14} />,
+      action: () => {
+        onClose();
+        activeAPI?.insertReactiveSlider?.();
+      },
+    },
+    {
+      id: 'open_animation_studio',
+      title: 'Whiteboard Animation Studio (Motion Replay & Video Export)...',
+      category: 'Creative Tools',
+      icon: <Film size={14} />,
+      action: () => {
+        onClose();
+        if (typeof window !== 'undefined' && window.__doodleOpenAnimationStudio) {
+          window.__doodleOpenAnimationStudio();
+        }
+      },
+    },
+    {
+      id: 'open_knowledge_constellation',
+      title: '3D Neural Knowledge Constellation (Thought Matrix & Backlinks)...',
+      category: 'Creative Tools',
+      icon: <Orbit size={14} />,
+      action: () => {
+        onClose();
+        if (typeof window !== 'undefined' && window.__doodleOpenKnowledgeConstellation) {
+          window.__doodleOpenKnowledgeConstellation();
+        }
+      },
+    },
+    {
+      id: 'open_napkin_scanner',
+      title: 'Napkin & Sketch-to-Vector Scanner (Camera / Photo OCR)...',
+      category: 'Creative Tools',
+      icon: <Camera size={14} />,
+      action: () => {
+        onClose();
+        if (typeof window !== 'undefined' && window.__doodleOpenNapkinScanner) {
+          window.__doodleOpenNapkinScanner();
+        }
+      },
+    },
+    {
+      id: 'canvas_physics_playground',
+      title: 'Toggle Canvas Physics & Gravity Playground (Drop, Bounce, Zero-G)...',
+      category: 'Creative Tools',
+      icon: <Orbit size={14} />,
+      shortcut: 'Shift+P',
+      action: () => {
+        onClose();
+        if (onTogglePhysicsPlayground) onTogglePhysicsPlayground();
+        else activeAPI?.togglePhysicsPlayground?.();
+      },
+    },
+    {
+      id: 'view_isometric_3d',
+      title: '2.5D Isometric 3D Architecture View (Layer Elevation & Tilt)...',
+      category: 'Creative Tools',
+      icon: <Box size={14} />,
+      shortcut: 'Shift+I',
+      action: () => {
+        onClose();
+        if (onToggleIsometric3D) onToggleIsometric3D();
+        else activeAPI?.toggleIsometric3D?.();
       },
     },
     {

@@ -72,3 +72,5 @@ export function FooterLeft({
     </div>
   );
 }
+
+export default FooterLeft;

@@ -32,6 +32,8 @@ import {
   LogOut,
   History,
   Focus,
+  Headphones,
+  Timer,
 } from 'lucide-react';
 import { WorkspaceIconBadge } from './WorkspaceIcons';
 import WorkspaceDropdown from './WorkspaceDropdown';
@@ -96,6 +98,11 @@ function StudioTopBarComponent({
   onOpenLiveChat,
   sendChatMessage,
   onFollowCollaborator,
+  onExportCode,
+  onToggleSoundStudio,
+  isSoundStudioOpen,
+  isAudioPlaying,
+  pomodoroState,
 }) {
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [exportDropPos, setExportDropPos] = useState({ top: 0, right: 0 });
@@ -863,6 +870,7 @@ function StudioTopBarComponent({
                   onExport={onExport}
                   onExportPdf={onExportPdf}
                   onCopyToClipboard={onCopyToClipboard}
+                  onExportCode={onExportCode}
                   theme={theme}
                   isDark={isDark}
                   onClose={() => setIsExportMenuOpen(false)}
@@ -871,6 +879,63 @@ function StudioTopBarComponent({
             </>
           )}
         </div>
+
+        {/* Focus Soundscapes & Pomodoro */}
+        {onToggleSoundStudio && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              className={`studio-icon-btn studio-soundscapes-btn ${isSoundStudioOpen || isAudioPlaying ? 'active' : ''}`}
+              onClick={onToggleSoundStudio}
+              title="Focus Soundscapes & Pomodoro Timer"
+              aria-label="Focus Soundscapes"
+              style={{
+                position: 'relative',
+                color: isAudioPlaying ? (isLight ? '#7c3aed' : '#c084fc') : undefined,
+              }}
+            >
+              <Headphones size={15} />
+              {isAudioPlaying && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 4,
+                    right: 4,
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    background: isLight ? '#7c3aed' : '#c084fc',
+                    boxShadow: isLight ? '0 0 4px #7c3aed' : '0 0 6px #c084fc',
+                  }}
+                />
+              )}
+            </button>
+            {pomodoroState?.isRunning && (
+              <button
+                type="button"
+                onClick={onToggleSoundStudio}
+                className="app-no-drag"
+                style={{
+                  background: isLight ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.15)',
+                  border: isLight ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '6px',
+                  padding: '2px 7px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  fontFamily: 'monospace',
+                  color: isLight ? '#dc2626' : '#ef4444',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Pomodoro Focus Timer (Click to open studio)"
+              >
+                <Timer size={11} />
+                <span>{pomodoroState.formattedTime}</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Theme Toggle */}
         <button
