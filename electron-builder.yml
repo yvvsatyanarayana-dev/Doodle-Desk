@@ -70,7 +70,6 @@ mac:
       arch:
         - x64
         - arm64
-  icon: build/icon.icns
   category: public.app-category.graphics-design
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -89,7 +88,7 @@ linux:
     - target: rpm
       arch:
         - x64
-  icon: build/icon.png
+  maintainer: "Satyanarayana <yvvsatyanarayana999@gmail.com>"
   category: Graphics
   synopsis: Hand-drawn diagramming desktop editor
   description: A production-quality offline desktop application for hand-drawn diagramming.
