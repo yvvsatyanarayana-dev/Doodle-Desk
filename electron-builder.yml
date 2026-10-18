@@ -1,6 +1,6 @@
 appId: com.doodledesk.desktop
 productName: Doodle Desk
-copyright: Copyright © 2026 Antigravity
+copyright: Copyright © 2026 Satyanarayana
 directories:
   output: release
   buildResources: build
