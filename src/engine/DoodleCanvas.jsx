@@ -1,7 +1,7 @@
 import React, {
   lazy, Suspense, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState, useImperativeHandle, forwardRef
 } from 'react';
-import { renderElement, renderSelectionOverlay, measureText } from './renderer/render.js';
+import { renderElement, renderSelectionOverlay, measureText, getTextElementBounds } from './renderer/render.js';
 import {
   getElementAtPoint, getElementsInRect, isPointOnFrameLabel,
   getResizeHandleAt, getCursorForHandle, RESIZE_HANDLES
@@ -213,6 +213,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   const elementsRef = useRef(elements);
   const appStateRef = useRef(appState);
   const filesRef = useRef(files);
+  const canvasStyleRef = useRef(canvasStyle);
+  const themeRef = useRef(theme);
   elementsRef.current = elements;
   appStateRef.current = panViewportRef.current.active
     ? {
@@ -222,6 +224,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
     : appState;
   filesRef.current = files;
+  canvasStyleRef.current = canvasStyle;
+  themeRef.current = theme;
 
   const collaboratorsRef = useRef(new Map());
 
@@ -368,7 +372,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   }, [canvasToScene, getCanvasPoint]);
 
   // ── Rendering ──
-  const render = useCallback((renderCanvasStyle = canvasStyle) => {
+  const render = useCallback((renderCanvasStyle) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -382,24 +386,27 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
+    const activeCanvasStyle = renderCanvasStyle || canvasStyleRef.current || 'standard';
+    const activeTheme = themeRef.current || theme || 'light';
+
     // ── 1. Determine Background Color by canvasStyle ──
-    let bg = viewBackgroundColor || (theme === 'dark' ? '#121212' : '#ffffff');
-    if (renderCanvasStyle === 'blueprint') {
+    let bg = viewBackgroundColor || (activeTheme === 'dark' ? '#121212' : '#ffffff');
+    if (activeCanvasStyle === 'blueprint') {
       bg = '#0c1b33';
-    } else if (renderCanvasStyle === 'dotgrid') {
-      bg = theme === 'dark' ? '#141416' : '#f8fafc';
-    } else if (renderCanvasStyle === 'isometric') {
-      bg = theme === 'dark' ? '#121215' : '#ffffff';
-    } else if (renderCanvasStyle === 'parchment') {
+    } else if (activeCanvasStyle === 'dotgrid') {
+      bg = activeTheme === 'dark' ? '#141416' : '#f8fafc';
+    } else if (activeCanvasStyle === 'isometric') {
+      bg = activeTheme === 'dark' ? '#121215' : '#ffffff';
+    } else if (activeCanvasStyle === 'parchment') {
       bg = '#fbf7ee';
-    } else if (renderCanvasStyle === 'engineering') {
+    } else if (activeCanvasStyle === 'engineering') {
       bg = '#111215';
     }
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cssW, cssH);
 
     // ── 2. Render Canvas Paper & Grid System ──
-    if (renderCanvasStyle === 'blueprint') {
+    if (activeCanvasStyle === 'blueprint') {
       ctx.save();
       const step = 20 * z;
       const majorStep = 100 * z;
@@ -431,7 +438,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (renderCanvasStyle === 'dotgrid') {
+    } else if (activeCanvasStyle === 'dotgrid') {
       ctx.save();
       drawDotGrid(ctx, {
         width: cssW,
@@ -439,17 +446,17 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         zoom: z,
         scrollX,
         scrollY,
-        theme,
+        theme: activeTheme,
         patternCache: dotGridPatternCache,
       });
       ctx.restore();
-    } else if (renderCanvasStyle === 'isometric') {
+    } else if (activeCanvasStyle === 'isometric') {
       ctx.save();
       // Equilateral isometric 30° / 150° / 90° technical grid
       const dy = 20 * z;
       const dx = dy * Math.sqrt(3);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)';
+      ctx.strokeStyle = activeTheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)';
 
       const startX = ((scrollX % dx) + dx * 2) % dx;
       ctx.beginPath();
@@ -478,7 +485,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (renderCanvasStyle === 'parchment') {
+    } else if (activeCanvasStyle === 'parchment') {
       ctx.save();
       const step = 20 * z;
       const startX = ((scrollX % step) + cssW) % step;
@@ -508,7 +515,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
-    } else if (renderCanvasStyle === 'engineering') {
+    } else if (activeCanvasStyle === 'engineering') {
       ctx.save();
       const step = 20 * z;
       const majorStep = 100 * z;
@@ -543,7 +550,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     } else if (gridSize) {
       // Standard grid if gridSize is set
       ctx.save();
-      ctx.strokeStyle = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+      ctx.strokeStyle = activeTheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
       ctx.lineWidth = 1;
       const startX = ((scrollX % (gridSize * z)) + cssW) % (gridSize * z);
       const startY = ((scrollY % (gridSize * z)) + cssH) % (gridSize * z);
@@ -605,6 +612,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
       if (el.id === interaction.current.editingElementId) continue;
+      if (interaction.current.editingElementId) {
+        const editingEl = elementsRef.current?.find(e => e.id === interaction.current.editingElementId);
+        if (editingEl && el.type === ELEMENT_TYPES.TEXT && Math.abs(el.x - editingEl.x) < 2 && Math.abs(el.y - editingEl.y) < 2) {
+          continue;
+        }
+      }
       renderElement(ctx, el, imageCache.current);
       if (selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
     }
@@ -626,8 +639,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     // Selection overlays
-    if (selectedEls.length > 0) {
-      renderSelectionOverlay(ctx, selectedEls, z);
+    const overlaysToRender = interaction.current.editingElementId
+      ? selectedEls.filter(el => el.id !== interaction.current.editingElementId)
+      : selectedEls;
+    if (overlaysToRender.length > 0) {
+      renderSelectionOverlay(ctx, overlaysToRender, z);
     }
 
     // Smart Magnetic Alignment Guides
@@ -738,7 +754,11 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (animRef.current) return;
     animRef.current = requestAnimationFrame(() => {
       animRef.current = null;
-      render();
+      if (renderRef.current) {
+        renderRef.current();
+      } else {
+        render();
+      }
     });
   }, [render]);
 
@@ -2808,7 +2828,29 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   // ── Double-click to edit text / rename frame / create text ──
   const onDoubleClick = useCallback((e) => {
     const [sx, sy] = getScenePoint(e);
-    const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
+    let hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
+
+    if (!hit) {
+      hit = getElementAtPoint(elementsRef.current.filter(el => !el.isDeleted && !el.isHidden), sx, sy);
+    }
+
+    const as = appStateRef.current;
+    const selectedIds = as?.selectedElementIds || {};
+    const selectedTextEl = elementsRef.current.find(
+      el => selectedIds[el.id] && el.type === ELEMENT_TYPES.TEXT && !el.isDeleted
+    );
+    if (!hit && selectedTextEl) {
+      const bounds = getTextElementBounds(selectedTextEl);
+      const pad = 24 / (as.zoom?.value || 1);
+      if (
+        sx >= bounds.x - pad &&
+        sx <= bounds.x + bounds.width + pad &&
+        sy >= bounds.y - pad &&
+        sy <= bounds.y + bounds.height + pad
+      ) {
+        hit = selectedTextEl;
+      }
+    }
 
     if (hit?.type === ELEMENT_TYPES.BOARD_PORTAL) {
       onNavigateBoardPortal?.(hit.portalWorkspaceId, hit.portalFileId);
@@ -2846,7 +2888,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       setElements([...updatedShapes, textEl]);
       startTextEditOnElement(textEl);
     } else {
-      startTextEdit(sx, sy);
+      const nearbyText = elementsRef.current.find(
+        el => el.type === ELEMENT_TYPES.TEXT && !el.isDeleted && !el.isHidden &&
+              Math.hypot(el.x - sx, el.y - sy) < 30
+      );
+      if (nearbyText) {
+        startTextEditOnElement(nearbyText);
+      } else {
+        startTextEdit(sx, sy);
+      }
     }
   }, [getScenePoint, beginFrameNameEdit, onNavigateBoardPortal]);
 
@@ -2865,13 +2915,16 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     setAppState({ selectedElementIds: { [el.id]: true }, activeTool: { type: 'selection' }, showWelcomeScreen: false });
     interaction.current.editingElementId = el.id;
     mountTextarea(el, sx, sy, true);
+    scheduleRender();
   }
 
   function startTextEditOnElement(el) {
     finishTextEdit();
     interaction.current.editingElementId = el.id;
+    setAppState({ selectedElementIds: { [el.id]: true } });
     const [cx, cy] = sceneBoundsToCanvas(el.x, el.y);
     mountTextarea(el, el.x, el.y, false, el.text || '');
+    scheduleRender();
   }
 
   function mountTextarea(el, sx, sy, isNew = false, initialText = '') {
@@ -2882,7 +2935,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const textarea = document.createElement('textarea');
     textarea.value = initialText;
     textarea.spellcheck = false;
-    textarea.wrap = el.width ? 'soft' : 'off';
+    const hasBoundWidth = Boolean(el.containerId && el.width > 0);
+    textarea.wrap = hasBoundWidth ? 'soft' : 'off';
     textarea.autocomplete = 'off';
     textarea.autocorrect = 'off';
     textarea.autocapitalize = 'off';
@@ -2909,37 +2963,42 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       pointerEvents: 'auto',
       userSelect: 'text',
       webkitUserSelect: 'text',
-      boxSizing: 'border-box',
-      minWidth: '1px',
-      width: el.width ? `${el.width * z}px` : 'auto',
-      maxWidth: el.width ? `${el.width * z}px` : 'none',
+      boxSizing: 'content-box',
+      minWidth: '10px',
+      width: hasBoundWidth ? `${el.width * z}px` : 'auto',
+      maxWidth: hasBoundWidth ? `${el.width * z}px` : 'none',
       minHeight: `${fontSize * (el.lineHeight || 1.25)}px`,
       fontSize: `${fontSize}px`,
       fontFamily: fontStacks[el.fontFamily] || fontStacks[5],
       lineHeight: String(el.lineHeight || 1.25),
       textAlign: el.textAlign || 'left',
-      color: el.strokeColor || '#1e1e1e',
+      color: el.strokeColor || ((themeRef.current || theme) === 'dark' ? '#ffffff' : '#1e1e1e'),
       background: 'transparent',
       border: '0',
       outline: 'none',
       padding: '0',
       margin: '0',
       resize: 'none',
-      overflow: 'hidden',
-      whiteSpace: el.width ? 'pre-wrap' : 'pre',
-      wordBreak: el.width ? 'break-word' : 'normal',
+      overflow: 'visible',
+      whiteSpace: hasBoundWidth ? 'pre-wrap' : 'pre',
+      wordBreak: hasBoundWidth ? 'break-word' : 'normal',
       zIndex: 9999,
       transform: el.angle ? `rotate(${el.angle}rad)` : 'none',
     });
 
     const resizeTextarea = () => {
       const text = textarea.value;
-      const { width, height } = measureText(text || ' ', el.fontSize || FONT_SIZE_DEFAULT, el.fontFamily);
-      // Add a small measurement cushion: canvas and textarea font metrics differ
-      // slightly in Chromium, and an undersized textarea wraps the same text.
-      textarea.style.width = `${(Math.max(1, width) + 12) * z}px`;
-      textarea.style.height = `${Math.max(el.fontSize || FONT_SIZE_DEFAULT, height) * z}px`;
-      return { text, width, height };
+      const { width, height } = measureText(
+        text || ' ',
+        el.fontSize || FONT_SIZE_DEFAULT,
+        el.fontFamily,
+        hasBoundWidth ? el.width : null
+      );
+      if (!hasBoundWidth) {
+        textarea.style.width = `${(Math.max(10, width) + 20) * z}px`;
+      }
+      textarea.style.height = `${(Math.max(el.fontSize || FONT_SIZE_DEFAULT, height) + 4) * z}px`;
+      return { text, width: hasBoundWidth ? el.width : width, height };
     };
 
     // Size existing text immediately as well as on every edit so the textarea
@@ -2990,18 +3049,27 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       interaction.current.textInput = null;
     }
     if (editId) {
-      // Remove empty text elements
+      // Remove empty text elements and store measured bounds
       setElements(prev => {
-        const updated = prev.map(el =>
-          el.id === editId && (!el.text || el.text.trim() === '')
-            ? { ...el, isDeleted: true }
-            : el
-        );
+        const updated = prev.map(el => {
+          if (el.id !== editId) return el;
+          if (!el.text || el.text.trim() === '') {
+            return { ...el, isDeleted: true };
+          }
+          const bounds = getTextElementBounds(el);
+          return {
+            ...el,
+            width: bounds.width,
+            height: bounds.height,
+            version: (el.version || 1) + 1,
+          };
+        });
         return updated;
       });
       interaction.current.editingElementId = null;
       commitHistory();
       notifyChange();
+      scheduleRender();
     }
   }
 
@@ -3448,7 +3516,7 @@ return { total, count: values.length };`,
       y: spawnY,
       width: totalWidth,
       height: totalHeight,
-      strokeColor: theme === 'dark' ? '#ffffff' : '#1e1e1e',
+      strokeColor: (themeRef.current || theme) === 'dark' ? '#ffffff' : '#1e1e1e',
       backgroundColor: 'transparent',
       fillStyle: 'hachure',
       strokeWidth: 2,
@@ -3573,7 +3641,10 @@ return { total, count: values.length };`,
       getSceneElementsIncludingDeleted: () => elementsRef.current,
       getAppState: () => appStateRef.current,
       getFiles: () => filesRef.current,
-      renderCanvasStyle: (style) => renderRef.current?.(style),
+      renderCanvasStyle: (style) => {
+        if (style) canvasStyleRef.current = style;
+        renderRef.current?.(style);
+      },
 
       // Scene mutation
       updateScene: (sceneData) => {

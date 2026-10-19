@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, X, GripVertical, Sparkles } from 'lucide-react';
-import { generateSketchyLinePath, generateSketchyRoundedRectPath } from '../engine/renderer/sketchy.js';
+import {
+  generateSketchyLinePath,
+  generateSketchyRoundedRectPath,
+  generateSketchyHachurePath,
+  generateSketchyCrossHatchPath,
+} from '../engine/renderer/sketchy.js';
 import { InteractiveTableFlashcardsModal } from './InteractiveTableFlashcardsModal.jsx';
 
 /**
@@ -440,8 +445,25 @@ export function InteractiveTableCard({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const hasCrossHatch = element.backgroundColor && element.backgroundColor !== 'transparent' && element.fillStyle === 'cross-hatch';
-  const hasHachure = element.backgroundColor && element.backgroundColor !== 'transparent' && element.fillStyle === 'hachure';
+  const effectiveFillStyle = element.fillStyle || 'hachure';
+  const hasCrossHatch = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'cross-hatch';
+  const hasHachure = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'hachure';
+  const hasDots = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'dots';
+  const hasZigzag = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'zigzag';
+  const hasDashed = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'dashed';
+  const isSolidFill = element.backgroundColor && element.backgroundColor !== 'transparent' && effectiveFillStyle === 'solid';
+
+  // 1b. Hand-drawn sketchy hachure fill path (dense organic diagonal strokes matching Table 2 / canvas engine)
+  const hachurePath = useMemo(() => {
+    if (!hasHachure) return '';
+    return generateSketchyHachurePath(width, height, seed + 777, roughness, strokeWidth);
+  }, [hasHachure, width, height, seed, roughness, strokeWidth]);
+
+  // 1c. Hand-drawn sketchy cross-hatch fill path (perpendicular sketchy strokes matching canvas engine)
+  const crossHatchPath = useMemo(() => {
+    if (!hasCrossHatch) return '';
+    return generateSketchyCrossHatchPath(width, height, seed + 888, roughness, strokeWidth);
+  }, [hasCrossHatch, width, height, seed, roughness, strokeWidth]);
 
   return (
     <div
@@ -494,30 +516,104 @@ export function InteractiveTableCard({
           {hasCrossHatch && (
             <pattern
               id={`table-crosshatch-${element.id}`}
-              width="14"
-              height="14"
+              width="10"
+              height="10"
               patternTransform="rotate(45 0 0)"
               patternUnits="userSpaceOnUse"
             >
-              <line x1="0" y1="0" x2="0" y2="14" stroke={element.backgroundColor} strokeWidth="1.5" />
-              <line x1="0" y1="0" x2="14" y2="0" stroke={element.backgroundColor} strokeWidth="1.5" />
+              {/* Base background color fill so dark canvas and dot-grid do not show through */}
+              <rect width="10" height="10" fill={element.backgroundColor} fillOpacity="0.38" />
+              {/* Dense hand-drawn cross-hatch strokes matching user created table */}
+              <line x1="0" y1="0" x2="0" y2="10" stroke={element.backgroundColor} strokeWidth="1.85" strokeLinecap="round" opacity="0.95" />
+              <line x1="0" y1="0" x2="10" y2="0" stroke={element.backgroundColor} strokeWidth="1.85" strokeLinecap="round" opacity="0.95" />
             </pattern>
           )}
 
           {hasHachure && (
             <pattern
               id={`table-hachure-${element.id}`}
-              width="14"
-              height="14"
+              width="8"
+              height="8"
               patternTransform="rotate(45 0 0)"
               patternUnits="userSpaceOnUse"
             >
-              <line x1="0" y1="0" x2="0" y2="14" stroke={element.backgroundColor} strokeWidth="1.5" />
+              {/* Base background color fill so dark canvas and dot-grid do not show through */}
+              <rect width="8" height="8" fill={element.backgroundColor} fillOpacity="0.38" />
+              {/* Dense hand-drawn hachure strokes matching user created table */}
+              <line x1="0" y1="0" x2="0" y2="8" stroke={element.backgroundColor} strokeWidth="1.85" strokeLinecap="round" opacity="0.95" />
+            </pattern>
+          )}
+
+          {hasDots && (
+            <pattern
+              id={`table-dots-${element.id}`}
+              width="12"
+              height="12"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="12" height="12" fill={element.backgroundColor} fillOpacity="0.38" />
+              <circle cx="6" cy="6" r="1.6" fill={element.backgroundColor} opacity="0.95" />
+              <circle cx="0" cy="0" r="1.6" fill={element.backgroundColor} opacity="0.95" />
+              <circle cx="12" cy="0" r="1.6" fill={element.backgroundColor} opacity="0.95" />
+              <circle cx="0" cy="12" r="1.6" fill={element.backgroundColor} opacity="0.95" />
+              <circle cx="12" cy="12" r="1.6" fill={element.backgroundColor} opacity="0.95" />
+            </pattern>
+          )}
+
+          {hasZigzag && (
+            <pattern
+              id={`table-zigzag-${element.id}`}
+              width="16"
+              height="12"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="16" height="12" fill={element.backgroundColor} fillOpacity="0.38" />
+              <polyline
+                points="0,6 4,2 8,6 12,2 16,6"
+                stroke={element.backgroundColor}
+                strokeWidth="1.7"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.95"
+              />
+              <polyline
+                points="0,12 4,8 8,12 12,8 16,12"
+                stroke={element.backgroundColor}
+                strokeWidth="1.7"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.95"
+              />
+            </pattern>
+          )}
+
+          {hasDashed && (
+            <pattern
+              id={`table-dashed-${element.id}`}
+              width="9"
+              height="9"
+              patternTransform="rotate(45 0 0)"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="9" height="9" fill={element.backgroundColor} fillOpacity="0.38" />
+              <line
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="9"
+                stroke={element.backgroundColor}
+                strokeWidth="1.85"
+                strokeDasharray="2.5 2"
+                strokeLinecap="round"
+                opacity="0.95"
+              />
             </pattern>
           )}
         </defs>
 
-        {/* 1. Outer Hand-Drawn Rounded Rectangle */}
+        {/* 1. Outer Hand-Drawn Rounded Rectangle (Matches Table 2 outer border + background fill) */}
         <path
           d={outerBoxPath}
           stroke={strokeColor}
@@ -527,7 +623,13 @@ export function InteractiveTableCard({
               ? `url(#table-crosshatch-${element.id})`
               : hasHachure
               ? `url(#table-hachure-${element.id})`
-              : element.backgroundColor && element.backgroundColor !== 'transparent' && element.fillStyle === 'solid'
+              : hasDots
+              ? `url(#table-dots-${element.id})`
+              : hasZigzag
+              ? `url(#table-zigzag-${element.id})`
+              : hasDashed
+              ? `url(#table-dashed-${element.id})`
+              : isSolidFill
               ? element.backgroundColor
               : 'transparent'
           }

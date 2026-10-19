@@ -31,7 +31,7 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
   if (isPointOnFrameLabel(el, px, py)) return true;
 
   const tol = HIT_TOLERANCE + getStrokeWidth(el) / 2;
-  const bounds = getCachedElementBounds(el);
+  const bounds = el.type === ELEMENT_TYPES.TEXT ? getTextElementBounds(el) : getCachedElementBounds(el);
   const left = Math.min(bounds.x, bounds.x + bounds.width);
   const right = Math.max(bounds.x, bounds.x + bounds.width);
   const top = Math.min(bounds.y, bounds.y + bounds.height);

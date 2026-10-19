@@ -231,6 +231,54 @@ export function PropertiesPanel({
                     <rect x="2.5" y="2.5" width="15" height="15" rx="2.5" />
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${fillStyle === 'dots' ? 'active' : ''}`}
+                  onClick={() => onUpdateProperty('fillStyle', 'dots')}
+                  title="Dots"
+                  aria-label="Dots fill"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <rect x="2.5" y="2.5" width="15" height="15" rx="2" strokeWidth="1.5" />
+                    <circle cx="6.5" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="10" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="13.5" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="6.5" cy="10" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="10" cy="10" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="13.5" cy="10" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="6.5" cy="13.5" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="10" cy="13.5" r="1.1" fill="currentColor" stroke="none" />
+                    <circle cx="13.5" cy="13.5" r="1.1" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${fillStyle === 'zigzag' ? 'active' : ''}`}
+                  onClick={() => onUpdateProperty('fillStyle', 'zigzag')}
+                  title="Zigzag"
+                  aria-label="Zigzag fill"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <rect x="2.5" y="2.5" width="15" height="15" rx="2" strokeWidth="1.5" />
+                    <path d="M 5 7.5 L 7.5 5.5 L 10 7.5 L 12.5 5.5 L 15 7.5" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M 5 11 L 7.5 9 L 10 11 L 12.5 9 L 15 11" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M 5 14.5 L 7.5 12.5 L 10 14.5 L 12.5 12.5 L 15 14.5" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${fillStyle === 'dashed' ? 'active' : ''}`}
+                  onClick={() => onUpdateProperty('fillStyle', 'dashed')}
+                  title="Dashed"
+                  aria-label="Dashed fill"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                    <rect x="2.5" y="2.5" width="15" height="15" rx="2" strokeWidth="1.5" />
+                    <line x1="4.5" y1="15.5" x2="15.5" y2="4.5" strokeWidth="1.4" strokeDasharray="2.5 2" />
+                    <line x1="4.5" y1="10" x2="10" y2="4.5" strokeWidth="1.4" strokeDasharray="2 2" />
+                    <line x1="10" y1="15.5" x2="15.5" y2="10" strokeWidth="1.4" strokeDasharray="2 2" />
+                  </svg>
+                </button>
               </div>
             </div>
           )}

@@ -126,4 +126,57 @@ describe('Text size and font controls', () => {
     expect(clone.groupIds).toEqual(original.groupIds);
     expect(clone.groupIds).not.toBe(original.groupIds);
   });
+
+  it('renders all 6 fill options (hachure, cross-hatch, solid, dots, zigzag, dashed) and updates property on click', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onUpdateProperty = vi.fn();
+
+    act(() => {
+      root.render(
+        <PropertiesPanel
+          selectedElements={[{ id: 'shape-1', type: 'rectangle', fillStyle: 'hachure' }]}
+          appState={{ activeTool: { type: 'selection' } }}
+          onUpdateProperty={onUpdateProperty}
+          onAction={vi.fn()}
+        />
+      );
+    });
+
+    const fillButtons = Array.from(container.querySelectorAll('.buttonList button[aria-label*="fill"]'));
+    expect(fillButtons.length).toBe(6);
+
+    const labels = fillButtons.map(btn => btn.getAttribute('aria-label'));
+    expect(labels).toContain('Hachure fill');
+    expect(labels).toContain('Cross-hatch fill');
+    expect(labels).toContain('Solid fill');
+    expect(labels).toContain('Dots fill');
+    expect(labels).toContain('Zigzag fill');
+    expect(labels).toContain('Dashed fill');
+
+    // Click Dots fill
+    const dotsBtn = container.querySelector('[aria-label="Dots fill"]');
+    act(() => {
+      dotsBtn.click();
+    });
+    expect(onUpdateProperty).toHaveBeenCalledWith('fillStyle', 'dots');
+
+    // Click Zigzag fill
+    const zigzagBtn = container.querySelector('[aria-label="Zigzag fill"]');
+    act(() => {
+      zigzagBtn.click();
+    });
+    expect(onUpdateProperty).toHaveBeenCalledWith('fillStyle', 'zigzag');
+
+    // Click Dashed fill
+    const dashedBtn = container.querySelector('[aria-label="Dashed fill"]');
+    act(() => {
+      dashedBtn.click();
+    });
+    expect(onUpdateProperty).toHaveBeenCalledWith('fillStyle', 'dashed');
+
+    act(() => root.unmount());
+    document.body.removeChild(container);
+  });
 });

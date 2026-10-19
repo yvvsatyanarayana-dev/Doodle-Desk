@@ -199,6 +199,53 @@ describe('shape outline rendering', () => {
     expect(ctx.stroke).toHaveBeenCalledOnce();
   });
 
+  it('renders rounded diamond with cross-hatch fill and smooth corner clipping', () => {
+    const ctx = createContext();
+
+    renderElement(ctx, {
+      id: 'diamond-cross-hatch',
+      type: 'diamond',
+      x: 10,
+      y: 20,
+      width: 200,
+      height: 120,
+      roundness: 'round',
+      roughness: 1,
+      strokeColor: '#fff',
+      backgroundColor: '#f06595',
+      fillStyle: 'cross-hatch',
+      opacity: 100,
+    });
+
+    // 4 for clip + at least 4 in sketchy stroke
+    expect(ctx.quadraticCurveTo.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(ctx.clip).toHaveBeenCalled();
+    expect(ctx.save).toHaveBeenCalled();
+    expect(ctx.restore).toHaveBeenCalled();
+  });
+
+  it('renders rounded diamond with solid fill using native curved fill', () => {
+    const ctx = createContext();
+
+    renderElement(ctx, {
+      id: 'diamond-solid',
+      type: 'diamond',
+      x: 10,
+      y: 20,
+      width: 200,
+      height: 120,
+      roundness: 'round',
+      roughness: 0,
+      strokeColor: '#fff',
+      backgroundColor: '#f06595',
+      fillStyle: 'solid',
+      opacity: 100,
+    });
+
+    expect(ctx.fill).toHaveBeenCalled();
+    expect(ctx.quadraticCurveTo).toHaveBeenCalledTimes(8); // 4 for fill + 4 for stroke
+  });
+
   it('keeps every rough rounded-rectangle corner continuous', () => {
     const ctx = createContext();
     sketchyRoundedRect(ctx, 0, 0, 200, 120, 16, 1234, 1);
@@ -317,5 +364,27 @@ describe('shape outline rendering', () => {
 
     expect(getElementBounds(legacyStroke)).toEqual({ x: 60, y: 85, width: 110, height: 35 });
     expect(getResizeHandleAt(legacyStroke, 56, 81, 1)).toBe(RESIZE_HANDLES.NW);
+  });
+
+  it('renders shapes with dots, zigzag, and dashed fill styles', () => {
+    for (const fillStyle of ['dots', 'zigzag', 'dashed']) {
+      const ctx = createContext();
+      ctx.arc = vi.fn();
+      renderElement(ctx, {
+        id: `rect-${fillStyle}`,
+        type: 'rectangle',
+        x: 10,
+        y: 20,
+        width: 100,
+        height: 80,
+        backgroundColor: '#74c0fc',
+        fillStyle,
+        roughness: 1,
+      });
+
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.clip).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
+    }
   });
 });

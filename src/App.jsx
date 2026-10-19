@@ -677,8 +677,9 @@ export default function App() {
   // Set canvas paper & grid style with proper canvas scene synchronization
   const handleSetCanvasStyle = useCallback((style) => {
     setCanvasStyle(style);
-    doodleAPI?.renderCanvasStyle?.(style);
-    if (!doodleAPI) return;
+    const activeAPI = doodleCanvasRef.current || doodleAPI;
+    activeAPI?.renderCanvasStyle?.(style);
+    if (!activeAPI) return;
 
     let bg = undefined;
     if (style === 'blueprint') bg = '#0c1b33';
@@ -688,7 +689,7 @@ export default function App() {
       bg = effectiveTheme === 'dark' ? '#121212' : '#ffffff';
     }
 
-    const appState = doodleAPI.getAppState?.();
+    const appState = activeAPI.getAppState?.();
     const currentStroke = appState?.currentItemStrokeColor;
     let newStroke = currentStroke;
 
@@ -706,7 +707,7 @@ export default function App() {
       }
     }
 
-    doodleAPI.updateScene({
+    activeAPI.updateScene({
       appState: {
         ...(bg ? { viewBackgroundColor: bg } : {}),
         ...(newStroke ? { currentItemStrokeColor: newStroke } : {}),
@@ -1560,16 +1561,17 @@ export default function App() {
         onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
         onInsertCodeScratchpad={() => doodleAPI?.insertCodeScratchpadCard?.()}
         onInsertMathGraph={() => doodleAPI?.insertMathGraphCard?.()}
-        onInsertInteractiveTable={() => doodleAPI?.insertInteractiveTable?.()}
+        onInsertInteractiveTable={() => (doodleCanvasRef.current || doodleAPI)?.insertInteractiveTable?.()}
         onOpenFlashcards={() => {
-          const elements = doodleAPI?.getSceneElements?.() || [];
+          const api = doodleCanvasRef.current || doodleAPI;
+          const elements = api?.getSceneElements?.() || [];
           const tableEl = elements.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
           if (tableEl) {
             setActiveFlashcardTable(tableEl);
           } else {
-            doodleAPI?.insertInteractiveTable?.();
+            api?.insertInteractiveTable?.();
             setTimeout(() => {
-              const updated = doodleAPI?.getSceneElements?.() || [];
+              const updated = api?.getSceneElements?.() || [];
               const newTable = updated.find((el) => !el.isDeleted && (el.docType === 'interactive_table' || el.tableData));
               if (newTable) setActiveFlashcardTable(newTable);
             }, 120);
@@ -1657,7 +1659,7 @@ export default function App() {
         onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
         onInsertCodeScratchpad={() => doodleAPI?.insertCodeScratchpadCard?.()}
         onInsertMathGraph={() => doodleAPI?.insertMathGraphCard?.()}
-        onInsertInteractiveTable={() => doodleAPI?.insertInteractiveTable?.()}
+        onInsertInteractiveTable={() => (doodleCanvasRef.current || doodleAPI)?.insertInteractiveTable?.()}
         onOpenTableFlashcards={(table) => setActiveFlashcardTable(table)}
         onTogglePhysicsPlayground={() => doodleAPI?.togglePhysicsPlayground?.()}
         onToggleIsometric3D={() => doodleAPI?.toggleIsometric3D?.()}

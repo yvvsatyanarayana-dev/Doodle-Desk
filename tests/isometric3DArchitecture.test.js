@@ -276,4 +276,74 @@ describe('Feature 4: 2.5D Isometric 3D Architecture View Suite (100% Offline)', 
     expect(result).toHaveProperty('filename');
     expect(result.filename).toContain('doodle-3d-architecture');
   });
+
+  it('supports progressive 3D scroll story layer-by-layer revelation and riser activation', () => {
+    const layers = [
+      { id: 'l0', name: 'Database', order: 0 },
+      { id: 'l1', name: 'Services', order: 1 },
+      { id: 'l2', name: 'API Gateway', order: 2 },
+      { id: 'l3', name: 'Client UI', order: 3 },
+    ];
+
+    const elements = [
+      { id: 'db1', x: 100, y: 100, width: 80, height: 40, isDeleted: false },
+      { id: 'srv1', x: 100, y: 200, width: 80, height: 40, isDeleted: false },
+      { id: 'api1', x: 100, y: 300, width: 80, height: 40, isDeleted: false },
+      { id: 'client1', x: 100, y: 400, width: 80, height: 40, isDeleted: false },
+      { id: 'arr1', type: 'arrow', startBinding: { elementId: 'db1' }, endBinding: { elementId: 'srv1' }, isDeleted: false },
+      { id: 'arr2', type: 'arrow', startBinding: { elementId: 'srv1' }, endBinding: { elementId: 'api1' }, isDeleted: false },
+      { id: 'arr3', type: 'arrow', startBinding: { elementId: 'api1' }, endBinding: { elementId: 'client1' }, isDeleted: false },
+    ];
+
+    const tierMap = new Map([
+      ['db1', 0],
+      ['srv1', 1],
+      ['api1', 2],
+      ['client1', 3],
+    ]);
+
+    const allRisers = extract3DRisers(elements, tierMap, 90, layers);
+    expect(allRisers.length).toBe(3);
+
+    // Helper: simulate riser visibility for a given revealedLayerCount
+    const getVisibleRisers = (revealedCount) => {
+      return allRisers.filter((r) => {
+        const sIdx = layers.findIndex((l) => l.order === r.source.tier);
+        const tIdx = layers.findIndex((l) => l.order === r.target.tier);
+        return sIdx < revealedCount && tIdx < revealedCount;
+      });
+    };
+
+    // Step 1: Base layer only (revealedCount = 1) -> no cross-tier risers visible
+    expect(getVisibleRisers(1).length).toBe(0);
+
+    // Step 2: Database + Services revealed (revealedCount = 2) -> 1 riser visible (db1 -> srv1)
+    expect(getVisibleRisers(2).length).toBe(1);
+    expect(getVisibleRisers(2)[0].source.tier).toBe(0);
+    expect(getVisibleRisers(2)[0].target.tier).toBe(1);
+
+    // Step 3: Database + Services + API revealed (revealedCount = 3) -> 2 risers visible
+    expect(getVisibleRisers(3).length).toBe(2);
+
+    // Step 4: All layers revealed (revealedCount = 4) -> all 3 risers visible
+    expect(getVisibleRisers(4).length).toBe(3);
+  });
+
+  it('correctly clamps scroll story step progression between 1 and layer count', () => {
+    const totalLayers = 4;
+    const clampStep = (current, delta) => Math.max(1, Math.min(totalLayers, current + delta));
+
+    // Clamps lower bound to 1
+    expect(clampStep(1, -1)).toBe(1);
+    expect(clampStep(1, -5)).toBe(1);
+
+    // Steps forward correctly
+    expect(clampStep(1, 1)).toBe(2);
+    expect(clampStep(2, 1)).toBe(3);
+    expect(clampStep(3, 1)).toBe(4);
+
+    // Clamps upper bound to totalLayers
+    expect(clampStep(4, 1)).toBe(4);
+    expect(clampStep(4, 10)).toBe(4);
+  });
 });

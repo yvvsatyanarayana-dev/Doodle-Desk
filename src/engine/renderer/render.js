@@ -5,7 +5,7 @@ import {
   sketchyCylinder, sketchyCloud, sketchyCapsule, sketchyParallelogram,
   getTriangleVertices, getStarVertices, getHexagonVertices, getOctagonVertices,
   getParallelogramVertices, getCylinderPolygon, getCloudPolygon,
-  sketchyFill, solidFill, crossHatchFill
+  sketchyFill, solidFill, crossHatchFill, dotsFill, zigzagFill, dashedFill
 } from './sketchy.js';
 import { STROKE_WIDTHS, ELEMENT_TYPES } from '../elements.js';
 import { getArrowheadPoints, rotatePoint, getElementCenter, getBoundsFromPoints } from '../math/geometry.js';
@@ -62,6 +62,26 @@ function applyFill(ctx, el, polygon) {
     ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
     ctx.setLineDash([]);
     crossHatchFill(ctx, polygon, el.seed || 0, el);
+    ctx.restore();
+  } else if (fillStyle === 'dots') {
+    ctx.save();
+    ctx.strokeStyle = el.backgroundColor;
+    ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
+    ctx.setLineDash([]);
+    dotsFill(ctx, polygon, el.seed || 0, el.roughness ?? 1, el);
+    ctx.restore();
+  } else if (fillStyle === 'zigzag') {
+    ctx.save();
+    ctx.strokeStyle = el.backgroundColor;
+    ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
+    ctx.setLineDash([]);
+    zigzagFill(ctx, polygon, el.seed || 0, el.roughness ?? 1, el);
+    ctx.restore();
+  } else if (fillStyle === 'dashed') {
+    ctx.save();
+    ctx.strokeStyle = el.backgroundColor;
+    ctx.lineWidth = Math.max(0.8, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 0.6);
+    dashedFill(ctx, polygon, el.seed || 0, el.roughness ?? 1, el);
     ctx.restore();
   }
 }
@@ -162,9 +182,23 @@ function renderInteractiveTableCanvas(ctx, el) {
       ctx.closePath();
     }
     ctx.clip();
+    if (el.fillStyle !== 'solid') {
+      ctx.save();
+      ctx.fillStyle = el.backgroundColor;
+      ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.3;
+      ctx.fill();
+      ctx.restore();
+    }
     applyFill(ctx, el, poly);
     ctx.restore();
   } else if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+    if (el.fillStyle !== 'solid') {
+      ctx.save();
+      ctx.fillStyle = el.backgroundColor;
+      ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.3;
+      solidFill(ctx, poly);
+      ctx.restore();
+    }
     applyFill(ctx, el, poly);
   }
 
@@ -373,9 +407,32 @@ export function renderElement(ctx, el, imageCache = {}) {
       const L_in = [dx + ux, cy2 + uy];
       const L_out = [dx + ux, cy2 - uy];
 
-      const poly2 = !isSharp && cr > 0
-        ? [T_out, R_in, R_out, B_in, B_out, L_in, L_out, T_in]
-        : [[cx2, dy], [dx + rw, cy2], [cx2, dy + rh], [dx, cy2]];
+      const poly2 = [];
+      if (!isSharp && cr > 0) {
+        const sampleQuad = (p0, cp, p1, steps = 12) => {
+          const pts = [];
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const omt = 1 - t;
+            const px = omt * omt * p0[0] + 2 * omt * t * cp[0] + t * t * p1[0];
+            const py = omt * omt * p0[1] + 2 * omt * t * cp[1] + t * t * p1[1];
+            pts.push([px, py]);
+          }
+          return pts;
+        };
+
+        poly2.push(T_out);
+        poly2.push(R_in);
+        poly2.push(...sampleQuad(R_in, [dx + rw, cy2], R_out, 12));
+        poly2.push(B_in);
+        poly2.push(...sampleQuad(B_in, [cx2, dy + rh], B_out, 12));
+        poly2.push(L_in);
+        poly2.push(...sampleQuad(L_in, [dx, cy2], L_out, 12));
+        poly2.push(T_in);
+        poly2.push(...sampleQuad(T_in, [cx2, dy], T_out, 12));
+      } else {
+        poly2.push([cx2, dy], [dx + rw, cy2], [cx2, dy + rh], [dx, cy2]);
+      }
 
       if (!isSharp && cr > 0 && el.backgroundColor && el.backgroundColor !== 'transparent') {
         ctx.save();
@@ -390,8 +447,13 @@ export function renderElement(ctx, el, imageCache = {}) {
         ctx.lineTo(T_in[0], T_in[1]);
         ctx.quadraticCurveTo(cx2, dy, T_out[0], T_out[1]);
         ctx.closePath();
-        ctx.clip();
-        applyFill(ctx, el, poly2);
+        if (el.fillStyle === 'solid') {
+          ctx.fillStyle = el.backgroundColor;
+          ctx.fill();
+        } else {
+          ctx.clip();
+          applyFill(ctx, el, poly2);
+        }
         ctx.restore();
       } else {
         applyFill(ctx, el, poly2);
@@ -618,8 +680,8 @@ export function renderElement(ctx, el, imageCache = {}) {
       ctx.textBaseline = 'top';
       ctx.textAlign = textAlign;
 
-      // Automatically wrap text to container/element width if defined and positive
-      const maxW = w && w > 0 ? w : 0;
+      // Automatically wrap text to container width if defined and positive
+      const maxW = el.containerId && w && w > 0 ? w : 0;
       const lines = maxW > 0 ? wrapText(ctx, text, maxW) : text.split('\n');
       const lineH = fontSize * lineHeight;
       let baseX = x;
@@ -901,12 +963,13 @@ export function measureText(text, fontSize, fontFamily = 5, maxWidth = null) {
 
 export function getTextElementBounds(element) {
   const text = element.text || '';
+  const maxWidth = element.containerId && element.width > 0 ? element.width : null;
   const measured = text
     ? measureText(
       text,
       element.fontSize || 20,
       element.fontFamily,
-      element.width > 0 ? element.width : null
+      maxWidth
     )
     : { width: 0, height: 0 };
   return {

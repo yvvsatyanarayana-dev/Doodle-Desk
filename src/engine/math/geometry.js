@@ -66,6 +66,37 @@ export function getElementBounds(el) {
     return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
   }
 
+  if (el.type === 'text') {
+    const text = el.text || '';
+    const fontSize = el.fontSize || 20;
+    const lineHeight = el.lineHeight || 1.25;
+    const lines = text.split('\n');
+    let maxLen = 0;
+    for (const line of lines) {
+      if (line.length > maxLen) maxLen = line.length;
+    }
+    const computedW = el.width > 0 ? el.width : Math.max(10, Math.ceil(maxLen * fontSize * 0.65) + 4);
+    const computedH = el.height > 0 ? el.height : Math.max(fontSize, Math.ceil(lines.length * fontSize * lineHeight) + 4);
+    const bounds = { x, y, width: computedW, height: computedH };
+    if (!angle || Math.abs(angle) < EPSILON) return bounds;
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    const halfW = bounds.width / 2;
+    const halfH = bounds.height / 2;
+    const cosAngle = Math.cos(angle);
+    const sinAngle = Math.sin(angle);
+    const corners = [[-halfW, -halfH], [halfW, -halfH], [halfW, halfH], [-halfW, halfH]]
+      .map(([localX, localY]) => [
+        centerX + localX * cosAngle - localY * sinAngle,
+        centerY + localX * sinAngle + localY * cosAngle,
+      ]);
+    const xs = corners.map(([cornerX]) => cornerX);
+    const ys = corners.map(([, cornerY]) => cornerY);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+  }
+
   if (!angle || Math.abs(angle) < EPSILON) {
     return { x, y, width, height };
   }
@@ -100,7 +131,9 @@ export function getCachedElementBounds(el) {
   if (cached &&
       cached.x === el.x && cached.y === el.y &&
       cached.width === el.width && cached.height === el.height &&
-      cached.angle === el.angle && cached.points === el.points) {
+      cached.angle === el.angle && cached.points === el.points &&
+      cached.text === el.text && cached.fontSize === el.fontSize &&
+      cached.lineHeight === el.lineHeight) {
     return cached.bounds;
   }
   const bounds = getElementBounds(el);
@@ -111,6 +144,9 @@ export function getCachedElementBounds(el) {
     height: el.height,
     angle: el.angle,
     points: el.points,
+    text: el.text,
+    fontSize: el.fontSize,
+    lineHeight: el.lineHeight,
     bounds,
   });
   return bounds;

@@ -29,6 +29,8 @@ import {
   Crosshair,
   Loader2,
   ExternalLink,
+  Play,
+  Pause,
 } from 'lucide-react';
 import {
   ISOMETRIC_CAMERA_PRESETS,
@@ -84,6 +86,14 @@ export function Isometric3DArchitectureView({
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   const isSpaceHeldRef = useRef(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
+
+  // 3D Scroll Story / Layer-by-Layer Assembly State
+  const [scrollMode, setScrollMode] = useState('story'); // 'story' (layer-by-layer) | 'zoom'
+  const [revealedLayerCount, setRevealedLayerCount] = useState(4);
+  const [isPlayingTour, setIsPlayingTour] = useState(false);
+  const wheelAccumulatorRef = useRef(0);
+  const lastWheelTimeRef = useRef(0);
+  const tourIntervalRef = useRef(null);
 
   // Custom User-Defined Architecture Layers
   const [layers, setLayers] = useState(() => {
@@ -164,6 +174,42 @@ export function Isometric3DArchitectureView({
   const topToBottomLayers = useMemo(() => {
     return [...sortedLayers].reverse();
   }, [sortedLayers]);
+
+  // Synchronize and clamp revealedLayerCount when sortedLayers changes
+  useEffect(() => {
+    if (sortedLayers.length > 0) {
+      setRevealedLayerCount((prev) => Math.max(1, Math.min(sortedLayers.length, prev || sortedLayers.length)));
+    }
+  }, [sortedLayers.length]);
+
+  // Automated 3D Cinematic Tour / Story Assembly Loop
+  useEffect(() => {
+    if (!isPlayingTour) {
+      if (tourIntervalRef.current) {
+        clearInterval(tourIntervalRef.current);
+        tourIntervalRef.current = null;
+      }
+      return;
+    }
+
+    tourIntervalRef.current = setInterval(() => {
+      setRevealedLayerCount((prev) => {
+        if (prev >= sortedLayers.length) {
+          return 1; // Loop back to base foundation
+        }
+        return prev + 1;
+      });
+      // Subtle continuous cinematic orbit
+      setYaw((prev) => (prev + 1.2) % 360);
+    }, 1800);
+
+    return () => {
+      if (tourIntervalRef.current) {
+        clearInterval(tourIntervalRef.current);
+        tourIntervalRef.current = null;
+      }
+    };
+  }, [isPlayingTour, sortedLayers.length]);
 
   // Element count per layer
   const elementCountPerLayer = useMemo(() => {
@@ -264,8 +310,16 @@ export function Isometric3DArchitectureView({
         setZoom((prev) => Math.min(2.5, +(prev + 0.1).toFixed(2)));
       } else if (e.key === '-' || e.key === '_') {
         setZoom((prev) => Math.max(0.35, +(prev - 0.1).toFixed(2)));
+      } else if (e.key === 'PageDown' || e.key === ']') {
+        e.preventDefault();
+        setRevealedLayerCount((prev) => Math.min(sortedLayers.length, prev + 1));
+      } else if (e.key === 'PageUp' || e.key === '[') {
+        e.preventDefault();
+        setRevealedLayerCount((prev) => Math.max(1, prev - 1));
       } else if (e.key === 'Escape') {
-        if (isGuideOpen) {
+        if (isPlayingTour) {
+          setIsPlayingTour(false);
+        } else if (isGuideOpen) {
           setIsGuideOpen(false);
         } else if (isLayersStudioOpen) {
           setIsLayersStudioOpen(false);
@@ -309,6 +363,11 @@ export function Isometric3DArchitectureView({
 
   // Mouse Orbit & Pan handlers (Screen-Space Pan like simple 2D canvas)
   const handlePointerDown = (e) => {
+    // If auto tour is active, user interaction pauses it
+    if (isPlayingTour) {
+      setIsPlayingTour(false);
+    }
+
     // Ignore interactive controls so buttons/inputs can be clicked
     if (e.target?.closest?.('button, input, select, textarea, .physics-btn')) {
       return;
@@ -366,10 +425,53 @@ export function Isometric3DArchitectureView({
     } catch {}
   };
 
+  // 3D Scroll Story Wheel Handler: Assembles & disassembles layers one-by-one with physics easing
   const handleWheel = (e) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.08 : 0.92;
-    setZoom((prev) => Math.max(0.35, Math.min(2.5, +(prev * factor).toFixed(3))));
+
+    // If holding Ctrl/Cmd or in explicit zoom mode, perform standard camera zoom
+    if (e.ctrlKey || e.metaKey || scrollMode === 'zoom') {
+      const factor = e.deltaY < 0 ? 1.08 : 0.92;
+      setZoom((prev) => Math.max(0.35, Math.min(2.5, +(prev * factor).toFixed(3))));
+      return;
+    }
+
+    if (isPlayingTour) {
+      setIsPlayingTour(false);
+    }
+
+    const now = performance.now();
+    wheelAccumulatorRef.current += e.deltaY;
+
+    // Dampened threshold of 40px ensures deliberate, satisfying step feel without accidental skips
+    const THRESHOLD = 40;
+    if (Math.abs(wheelAccumulatorRef.current) >= THRESHOLD) {
+      if (now - lastWheelTimeRef.current > 190) {
+        lastWheelTimeRef.current = now;
+        if (wheelAccumulatorRef.current > 0) {
+          // Scroll Down / Forward: assemble next layer
+          setRevealedLayerCount((prev) => {
+            const next = Math.min(sortedLayers.length, prev + 1);
+            if (next !== prev) {
+              const activeLayer = sortedLayers[next - 1];
+              doodleAPI?.onToast?.(`Tier ${next}/${sortedLayers.length}: ${activeLayer?.name || 'Layer'}`);
+            }
+            return next;
+          });
+        } else {
+          // Scroll Up / Backward: disassemble top layer
+          setRevealedLayerCount((prev) => {
+            const next = Math.max(1, prev - 1);
+            if (next !== prev) {
+              const activeLayer = sortedLayers[next - 1];
+              doodleAPI?.onToast?.(`Tier ${next}/${sortedLayers.length}: ${activeLayer?.name || 'Layer'}`);
+            }
+            return next;
+          });
+        }
+      }
+      wheelAccumulatorRef.current = 0;
+    }
   };
 
   // Stamp Demo Architecture to Canvas (Working & Cleanly Switches to Canvas)
@@ -597,9 +699,16 @@ export function Isometric3DArchitectureView({
     setIsSnapshotting(true);
     doodleAPI?.onToast?.('📸 Rendering high-res 3D architecture snapshot...');
     try {
+      const activeLayers = sortedLayers.slice(0, revealedLayerCount);
+      const activeElements = elements.filter((el) => {
+        const t = tierMap.get(el.id) ?? 0;
+        const idx = sortedLayers.findIndex((l) => l && (l.order === t || l.id === t));
+        return idx === -1 || idx < revealedLayerCount;
+      });
+
       const result = await export3DArchitectureSnapshot({
-        elements,
-        layers: sortedLayers,
+        elements: activeElements,
+        layers: activeLayers,
         tierMap,
         pitch,
         yaw,
@@ -696,15 +805,18 @@ export function Isometric3DArchitectureView({
 
         {/* Multi-Tier Dynamic Elevation Layer Plates */}
         {showTierPlates &&
-          sortedLayers.map((layer) => {
+          sortedLayers.map((layer, idx) => {
             if (!layer) return null;
             const isHidden = hiddenLayerIds.has(layer.id);
             if (isHidden) return null;
 
+            const isRevealed = idx < revealedLayerCount;
+            const isCurrentActive = idx === revealedLayerCount - 1;
             const isSoloed = soloLayerId === layer.id;
             const isDimmed = soloLayerId !== null && !isSoloed;
             const isLayerHighlighted = highlightedLayerId === layer.id;
-            const tierZ = (layer.order ?? 0) * elevationSpacing;
+            const tierZ = (layer.order ?? idx) * elevationSpacing;
+            const futureZ = tierZ + 160;
             const elementCount = elementCountPerLayer[layer.id] || elementCountPerLayer[layer.order ?? 0] || 0;
             const isEditingThisLayer = editingLayerId === layer.id;
 
@@ -714,10 +826,12 @@ export function Isometric3DArchitectureView({
                 style={{
                   position: 'absolute',
                   inset: '-20px',
-                  transform: `translateZ(${tierZ}px)`,
+                  transform: isRevealed
+                    ? `translateZ(${tierZ}px) scale(1)`
+                    : `translateZ(${futureZ}px) scale(0.92)`,
                   transformStyle: 'preserve-3d',
                   borderRadius: '12px',
-                  border: isLayerHighlighted
+                  border: isLayerHighlighted || isCurrentActive
                     ? `2px solid ${layer.color}`
                     : `1px solid ${layer.color}44`,
                   background: isDark
@@ -727,19 +841,21 @@ export function Isometric3DArchitectureView({
                     ? `linear-gradient(to right, ${layer.color}15 1px, transparent 1px), linear-gradient(to bottom, ${layer.color}15 1px, transparent 1px)`
                     : 'none',
                   backgroundSize: '40px 40px',
-                  boxShadow: isLayerHighlighted
-                    ? `0 0 30px ${layer.color}66, 0 16px 36px rgba(0, 0, 0, 0.3)`
+                  boxShadow: isLayerHighlighted || isCurrentActive
+                    ? `0 0 32px ${layer.color}66, 0 20px 40px rgba(0, 0, 0, 0.35)`
                     : `0 16px 36px rgba(0, 0, 0, 0.25)`,
-                  opacity: isDimmed ? 0.2 : 1,
-                  transition: 'opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
+                  opacity: !isRevealed ? 0 : (isDimmed ? 0.2 : 1),
+                  filter: !isRevealed ? 'blur(8px)' : 'blur(0px)',
+                  transition: 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease, filter 0.45s ease, border-color 0.3s ease, box-shadow 0.3s ease',
                   pointerEvents: 'none',
                 }}
               >
                 {/* Interactive Floating Layer Title Tag & Controls */}
                 <div
-                  onMouseEnter={() => setHighlightedLayerId(layer.id)}
+                  onMouseEnter={() => isRevealed && setHighlightedLayerId(layer.id)}
                   onMouseLeave={() => setHighlightedLayerId(null)}
                   onClick={(e) => {
+                    if (!isRevealed) return;
                     e.stopPropagation();
                     setHighlightedLayerId(layer.id);
                   }}
@@ -998,6 +1114,16 @@ export function Isometric3DArchitectureView({
           const len = Math.sqrt(dx * dx + dy * dy);
           const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
+          const sourceIdx = sortedLayers.findIndex(
+            (l) => l && (l.order === riser.source.tier || l.id === riser.source.tier)
+          );
+          const targetIdx = sortedLayers.findIndex(
+            (l) => l && (l.order === riser.target.tier || l.id === riser.target.tier)
+          );
+          const isRiserVisible =
+            (sourceIdx === -1 || sourceIdx < revealedLayerCount) &&
+            (targetIdx === -1 || targetIdx < revealedLayerCount);
+
           return (
             <React.Fragment key={riser.id}>
               {/* Vertical Glowing Riser Guide Beam */}
@@ -1009,9 +1135,11 @@ export function Isometric3DArchitectureView({
                   width: '2px',
                   height: `${Math.abs(riser.heightDiff)}px`,
                   transformOrigin: 'top left',
-                  transform: `translateZ(${Math.min(riser.source.z, riser.target.z)}px) rotateX(90deg)`,
+                  transform: `translateZ(${Math.min(riser.source.z, riser.target.z)}px) rotateX(90deg) ${isRiserVisible ? 'scaleY(1)' : 'scaleY(0)'}`,
                   background: `linear-gradient(to bottom, #818cf8, #06b6d4)`,
-                  boxShadow: '0 0 10px rgba(99, 102, 241, 0.6)',
+                  boxShadow: isRiserVisible ? '0 0 12px rgba(99, 102, 241, 0.8), 0 0 4px #06b6d4' : 'none',
+                  opacity: isRiserVisible ? 1 : 0,
+                  transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease',
                   pointerEvents: 'none',
                 }}
               />
@@ -1026,6 +1154,8 @@ export function Isometric3DArchitectureView({
                   transformOrigin: 'top left',
                   transform: `translateZ(${riser.target.z}px) rotate(${angle}deg)`,
                   background: 'dashed 2px rgba(129, 140, 248, 0.6)',
+                  opacity: isRiserVisible ? 1 : 0,
+                  transition: 'opacity 0.35s ease',
                   pointerEvents: 'none',
                 }}
               />
@@ -1038,7 +1168,12 @@ export function Isometric3DArchitectureView({
           .filter((el) => !el.isDeleted && !el.isHidden && el.type !== 'arrow')
           .map((el) => {
             const tier = tierMap.get(el.id) ?? 0;
+            const layerIdx = sortedLayers.findIndex((l) => l && (l.order === tier || l.id === tier));
+            const isElRevealed = layerIdx === -1 || layerIdx < revealedLayerCount;
+            const isElOnActiveLayer = layerIdx === revealedLayerCount - 1;
+
             const z = tier * elevationSpacing;
+            const futureZ = z + 150;
             const isSelected = selectedElementId === el.id;
             const isEditingThis = editingNodeId === el.id;
             const relX = el.x - bounds.minX;
@@ -1059,10 +1194,12 @@ export function Isometric3DArchitectureView({
               <div
                 key={el.id}
                 onClick={(e) => {
+                  if (!isElRevealed) return;
                   e.stopPropagation();
                   setSelectedElementId(el.id);
                 }}
                 onDoubleClick={(e) => {
+                  if (!isElRevealed) return;
                   e.stopPropagation();
                   setSelectedElementId(el.id);
                   setEditingNodeId(el.id);
@@ -1074,24 +1211,28 @@ export function Isometric3DArchitectureView({
                   top: `${relY}px`,
                   width: `${w}px`,
                   height: `${h}px`,
-                  transform: `translateZ(${z}px)`,
+                  transform: isElRevealed
+                    ? `translateZ(${z}px) scale(1)`
+                    : `translateZ(${futureZ}px) scale(0.85)`,
                   transformStyle: 'preserve-3d',
                   borderRadius: el.type === 'ellipse' ? '50%' : '8px',
                   background: el.backgroundColor || (isDark ? '#27272a' : '#f1f5f9'),
-                  border: `2px solid ${isSelected ? '#ffffff' : el.strokeColor || layer.color}`,
+                  border: `2px solid ${isSelected ? '#ffffff' : (isElOnActiveLayer ? layer.color : el.strokeColor || layer.color)}`,
                   boxShadow: isSelected
                     ? `0 0 0 3px #6366f1, 0 18px 32px rgba(0, 0, 0, 0.45)`
-                    : `0 12px 24px rgba(0, 0, 0, 0.35)`,
+                    : (isElOnActiveLayer ? `0 0 20px ${layer.color}66, 0 14px 28px rgba(0, 0, 0, 0.4)` : `0 12px 24px rgba(0, 0, 0, 0.35)`),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '8px',
                   color: isDark ? '#ffffff' : '#0f172a',
-                  cursor: 'pointer',
-                  opacity: isDimmed ? 0.2 : 1,
-                  transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease',
+                  cursor: isElRevealed ? 'pointer' : 'default',
+                  opacity: !isElRevealed ? 0 : (isDimmed ? 0.2 : 1),
+                  filter: !isElRevealed ? 'blur(6px)' : 'blur(0px)',
+                  pointerEvents: isElRevealed ? 'auto' : 'none',
+                  transition: 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, opacity 0.45s ease, filter 0.45s ease',
                 }}
-                title="Click to select, double-click to rename"
+                title={isElRevealed ? 'Click to select, double-click to rename' : ''}
               >
                 {/* 3D Extrusion Side Wall Simulation */}
                 <div
@@ -1850,6 +1991,13 @@ export function Isometric3DArchitectureView({
                   Select any component in 3D and use the layer dropdown in the top-right inspector to immediately transport it to any floor plane, or click <strong>+ Add Node</strong> in the dock to drop directly into that tier.
                 </p>
               </div>
+
+              <div>
+                <strong>5. 3D Scroll Story & Layer-by-Layer Assembly</strong>
+                <p style={{ margin: '4px 0 0', opacity: 0.8 }}>
+                  Scroll your mouse wheel or trackpad to dynamically build and assemble your architecture stack layer-by-layer with cinematic 3D easing. Use the timeline scrubber pips to jump to any tier, click <strong>Auto Tour</strong> for an automated showcase, and hold <strong>Ctrl + Wheel</strong> anytime to zoom.
+                </p>
+              </div>
             </div>
 
             <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -1875,6 +2023,217 @@ export function Isometric3DArchitectureView({
           </div>
         </div>
       )}
+
+      {/* 3D Scroll Story / Layer-by-Layer Assembly HUD Controller */}
+      <div
+        className="isometric-story-scrubber"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          bottom: '74px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 14px',
+          background: isDark ? 'rgba(20, 20, 25, 0.94)' : 'rgba(255, 255, 255, 0.94)',
+          backdropFilter: 'blur(16px)',
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(0, 0, 0, 0.12)',
+          borderRadius: '12px',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.35)',
+          color: isDark ? '#f4f4f5' : '#0f172a',
+          zIndex: 10,
+          userSelect: 'none',
+        }}
+      >
+        {/* Scroll Mode Toggle */}
+        <button
+          type="button"
+          className={`physics-btn ${scrollMode === 'story' ? 'is-active' : ''}`}
+          onClick={() => {
+            const next = scrollMode === 'story' ? 'zoom' : 'story';
+            setScrollMode(next);
+            doodleAPI?.onToast?.(
+              next === 'story'
+                ? 'Scroll Mode: 3D Story (Scroll wheel reveals layers • Ctrl+Wheel to zoom)'
+                : 'Scroll Mode: Zoom Canvas'
+            );
+          }}
+          style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            padding: '3px 8px',
+            color: scrollMode === 'story' ? '#818cf8' : undefined,
+          }}
+          title="Toggle between 3D Layer Scroll Story and Canvas Zoom (Ctrl+Wheel always zooms)"
+        >
+          <Sparkles size={12} style={{ color: scrollMode === 'story' ? '#818cf8' : undefined }} />
+          <span>{scrollMode === 'story' ? 'Scroll: Story' : 'Scroll: Zoom'}</span>
+        </button>
+
+        <div className="physics-dock-divider" />
+
+        {/* Step Backward Button */}
+        <button
+          type="button"
+          className="physics-btn"
+          disabled={revealedLayerCount <= 1}
+          onClick={() => setRevealedLayerCount((prev) => Math.max(1, prev - 1))}
+          style={{
+            opacity: revealedLayerCount <= 1 ? 0.35 : 1,
+            padding: '3px 6px',
+            cursor: revealedLayerCount <= 1 ? 'not-allowed' : 'pointer',
+          }}
+          title="Previous tier (or Scroll Up / [)"
+        >
+          <ChevronLeft size={13} />
+        </button>
+
+        {/* Layer Pips / Timeline Chips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {sortedLayers.map((l, idx) => {
+            if (!l) return null;
+            const isRevealed = idx < revealedLayerCount;
+            const isCurrent = idx === revealedLayerCount - 1;
+            return (
+              <button
+                key={`story_pip_${l.id}`}
+                type="button"
+                onClick={() => setRevealedLayerCount(idx + 1)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  border: isCurrent
+                    ? `1px solid ${l.color}`
+                    : '1px solid transparent',
+                  background: isCurrent
+                    ? `${l.color}24`
+                    : isRevealed
+                    ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)')
+                    : 'transparent',
+                  color: isCurrent
+                    ? l.color
+                    : isRevealed
+                    ? (isDark ? '#e4e4e7' : '#3f3f46')
+                    : '#71717a',
+                  fontSize: '11px',
+                  fontWeight: isCurrent ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+                title={`Click to show up to Layer ${idx + 1}: ${l.name}`}
+              >
+                <span
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: isRevealed ? l.color : '#52525b',
+                    boxShadow: isCurrent ? `0 0 8px ${l.color}` : 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                />
+                <span>L{l.order ?? idx}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Step Forward Button */}
+        <button
+          type="button"
+          className="physics-btn"
+          disabled={revealedLayerCount >= sortedLayers.length}
+          onClick={() => setRevealedLayerCount((prev) => Math.min(sortedLayers.length, prev + 1))}
+          style={{
+            opacity: revealedLayerCount >= sortedLayers.length ? 0.35 : 1,
+            padding: '3px 6px',
+            cursor: revealedLayerCount >= sortedLayers.length ? 'not-allowed' : 'pointer',
+          }}
+          title="Next tier (or Scroll Down / ])"
+        >
+          <ChevronRight size={13} />
+        </button>
+
+        <div className="physics-dock-divider" />
+
+        {/* Current Active Layer Info Badge */}
+        {(() => {
+          const currentLayer = sortedLayers[revealedLayerCount - 1] || sortedLayers[0];
+          const nodeCount = currentLayer ? (elementCountPerLayer[currentLayer.id] ?? elementCountPerLayer[currentLayer.order ?? 0] ?? 0) : 0;
+          return (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '2px 8px',
+                background: currentLayer ? `${currentLayer.color}15` : 'transparent',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: currentLayer?.color || '#818cf8',
+              }}
+            >
+              <span>{revealedLayerCount}/{sortedLayers.length}:</span>
+              <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentLayer?.name || 'Base Layer'}
+              </span>
+              <span style={{ fontSize: '10px', opacity: 0.75 }}>({nodeCount})</span>
+            </div>
+          );
+        })()}
+
+        <div className="physics-dock-divider" />
+
+        {/* Auto Tour Play / Pause */}
+        <button
+          type="button"
+          className={`physics-btn ${isPlayingTour ? 'is-active' : ''}`}
+          onClick={() => {
+            setIsPlayingTour((prev) => {
+              const next = !prev;
+              doodleAPI?.onToast?.(next ? '▶ Auto Tour: Assembling architecture layers' : 'Paused Auto Tour');
+              return next;
+            });
+          }}
+          style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            padding: '3px 8px',
+            color: isPlayingTour ? '#10b981' : undefined,
+            background: isPlayingTour ? 'rgba(16, 185, 129, 0.2)' : undefined,
+          }}
+          title={isPlayingTour ? 'Pause automated tour' : 'Play automated 3D layer assembly tour'}
+        >
+          {isPlayingTour ? <Pause size={12} /> : <Play size={12} />}
+          <span>{isPlayingTour ? 'Pause' : 'Tour'}</span>
+        </button>
+
+        {/* Show All / Reset Toggle */}
+        <button
+          type="button"
+          className="physics-btn"
+          onClick={() => {
+            if (revealedLayerCount === sortedLayers.length) {
+              setRevealedLayerCount(1);
+              doodleAPI?.onToast?.('Reset to foundation layer (Scroll down to build)');
+            } else {
+              setRevealedLayerCount(sortedLayers.length);
+              doodleAPI?.onToast?.('All architecture layers assembled');
+            }
+          }}
+          style={{ fontSize: '11px', padding: '3px 8px' }}
+          title={revealedLayerCount === sortedLayers.length ? 'Collapse down to base layer' : 'Assemble all layers'}
+        >
+          <span>{revealedLayerCount === sortedLayers.length ? 'Base Only' : 'Show All'}</span>
+        </button>
+      </div>
 
       {/* Bottom Floating Control Dock */}
       <div

@@ -11080,6 +11080,26 @@ label.force-tool-unselected,
   }
 }
 
+.isometric-story-scrubber {
+  animation: storyScrubberSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+@keyframes storyScrubberSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.isometric-story-scrubber button:hover {
+  filter: brightness(1.15);
+}
+
 
 
 

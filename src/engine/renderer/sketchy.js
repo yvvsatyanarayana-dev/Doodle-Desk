@@ -346,6 +346,73 @@ export function generateSketchyRoundedRectPath(x, y, w, h, radius, seed = 0, rou
 }
 
 /**
+ * Generate an SVG path data string ('d') for a sketchy hand-drawn hachure fill.
+ * Matches sketchyFill with organic -45° diagonal lines and double-pass jitter.
+ */
+export function generateSketchyHachurePath(w, h, seed = 0, roughness = 1, strokeWidth = 2) {
+  const angle = -Math.PI / 4;
+  const gap = Math.max(7, strokeWidth * 3.5);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const diagLen = Math.sqrt(w * w + h * h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const lineRoughness = Math.max(0, roughness * 0.6);
+
+  const paths = [];
+  for (let d = -diagLen; d < diagLen; d += gap) {
+    const x1 = cx + cos * d - sin * diagLen;
+    const y1 = cy + sin * d + cos * diagLen;
+    const x2 = cx + cos * d + sin * diagLen;
+    const y2 = cy + sin * d - cos * diagLen;
+    const lineD = generateSketchyLinePath(x1, y1, x2, y2, seed + Math.round(d), lineRoughness);
+    if (lineD) paths.push(lineD);
+  }
+  return paths.join(' ');
+}
+
+/**
+ * Generate an SVG path data string ('d') for a sketchy hand-drawn cross-hatch fill.
+ * Matches crossHatchFill with two perpendicular sketchy passes (-45° and +45°).
+ */
+export function generateSketchyCrossHatchPath(w, h, seed = 0, roughness = 1, strokeWidth = 2) {
+  const gap = Math.max(9, strokeWidth * 4.5);
+  const diagLen = Math.sqrt(w * w + h * h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const lineRoughness = Math.max(0, roughness * 0.6);
+
+  const paths = [];
+  // Pass 1: -45 deg
+  const angle1 = -Math.PI / 4;
+  const cos1 = Math.cos(angle1);
+  const sin1 = Math.sin(angle1);
+  for (let d = -diagLen; d < diagLen; d += gap) {
+    const x1 = cx + cos1 * d - sin1 * diagLen;
+    const y1 = cy + sin1 * d + cos1 * diagLen;
+    const x2 = cx + cos1 * d + sin1 * diagLen;
+    const y2 = cy + sin1 * d - cos1 * diagLen;
+    const lineD = generateSketchyLinePath(x1, y1, x2, y2, seed + Math.round(d), lineRoughness);
+    if (lineD) paths.push(lineD);
+  }
+
+  // Pass 2: +45 deg
+  const angle2 = Math.PI / 4;
+  const cos2 = Math.cos(angle2);
+  const sin2 = Math.sin(angle2);
+  for (let d = -diagLen; d < diagLen; d += gap) {
+    const x1 = cx + cos2 * d - sin2 * diagLen;
+    const y1 = cy + sin2 * d + cos2 * diagLen;
+    const x2 = cx + cos2 * d + sin2 * diagLen;
+    const y2 = cy + sin2 * d - cos2 * diagLen;
+    const lineD = generateSketchyLinePath(x1, y1, x2, y2, seed + 500 + Math.round(d), lineRoughness);
+    if (lineD) paths.push(lineD);
+  }
+
+  return paths.join(' ');
+}
+
+/**
  * Draw a sketchy ellipse with 2-pass overlapping loop.
  * Passes sweep past 360° by ~20° to eliminate flat seams and produce an authentic hand-drawn look.
  */
@@ -573,6 +640,140 @@ export function crossHatchFill(ctx, paths, seed, cacheOwner = null) {
   const gap = Math.max(9, (ctx.lineWidth || 2) * 5);
   drawHachure(ctx, paths, seed, 1, cacheOwner, -Math.PI / 4, gap, 0.52);
   drawHachure(ctx, paths, seed + 500, 1, cacheOwner, Math.PI / 4, gap, 0.52);
+}
+
+/**
+ * Dots fill — hand-drawn stippled dot matrix clipped inside the shape.
+ */
+export function dotsFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
+  if (!paths || paths.length < 3) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(paths[0][0], paths[0][1]);
+  for (let i = 1; i < paths.length; i++) {
+    ctx.lineTo(paths[i][0], paths[i][1]);
+  }
+  ctx.closePath();
+  ctx.clip();
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [px, py] of paths) {
+    if (px < minX) minX = px;
+    if (py < minY) minY = py;
+    if (px > maxX) maxX = px;
+    if (py > maxY) maxY = py;
+  }
+
+  const gap = Math.max(9, (ctx.lineWidth || 2) * 4.5);
+  const dotR = Math.max(1.3, (ctx.lineWidth || 2) * 0.65);
+  const rng = pseudoRandom(seed + 999);
+
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.beginPath();
+  let row = 0;
+  for (let y = minY + gap / 2; y <= maxY + gap / 2; y += gap) {
+    const offsetX = (row % 2 === 1) ? gap / 2 : 0;
+    for (let x = minX + gap / 2 + offsetX; x <= maxX + gap / 2; x += gap) {
+      const jx = (rng() - 0.5) * (roughness * 1.4);
+      const jy = (rng() - 0.5) * (roughness * 1.4);
+      ctx.moveTo(x + jx + dotR, y + jy);
+      ctx.arc(x + jx, y + jy, dotR, 0, Math.PI * 2);
+    }
+    row++;
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Zigzag fill — hand-drawn continuous zigzag hatching clipped inside the shape.
+ */
+export function zigzagFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
+  if (!paths || paths.length < 3) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(paths[0][0], paths[0][1]);
+  for (let i = 1; i < paths.length; i++) {
+    ctx.lineTo(paths[i][0], paths[i][1]);
+  }
+  ctx.closePath();
+  ctx.clip();
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [px, py] of paths) {
+    if (px < minX) minX = px;
+    if (py < minY) minY = py;
+    if (px > maxX) maxX = px;
+    if (py > maxY) maxY = py;
+  }
+
+  const angle = -Math.PI / 4;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const gap = Math.max(12, (ctx.lineWidth || 2) * 5.5);
+  const diagLen = Math.sqrt((maxX - minX) ** 2 + (maxY - minY) ** 2);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const step = Math.max(8, gap * 0.6);
+  const amp = Math.min(gap * 0.4, 7);
+
+  ctx.beginPath();
+  for (let d = -diagLen; d < diagLen; d += gap) {
+    const x1 = cx + cos * d - sin * diagLen;
+    const y1 = cy + sin * d + cos * diagLen;
+    const x2 = cx + cos * d + sin * diagLen;
+    const y2 = cy + sin * d - cos * diagLen;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+
+    const ux = dx / len;
+    const uy = dy / len;
+    const perpX = -uy;
+    const perpY = ux;
+
+    const rng = pseudoRandom(seed + Math.round(d) * 19);
+    ctx.moveTo(x1, y1);
+    let dist = 0;
+    let up = true;
+    while (dist < len) {
+      dist += step;
+      const t = Math.min(dist, len);
+      const px = x1 + ux * t;
+      const py = y1 + uy * t;
+      const wave = up ? amp : -amp;
+      const jx = (rng() - 0.5) * (roughness * 0.8);
+      const jy = (rng() - 0.5) * (roughness * 0.8);
+      ctx.lineTo(px + perpX * wave + jx, py + perpY * wave + jy);
+      up = !up;
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Dashed fill — hand-drawn dashed diagonal lines clipped inside the shape.
+ */
+export function dashedFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
+  ctx.save();
+  const dash = Math.max(6, (ctx.lineWidth || 2) * 2.5);
+  ctx.setLineDash([dash, dash * 0.75]);
+  drawHachure(
+    ctx,
+    paths,
+    seed,
+    roughness,
+    cacheOwner,
+    -Math.PI / 4,
+    Math.max(7, (ctx.lineWidth || 2) * 4),
+    0.85,
+  );
+  ctx.restore();
 }
 
 // ── Polygon & Multi-Shape Handlers ──

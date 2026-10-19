@@ -153,7 +153,7 @@ export function defaultElementProps() {
   return {
     strokeColor: '#1e1e1e',
     backgroundColor: 'transparent',
-    fillStyle: 'hachure', // hachure | cross-hatch | solid | none
+    fillStyle: 'hachure', // hachure | cross-hatch | solid | dots | zigzag | dashed | none
     strokeWidth: 2,
     strokeStyle: 'solid', // solid | dashed | dotted
     roughness: 1,
@@ -187,15 +187,24 @@ export function createElement(type, x, y, width = 0, height = 0, extraProps = {}
 
 // Create a text element
 export function createTextElement(x, y, text = '', extraProps = {}) {
-  return createElement(ELEMENT_TYPES.TEXT, x, y, 0, 0, {
+  const fontSize = extraProps.fontSize || FONT_SIZE_DEFAULT;
+  const lineHeight = extraProps.lineHeight || 1.25;
+  const lines = text ? text.split('\n') : [''];
+  let maxLen = 0;
+  for (const line of lines) {
+    if (line.length > maxLen) maxLen = line.length;
+  }
+  const defaultW = text ? Math.max(10, Math.ceil(maxLen * fontSize * 0.65) + 4) : 0;
+  const defaultH = text ? Math.max(fontSize, Math.ceil(lines.length * fontSize * lineHeight) + 4) : 0;
+  return createElement(ELEMENT_TYPES.TEXT, x, y, extraProps.width ?? defaultW, extraProps.height ?? defaultH, {
     text,
-    fontSize: FONT_SIZE_DEFAULT,
+    fontSize,
     fontFamily: FONT_FAMILY.Doodlefont,
     textAlign: 'left',
     verticalAlign: 'top',
     containerId: null,
     originalText: text,
-    lineHeight: 1.25,
+    lineHeight,
     ...extraProps,
   });
 }

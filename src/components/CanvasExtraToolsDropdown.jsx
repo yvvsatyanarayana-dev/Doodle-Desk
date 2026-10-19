@@ -71,7 +71,7 @@ function CanvasExtraToolsDropdownComponent({
   onTogglePhysicsPlayground,
   onToggleIsometric3D,
 }) {
-  const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
+  const activeAPI = (typeof window !== 'undefined' && window.__doodleAPI) || doodleAPI || canvasAPI || null;
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 64, left: 100 });
   const menuRef = useRef(null);
