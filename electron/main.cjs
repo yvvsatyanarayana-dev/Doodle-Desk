@@ -2,11 +2,11 @@ const { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, nativeImage, No
 const path = require('path');
 const fs = require('fs');
 
-const { createWindow, getAllWindows, getFocusedWindow, setIsQuitting } = require('./windows');
-const { setupMenu, rebuildMenu } = require('./menu');
-const { getSettings, getSetting, setSetting, resetSettings, addRecentFile, getRecentFiles, clearRecentFiles } = require('./store');
-const { isSupportedFile, parseFilePathFromArgv, queueFileToOpen, getQueuedFiles, registerProtocol } = require('./fileAssociation');
-const { setupAutoUpdater, checkUpdate, getLastStatus, quitAndInstall } = require('./updater');
+const { createWindow, getAllWindows, getFocusedWindow, setIsQuitting } = require('./windows.cjs');
+const { setupMenu, rebuildMenu } = require('./menu.cjs');
+const { getSettings, getSetting, setSetting, resetSettings, addRecentFile, getRecentFiles, clearRecentFiles } = require('./store.cjs');
+const { isSupportedFile, parseFilePathFromArgv, queueFileToOpen, getQueuedFiles, registerProtocol } = require('./fileAssociation.cjs');
+const { setupAutoUpdater, checkUpdate, getLastStatus, quitAndInstall } = require('./updater.cjs');
 
 // Process-level crash & rejection prevention
 process.on('uncaughtException', (err) => {
@@ -846,7 +846,7 @@ ipcMain.handle('app:print-canvas', async (event, { dataUrl, title, isLandscape, 
       trafficLightPosition: isMac ? { x: 14, y: 14 } : undefined,
       backgroundColor: isDark ? '#111113' : '#ffffff',
       webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
+        preload: path.join(__dirname, 'preload.cjs'),
         nodeIntegration: false,
         contextIsolation: true,
       },

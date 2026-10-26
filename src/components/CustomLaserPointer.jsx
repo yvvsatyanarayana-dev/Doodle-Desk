@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
+import { ParticleTrailEngine, TRAIL_MODES } from '../utils/particleTrails.js';
+import { Sparkles, Flame, PenTool, Target, X } from 'lucide-react';
 
 const UI_SELECTOR = 'button, a, input, select, textarea, [role="button"], header, nav, dialog, ' +
   '.studio-topbar, .studio-topbar-left, .studio-topbar-center, .studio-topbar-right, ' +
@@ -11,21 +13,29 @@ const UI_SELECTOR = 'button, a, input, select, textarea, [role="button"], header
   '.studio-properties-panel, .App-menu__left-wrapper, .welcome-screen, .zen-mode-toggle-btn';
 
 /**
- * Minimal Laser Pointer
- * Draws an ultra-fine, elegant glowing crimson beam when holding down and dragging on the canvas.
- * Always keeps pointerEvents: 'none' on the canvas overlay so it NEVER blocks clicks on toolbars or UI.
- * Passes through pointer events seamlessly when interacting with toolbars, headers, or menus.
+ * Custom Laser Pointer & Presenter Particle Physics
+ * Supports:
+ * - Beam (crimson laser)
+ * - Fireflies (sparkle bursts with velocity physics)
+ * - Ribbon (calligraphic flowing ink stream)
+ * - Spotlight (magnetic halo snapping to nearby diagram elements)
  */
-function CustomLaserPointerComponent({ isActive, onClose }) {
+function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
   const canvasRef = useRef(null);
-  const pointsRef = useRef([]);
+  const engineRef = useRef(new ParticleTrailEngine());
   const animFrameRef = useRef(null);
   const currentPosRef = useRef({ x: -100, y: -100 });
   const isPointerDownRef = useRef(false);
+  const [trailMode, setTrailMode] = useState(TRAIL_MODES.BEAM);
+
+  // Sync mode with engine
+  const handleSelectMode = (mode) => {
+    setTrailMode(mode);
+    engineRef.current.setMode(mode);
+  };
 
   useEffect(() => {
     if (!isActive) {
-      pointsRef.current = [];
       isPointerDownRef.current = false;
       return;
     }
@@ -33,6 +43,7 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    const engine = engineRef.current;
 
     const handleResize = () => {
       canvas.width = window.innerWidth;
@@ -47,16 +58,12 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
     };
 
     const handlePointerDown = (e) => {
-      // If clicking on any toolbar or UI button, deactivate laser so the tool is selected
       if (isOverUI(e.target)) {
-        onClose?.();
         return;
       }
-
       if (e.button === 0) {
         isPointerDownRef.current = true;
-        const now = performance.now();
-        pointsRef.current.push({ x: e.clientX, y: e.clientY, time: now });
+        engine.addPoint(e.clientX, e.clientY, true);
       }
     };
 
@@ -71,9 +78,19 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
         currentPosRef.current = { x: e.clientX, y: e.clientY };
       }
 
-      if (isPointerDownRef.current) {
-        const now = performance.now();
-        pointsRef.current.push({ x: e.clientX, y: e.clientY, time: now });
+      if (isPointerDownRef.current || engine.mode === TRAIL_MODES.SPOTLIGHT) {
+        engine.addPoint(e.clientX, e.clientY, isPointerDownRef.current);
+      }
+
+      // Magnetic spotlight update
+      if (engine.mode === TRAIL_MODES.SPOTLIGHT && doodleAPI) {
+        const elements = doodleAPI.getSceneElements?.() || [];
+        const appState = doodleAPI.getAppState?.() || {};
+        engine.updateMagneticSpotlight(e.clientX, e.clientY, elements, {
+          zoom: appState.zoom?.value || 1,
+          scrollX: appState.scrollX || 0,
+          scrollY: appState.scrollY || 0,
+        });
       }
     };
 
@@ -84,6 +101,14 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
       ) {
         e.preventDefault();
         onClose?.();
+        return;
+      }
+
+      // Shift+L cycles trail modes
+      if (e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        const next = engine.cycleMode();
+        setTrailMode(next);
       }
     };
 
@@ -92,48 +117,25 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('keydown', handleKeyDown);
 
-    // Minimal render loop
+    // Particle render loop
     const render = (now) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      engine.render(ctx, canvas.width, canvas.height, now);
 
-      const MAX_AGE = 350; // Smooth 350ms fade-out
-
-      // Filter old trail points
-      pointsRef.current = pointsRef.current.filter((p) => now - p.time < MAX_AGE);
-      const pts = pointsRef.current;
-
-      // Draw minimal smooth laser beam only when dragging
-      if (pts.length > 1) {
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        for (let i = 1; i < pts.length; i++) {
-          const p1 = pts[i - 1];
-          const p2 = pts[i];
-          const progress = 1 - (now - p2.time) / MAX_AGE;
-          if (progress <= 0) continue;
-
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-
-          // Minimal glowing crimson line
-          ctx.strokeStyle = `rgba(244, 63, 94, ${progress * 0.95})`;
-          ctx.lineWidth = Math.max(progress * 3, 1.5);
-          ctx.shadowColor = '#f43f5e';
-          ctx.shadowBlur = 4;
-          ctx.stroke();
-        }
-      }
-
-      // Draw minimal laser bead at cursor position when over canvas
+      // Render cursor bead
       const head = currentPosRef.current;
       if (head.x > 0 && head.y > 0) {
         ctx.beginPath();
-        ctx.arc(head.x, head.y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#f43f5e';
-        ctx.shadowColor = '#f43f5e';
-        ctx.shadowBlur = 6;
+        ctx.arc(head.x, head.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle =
+          engine.mode === TRAIL_MODES.FIREFLIES
+            ? '#38bdf8'
+            : engine.mode === TRAIL_MODES.RIBBON
+            ? '#10b981'
+            : engine.mode === TRAIL_MODES.SPOTLIGHT
+            ? '#818cf8'
+            : '#f43f5e';
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 8;
         ctx.fill();
       }
 
@@ -152,24 +154,150 @@ function CustomLaserPointerComponent({ isActive, onClose }) {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [isActive, onClose]);
+  }, [isActive, onClose, doodleAPI]);
 
   if (!isActive) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="custom-laser-canvas"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        pointerEvents: 'none',
-        zIndex: 9999,
-      }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="custom-laser-canvas"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex: 9999,
+        }}
+      />
+
+      {/* Floating Trail Physics Mode Bar */}
+      <div
+        className="laser-mode-pill"
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '4px 8px',
+          background: 'rgba(24, 24, 27, 0.92)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '20px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          zIndex: 10000,
+          color: '#f4f4f5',
+          fontSize: '11px',
+          fontWeight: 600,
+        }}
+      >
+        <span style={{ fontSize: '10px', color: '#a1a1aa', marginRight: '4px' }}>TRAIL:</span>
+
+        <button
+          type="button"
+          onClick={() => handleSelectMode(TRAIL_MODES.BEAM)}
+          style={{
+            background: trailMode === TRAIL_MODES.BEAM ? 'rgba(244, 63, 94, 0.25)' : 'transparent',
+            color: trailMode === TRAIL_MODES.BEAM ? '#f43f5e' : '#a1a1aa',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '3px 7px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+          title="Crimson Laser Beam"
+        >
+          <Flame size={12} /> Beam
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSelectMode(TRAIL_MODES.FIREFLIES)}
+          style={{
+            background: trailMode === TRAIL_MODES.FIREFLIES ? 'rgba(56, 189, 248, 0.25)' : 'transparent',
+            color: trailMode === TRAIL_MODES.FIREFLIES ? '#38bdf8' : '#a1a1aa',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '3px 7px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+          title="Luminous Spark Fireflies"
+        >
+          <Sparkles size={12} /> Sparks
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSelectMode(TRAIL_MODES.RIBBON)}
+          style={{
+            background: trailMode === TRAIL_MODES.RIBBON ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
+            color: trailMode === TRAIL_MODES.RIBBON ? '#10b981' : '#a1a1aa',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '3px 7px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+          title="Fluid Ink Ribbon"
+        >
+          <PenTool size={12} /> Ribbon
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSelectMode(TRAIL_MODES.SPOTLIGHT)}
+          style={{
+            background: trailMode === TRAIL_MODES.SPOTLIGHT ? 'rgba(129, 140, 248, 0.25)' : 'transparent',
+            color: trailMode === TRAIL_MODES.SPOTLIGHT ? '#818cf8' : '#a1a1aa',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '3px 7px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+            fontSize: '11px',
+          }}
+          title="Magnetic Spotlight (Snaps to elements)"
+        >
+          <Target size={12} /> Spotlight
+        </button>
+
+        <div style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.15)', margin: '0 2px' }} />
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#71717a',
+            cursor: 'pointer',
+            padding: '2px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+          title="Exit Laser Mode (Esc)"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </>
   );
 }
 

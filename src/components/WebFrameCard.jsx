@@ -6,6 +6,7 @@ import { MathGraphCard } from './MathGraphCard.jsx';
 import { InteractiveTableCard } from './InteractiveTableCard.jsx';
 import { LiveDataCard } from './LiveDataCard.jsx';
 import { ReactiveSliderCard } from './ReactiveSliderCard.jsx';
+import { InteractiveStencilCard } from './InteractiveStencilCard.jsx';
 
 export function extractElementIdFromLink(link) {
   if (!link || typeof link !== 'string') return null;
@@ -855,6 +856,18 @@ function WebFrameCardComponent({ element, appState, doodleAPI, onLinkOpen }) {
     return (
       <div style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
         <ReactiveSliderCard
+          element={element}
+          doodleAPI={doodleAPI}
+          isDark={appState?.theme === 'dark' || (typeof document !== 'undefined' && document.body?.classList.contains('theme--dark'))}
+        />
+      </div>
+    );
+  }
+
+  if (element.docType === 'interactive_stencil') {
+    return (
+      <div style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+        <InteractiveStencilCard
           element={element}
           doodleAPI={doodleAPI}
           isDark={appState?.theme === 'dark' || (typeof document !== 'undefined' && document.body?.classList.contains('theme--dark'))}

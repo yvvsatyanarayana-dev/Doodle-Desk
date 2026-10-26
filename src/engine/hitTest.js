@@ -45,47 +45,38 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
 
   switch (el.type) {
     case ELEMENT_TYPES.RECTANGLE: {
-      // Hit on stroke (border)
-      const onLeft = Math.abs(lx - x) <= tol && ly >= y - tol && ly <= y + h + tol;
-      const onRight = Math.abs(lx - (x + w)) <= tol && ly >= y - tol && ly <= y + h + tol;
-      const onTop = Math.abs(ly - y) <= tol && lx >= x - tol && lx <= x + w + tol;
-      const onBottom = Math.abs(ly - (y + h)) <= tol && lx >= x - tol && lx <= x + w + tol;
-
-      if (onLeft || onRight || onTop || onBottom) return true;
-
-      // Hit on fill
-      if (el.backgroundColor && el.backgroundColor !== 'transparent') {
-        return isPointInRect(lx, ly, x, y, w, h);
-      }
-      return false;
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const rw = Math.max(1, Math.abs(w));
+      const rh = Math.max(1, Math.abs(h));
+      return isPointInRect(lx, ly, rx, ry, rw, rh, tol);
     }
 
     case ELEMENT_TYPES.ELLIPSE: {
-      const cx = x + w / 2, cy = y + h / 2;
-      const rx = w / 2 || 1, ry = h / 2 || 1;
-      const ex = (lx - cx) / rx;
-      const ey = (ly - cy) / ry;
-      const dist = Math.sqrt(ex * ex + ey * ey);
-      // On border
-      if (Math.abs(dist - 1) * Math.min(rx, ry) <= tol) return true;
-      // On fill
-      if (el.backgroundColor && el.backgroundColor !== 'transparent') {
-        return dist <= 1;
-      }
-      return false;
+      const rw = Math.max(1, Math.abs(w));
+      const rh = Math.max(1, Math.abs(h));
+      const rx = rw / 2;
+      const ry = rh / 2;
+      const cx = (w < 0 ? x + w : x) + rx;
+      const cy = (h < 0 ? y + h : y) + ry;
+      const ex = (lx - cx) / (rx + tol);
+      const ey = (ly - cy) / (ry + tol);
+      return (ex * ex + ey * ey) <= 1;
     }
 
     case ELEMENT_TYPES.DIAMOND: {
-      const cx = x + w / 2, cy = y + h / 2;
-      const corners = [[cx, y], [x + w, cy], [cx, y + h], [x, cy]];
+      const rw = Math.max(1, Math.abs(w));
+      const rh = Math.max(1, Math.abs(h));
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const cx = rx + rw / 2, cy = ry + rh / 2;
+      const corners = [[cx, ry], [rx + rw, cy], [cx, ry + rh], [rx, cy]];
+      if (polygonContainsPoint(corners, lx, ly)) return true;
       for (let i = 0; i < 4; i++) {
         const next = (i + 1) % 4;
         if (distanceToSegment(lx, ly, corners[i][0], corners[i][1], corners[next][0], corners[next][1]) <= tol) {
           return true;
         }
-      }
-      if (el.backgroundColor && el.backgroundColor !== 'transparent') {
-        return polygonContainsPoint(corners, lx, ly);
       }
       return false;
     }
@@ -107,29 +98,23 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
       else if (el.type === ELEMENT_TYPES.CLOUD) poly = getCloudPolygon(x, y, w, h);
 
       if (poly) {
+        if (polygonContainsPoint(poly, lx, ly)) return true;
         for (let i = 0; i < poly.length; i++) {
           const next = (i + 1) % poly.length;
           if (distanceToSegment(lx, ly, poly[i][0], poly[i][1], poly[next][0], poly[next][1]) <= tol) {
             return true;
           }
         }
-        if (el.backgroundColor && el.backgroundColor !== 'transparent') {
-          return polygonContainsPoint(poly, lx, ly);
-        }
       }
       return false;
     }
 
     case ELEMENT_TYPES.CAPSULE: {
-      const onLeft = Math.abs(lx - x) <= tol && ly >= y && ly <= y + h;
-      const onRight = Math.abs(lx - (x + w)) <= tol && ly >= y && ly <= y + h;
-      const onTop = Math.abs(ly - y) <= tol && lx >= x && lx <= x + w;
-      const onBottom = Math.abs(ly - (y + h)) <= tol && lx >= x && lx <= x + w;
-      if (onLeft || onRight || onTop || onBottom) return true;
-      if (el.backgroundColor && el.backgroundColor !== 'transparent') {
-        return isPointInRect(lx, ly, x, y, w, h);
-      }
-      return false;
+      const rx = w < 0 ? x + w : x;
+      const ry = h < 0 ? y + h : y;
+      const rw = Math.max(1, Math.abs(w));
+      const rh = Math.max(1, Math.abs(h));
+      return isPointInRect(lx, ly, rx, ry, rw, rh, tol);
     }
 
     case ELEMENT_TYPES.ARROW:
@@ -148,6 +133,12 @@ export function hitTestElement(el, px, py, { includeLocked = false } = {}) {
       for (let i = 0; i < el.points.length - 1; i++) {
         const ax = x + el.points[i][0], ay = y + el.points[i][1];
         const bx = x + el.points[i + 1][0], by = y + el.points[i + 1][1];
+        const segMinX = (ax < bx ? ax : bx) - tol;
+        const segMaxX = (ax > bx ? ax : bx) + tol;
+        if (lx < segMinX || lx > segMaxX) continue;
+        const segMinY = (ay < by ? ay : by) - tol;
+        const segMaxY = (ay > by ? ay : by) + tol;
+        if (ly < segMinY || ly > segMaxY) continue;
         if (distanceToSegment(lx, ly, ax, ay, bx, by) <= tol) return true;
       }
       return false;
@@ -204,7 +195,7 @@ export function getElementAtPoint(elements, px, py, { includeLocked = false, pre
   return null;
 }
 
-// Find all elements inside a selection rectangle
+// Find all elements inside or intersecting a selection rectangle
 export function getElementsInRect(elements, rx, ry, rw, rh) {
   const minX = Math.min(rx, rx + rw);
   const minY = Math.min(ry, ry + rh);
@@ -213,8 +204,14 @@ export function getElementsInRect(elements, rx, ry, rw, rh) {
 
   return elements.filter(el => {
     if (el.isDeleted || el.isHidden || el.locked) return false;
-    const b = getElementBounds(el);
-    return b.x >= minX && b.y >= minY && b.x + b.width <= maxX && b.y + b.height <= maxY;
+    const b = el.type === ELEMENT_TYPES.TEXT ? getTextElementBounds(el) : getCachedElementBounds(el);
+    const bMinX = Math.min(b.x, b.x + b.width);
+    const bMaxX = Math.max(b.x, b.x + b.width);
+    const bMinY = Math.min(b.y, b.y + b.height);
+    const bMaxY = Math.max(b.y, b.y + b.height);
+    const isEnclosed = bMinX >= minX && bMinY >= minY && bMaxX <= maxX && bMaxY <= maxY;
+    const isIntersecting = bMaxX >= minX && bMinX <= maxX && bMaxY >= minY && bMinY <= maxY;
+    return isEnclosed || isIntersecting;
   });
 }
 

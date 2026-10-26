@@ -8,7 +8,8 @@ import {
   sketchyFill, solidFill, crossHatchFill, dotsFill, zigzagFill, dashedFill
 } from './sketchy.js';
 import { STROKE_WIDTHS, ELEMENT_TYPES } from '../elements.js';
-import { getArrowheadPoints, rotatePoint, getElementCenter, getBoundsFromPoints } from '../math/geometry.js';
+import { getArrowheadPoints, rotatePoint, getElementCenter, getBoundsFromPoints, getCachedElementBounds } from '../math/geometry.js';
+import { computeOrthogonalPoints, renderOrthogonalPath } from '../layout/orthogonalRouting.js';
 
 // Font stack for each family
 const FONT_STACKS = {
@@ -84,6 +85,117 @@ function applyFill(ctx, el, polygon) {
     dashedFill(ctx, polygon, el.seed || 0, el.roughness ?? 1, el);
     ctx.restore();
   }
+}
+
+// High-performance Path2D generator with Catmull-Rom & Chaikin smoothing
+export function appendSmoothFreedrawToPath(path, offsetX, offsetY, pts, baseWidth = 2) {
+  if (!path || !pts || pts.length === 0) return;
+  if (pts.length === 1) {
+    path.moveTo(offsetX + pts[0][0] + Math.max(1, baseWidth / 2), offsetY + pts[0][1]);
+    path.arc(offsetX + pts[0][0], offsetY + pts[0][1], Math.max(1, baseWidth / 2), 0, Math.PI * 2);
+    return;
+  }
+  if (pts.length === 2) {
+    path.moveTo(offsetX + pts[0][0], offsetY + pts[0][1]);
+    path.lineTo(offsetX + pts[1][0], offsetY + pts[1][1]);
+    return;
+  }
+
+  const filtered = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = filtered[filtered.length - 1];
+    const curr = pts[i];
+    const dx = curr[0] - prev[0];
+    const dy = curr[1] - prev[1];
+    if (dx * dx + dy * dy >= 1.0 || i === pts.length - 1) {
+      filtered.push(curr);
+    }
+  }
+
+  let renderPts = filtered;
+  if (filtered.length >= 4) {
+    const chaikin = [filtered[0]];
+    for (let i = 0; i < filtered.length - 1; i++) {
+      const p0 = filtered[i];
+      const p1 = filtered[i + 1];
+      chaikin.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
+      chaikin.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
+    }
+    chaikin.push(filtered[filtered.length - 1]);
+    renderPts = chaikin;
+  }
+
+  const n = renderPts.length;
+  path.moveTo(offsetX + renderPts[0][0], offsetY + renderPts[0][1]);
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = renderPts[i === 0 ? 0 : i - 1];
+    const p1 = renderPts[i];
+    const p2 = renderPts[i + 1];
+    const p3 = renderPts[i + 2 >= n ? n - 1 : i + 2];
+
+    const cp1x = offsetX + p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = offsetY + p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = offsetX + p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = offsetY + p2[1] - (p3[1] - p1[1]) / 6;
+    path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, offsetX + p2[0], offsetY + p2[1]);
+  }
+}
+
+function createSmoothFreedrawPath(pts, baseWidth) {
+  if (typeof Path2D === 'undefined' || !pts || pts.length === 0) return null;
+  const p = new Path2D();
+  appendSmoothFreedrawToPath(p, 0, 0, pts, baseWidth);
+  return p;
+}
+
+// Ultra-fast single-draw-call rasterizer for runs of thousands of freedraw strokes
+export function renderBatchedFreedrawRun(ctx, elements, start, end) {
+  if (typeof Path2D === 'undefined' || start >= end) return;
+  const leadEl = elements[start];
+  const lastEl = elements[end - 1];
+  const count = end - start;
+  const baseWidth = STROKE_WIDTHS[leadEl.strokeWidth] ?? (typeof leadEl.strokeWidth === 'number' ? leadEl.strokeWidth : 2);
+
+  let batch = leadEl._batchedRun;
+  if (!batch || batch.count !== count || batch.lastId !== lastEl.id) {
+    const p = new Path2D();
+    const originX = leadEl.x || 0;
+    const originY = leadEl.y || 0;
+    for (let k = start; k < end; k++) {
+      const el = elements[k];
+      if (el.points && el.points.length > 0) {
+        appendSmoothFreedrawToPath(p, (el.x || 0) - originX, (el.y || 0) - originY, el.points, baseWidth);
+      }
+    }
+    batch = {
+      path: p,
+      count,
+      lastId: lastEl.id,
+      originX,
+      originY,
+    };
+    leadEl._batchedRun = batch;
+  }
+
+  const strokeColor = leadEl.strokeColor || '#1e1e1e';
+  if (ctx.strokeStyle !== strokeColor) ctx.strokeStyle = strokeColor;
+  if (ctx.lineWidth !== baseWidth) ctx.lineWidth = baseWidth;
+  if (ctx.lineCap !== 'round') ctx.lineCap = 'round';
+  if (ctx.lineJoin !== 'round') ctx.lineJoin = 'round';
+  const hasOpacity = leadEl.opacity !== undefined && leadEl.opacity < 100;
+  if (hasOpacity) ctx.globalAlpha = (leadEl.opacity / 100);
+
+  const curX = leadEl.x || 0;
+  const curY = leadEl.y || 0;
+  if (curX === 0 && curY === 0) {
+    ctx.stroke(batch.path);
+  } else {
+    ctx.translate(curX, curY);
+    ctx.stroke(batch.path);
+    ctx.translate(-curX, -curY);
+  }
+
+  if (hasOpacity) ctx.globalAlpha = 1;
 }
 
 // Catmull-Rom spline with Chaikin corner-smoothing for fluid, organic handwriting
@@ -285,6 +397,42 @@ function renderInteractiveTableCanvas(ctx, el) {
 export function renderElement(ctx, el, imageCache = {}) {
   if (el.isDeleted || el.isHidden) return;
   if ((el.opacity ?? 100) === 0) return;
+
+  // Ultra-fast GPU Path2D zero-overhead path for FREEDRAW
+  // Bypasses heavy ctx.save() / ctx.restore() context state stack operations
+  if (el.type === ELEMENT_TYPES.FREEDRAW && (!el.angle || Math.abs(el.angle) < 0.0001)) {
+    if (!el.points || el.points.length === 0) return;
+    const pts = el.points;
+    const baseWidth = STROKE_WIDTHS[el.strokeWidth] ?? (typeof el.strokeWidth === 'number' ? el.strokeWidth : 2);
+    if (typeof Path2D !== 'undefined') {
+      if (!el._cachedPath2D || el._cachedPoints !== pts || el._cachedBaseWidth !== baseWidth) {
+        el._cachedPath2D = createSmoothFreedrawPath(pts, baseWidth);
+        el._cachedPoints = pts;
+        el._cachedBaseWidth = baseWidth;
+      }
+      if (el._cachedPath2D) {
+        const strokeColor = el.strokeColor || '#1e1e1e';
+        if (ctx.strokeStyle !== strokeColor) ctx.strokeStyle = strokeColor;
+        if (ctx.lineWidth !== baseWidth) ctx.lineWidth = baseWidth;
+        if (ctx.lineCap !== 'round') ctx.lineCap = 'round';
+        if (ctx.lineJoin !== 'round') ctx.lineJoin = 'round';
+        const hasOpacity = el.opacity !== undefined && el.opacity < 100;
+        if (hasOpacity) ctx.globalAlpha = (el.opacity / 100);
+
+        const x = el.x || 0;
+        const y = el.y || 0;
+        if (x === 0 && y === 0) {
+          ctx.stroke(el._cachedPath2D);
+        } else {
+          ctx.translate(x, y);
+          ctx.stroke(el._cachedPath2D);
+          ctx.translate(-x, -y);
+        }
+        if (hasOpacity) ctx.globalAlpha = 1;
+        return;
+      }
+    }
+  }
 
   ctx.save();
 
@@ -588,8 +736,25 @@ export function renderElement(ctx, el, imageCache = {}) {
       const pts = el.points;
       const edgeMode = el.roundness;
       const isSharp = !edgeMode || edgeMode === 'sharp' || edgeMode === false || edgeMode === 0;
+      const isOrthogonal = el.routing === 'orthogonal' || edgeMode === 'elbow';
 
-      if (!isSharp && pts.length >= 3) {
+      let effectiveHeadBefore = [x + pts[pts.length - 2][0], y + pts[pts.length - 2][1]];
+      let effectiveHeadTip = [x + pts[pts.length - 1][0], y + pts[pts.length - 1][1]];
+      let effectiveStartTip = [x + pts[0][0], y + pts[0][1]];
+      let effectiveStartBefore = [x + pts[1][0], y + pts[1][1]];
+
+      if (isOrthogonal) {
+        const startPt = [x + pts[0][0], y + pts[0][1]];
+        const endPt = [x + pts[pts.length - 1][0], y + pts[pts.length - 1][1]];
+        const orthoPts = computeOrthogonalPoints(startPt, endPt);
+        renderOrthogonalPath(ctx, orthoPts, isSharp ? 0 : 8, roughness, seed);
+        if (orthoPts.length >= 2) {
+          effectiveHeadBefore = orthoPts[orthoPts.length - 2];
+          effectiveHeadTip = orthoPts[orthoPts.length - 1];
+          effectiveStartTip = orthoPts[0];
+          effectiveStartBefore = orthoPts[1];
+        }
+      } else if (!isSharp && pts.length >= 3) {
         ctx.beginPath();
         ctx.moveTo(x + pts[0][0], y + pts[0][1]);
         for (let i = 1; i < pts.length - 1; i++) {
@@ -610,10 +775,8 @@ export function renderElement(ctx, el, imageCache = {}) {
 
       // Draw arrowhead if arrow type
       if (type === ELEMENT_TYPES.ARROW) {
-        const last = pts[pts.length - 1];
-        const prev = pts[pts.length - 2];
-        const tip = [x + last[0], y + last[1]];
-        const before = [x + prev[0], y + prev[1]];
+        const tip = effectiveHeadTip;
+        const before = effectiveHeadBefore;
         const arrowSize = Math.max(10, (STROKE_WIDTHS[el.strokeWidth] ?? 2) * 5);
 
         const headPts = getArrowheadPoints(before[0], before[1], tip[0], tip[1], arrowSize);
@@ -628,10 +791,8 @@ export function renderElement(ctx, el, imageCache = {}) {
 
         // Start arrowhead if bidirectional
         if (el.startArrowhead === 'arrow') {
-          const first = pts[0];
-          const second = pts[1];
-          const tipS = [x + first[0], y + first[1]];
-          const beforeS = [x + second[0], y + second[1]];
+          const tipS = effectiveStartTip;
+          const beforeS = effectiveStartBefore;
           const headS = getArrowheadPoints(beforeS[0], beforeS[1], tipS[0], tipS[1], arrowSize);
           ctx.beginPath();
           ctx.moveTo(headS[1][0], headS[1][1]);
@@ -649,6 +810,28 @@ export function renderElement(ctx, el, imageCache = {}) {
       const pts = el.points;
       const baseWidth = STROKE_WIDTHS[el.strokeWidth] ?? (typeof el.strokeWidth === 'number' ? el.strokeWidth : 2);
 
+      // Ultra-fast GPU Path2D path (bypasses heavy ctx.save/restore context stack overhead)
+      if (typeof Path2D !== 'undefined') {
+        if (!el._cachedPath2D || el._cachedPoints !== pts || el._cachedBaseWidth !== baseWidth) {
+          el._cachedPath2D = createSmoothFreedrawPath(pts, baseWidth);
+          el._cachedPoints = pts;
+          el._cachedBaseWidth = baseWidth;
+        }
+        if (el._cachedPath2D) {
+          ctx.strokeStyle = el.strokeColor || '#1e1e1e';
+          ctx.lineWidth = baseWidth;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          const hasOpacity = el.opacity !== undefined && el.opacity < 100;
+          if (hasOpacity) ctx.globalAlpha = (el.opacity / 100);
+          ctx.translate(x, y);
+          ctx.stroke(el._cachedPath2D);
+          ctx.translate(-x, -y);
+          if (hasOpacity) ctx.globalAlpha = 1;
+          break;
+        }
+      }
+
       ctx.save();
       ctx.strokeStyle = el.strokeColor || '#1e1e1e';
       ctx.fillStyle = el.strokeColor || '#1e1e1e';
@@ -656,7 +839,6 @@ export function renderElement(ctx, el, imageCache = {}) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.globalAlpha = (el.opacity ?? 100) / 100;
-
       if (el.strokeStyle === 'dashed') {
         ctx.setLineDash([baseWidth * 4, baseWidth * 3]);
       } else if (el.strokeStyle === 'dotted') {
@@ -664,7 +846,6 @@ export function renderElement(ctx, el, imageCache = {}) {
       } else {
         ctx.setLineDash([]);
       }
-
       renderSmoothFreedraw(ctx, x, y, pts, baseWidth);
       ctx.restore();
       break;
@@ -980,154 +1161,250 @@ export function getTextElementBounds(element) {
   };
 }
 
-// Render hit-test overlay (selection box + handles)
-export function renderSelectionOverlay(ctx, elements, zoom = 1) {
-  for (const el of elements) {
-    if (el.isDeleted) continue;
-    ctx.save();
+// Render single element selection box & handles
+function renderSingleElementSelection(ctx, el, zoom = 1) {
+  ctx.save();
 
-    const pointBounds = el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length
-      ? getBoundsFromPoints(el.points)
-      : null;
-    const localBounds = pointBounds
-      ? { x: el.x + pointBounds.x, y: el.y + pointBounds.y, width: pointBounds.width, height: pointBounds.height }
-      : el.type === ELEMENT_TYPES.TEXT
-        ? getTextElementBounds(el)
-        : { x: el.x, y: el.y, width: el.width, height: el.height };
+  const pointBounds = el.type === ELEMENT_TYPES.FREEDRAW && el.points?.length
+    ? getBoundsFromPoints(el.points)
+    : null;
+  const localBounds = pointBounds
+    ? { x: el.x + pointBounds.x, y: el.y + pointBounds.y, width: pointBounds.width, height: pointBounds.height }
+    : el.type === ELEMENT_TYPES.TEXT
+      ? getTextElementBounds(el)
+      : { x: el.x, y: el.y, width: el.width, height: el.height };
 
-    if (el.angle && Math.abs(el.angle) > 0.0001) {
-      const [cx, cy] = [localBounds.x + localBounds.width / 2, localBounds.y + localBounds.height / 2];
-      ctx.translate(cx, cy);
-      ctx.rotate(el.angle);
-      ctx.translate(-cx, -cy);
-    }
+  if (el.angle && Math.abs(el.angle) > 0.0001) {
+    const [cx, cy] = [localBounds.x + localBounds.width / 2, localBounds.y + localBounds.height / 2];
+    ctx.translate(cx, cy);
+    ctx.rotate(el.angle);
+    ctx.translate(-cx, -cy);
+  }
 
-    const padding = 4 / zoom;
-    const rx = localBounds.x - padding;
-    const ry = localBounds.y - padding;
-    const rw = localBounds.width + padding * 2;
-    const rh = localBounds.height + padding * 2;
+  const padding = 4 / zoom;
+  const rx = localBounds.x - padding;
+  const ry = localBounds.y - padding;
+  const rw = localBounds.width + padding * 2;
+  const rh = localBounds.height + padding * 2;
 
-    // Dedicated linear selection handles for Arrow & Line (Doodle style: Start circle, Midpoint filled purple circle, End circle - NO bounding box or corner squares!)
-    if (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) {
-      if (el.points?.length >= 2) {
-        const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
-        const handleBg = isLight ? '#ffffff' : '#232329';
-        const primaryColor = 'rgba(80,80,80,0.7)';
-        const strokeW = 1.8 / zoom;
-        const pts = el.points;
-        const startX = el.x + pts[0][0];
-        const startY = el.y + pts[0][1];
-        const endX = el.x + pts[pts.length - 1][0];
-        const endY = el.y + pts[pts.length - 1][1];
+  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
+  const handleBg = isLight ? '#ffffff' : '#232329';
+  const primaryColor = isLight ? '#6366f1' : '#818cf8';
 
-        // 1. Start handle: hollow circular handle with theme bg
-        ctx.fillStyle = handleBg;
-        ctx.strokeStyle = primaryColor;
-        ctx.lineWidth = strokeW;
+  // Dedicated linear selection handles for Arrow & Line (Doodle style: Start circle, Midpoint filled purple circle, End circle - NO bounding box or corner squares!)
+  if (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) {
+    if (el.points?.length >= 2) {
+      const strokeW = 1.8 / zoom;
+      const pts = el.points;
+      const startX = el.x + pts[0][0];
+      const startY = el.y + pts[0][1];
+      const endX = el.x + pts[pts.length - 1][0];
+      const endY = el.y + pts[pts.length - 1][1];
+
+      // 1. Start handle: hollow circular handle with theme bg
+      ctx.fillStyle = handleBg;
+      ctx.strokeStyle = primaryColor;
+      ctx.lineWidth = strokeW;
+      ctx.beginPath();
+      ctx.arc(startX, startY, 5.5 / zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 2. Midpoint handle(s): solid filled purple circle ● as shown in screenshot
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1x = el.x + pts[i][0];
+        const p1y = el.y + pts[i][1];
+        const p2x = el.x + pts[i + 1][0];
+        const p2y = el.y + pts[i + 1][1];
+        const mx = (p1x + p2x) / 2;
+        const my = (p1y + p2y) / 2;
+
+        ctx.fillStyle = primaryColor;
         ctx.beginPath();
-        ctx.arc(startX, startY, 5.5 / zoom, 0, Math.PI * 2);
+        ctx.arc(mx, my, 4.5 / zoom, 0, Math.PI * 2);
         ctx.fill();
-        ctx.stroke();
+      }
 
-        // 2. Midpoint handle(s): solid filled purple circle ● as shown in screenshot
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p1x = el.x + pts[i][0];
-          const p1y = el.y + pts[i][1];
-          const p2x = el.x + pts[i + 1][0];
-          const p2y = el.y + pts[i + 1][1];
-          const mx = (p1x + p2x) / 2;
-          const my = (p1y + p2y) / 2;
-
-          ctx.fillStyle = primaryColor;
-          ctx.beginPath();
-          ctx.arc(mx, my, 4.5 / zoom, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Intermediate vertex handles if multi-point arrow/line
-        for (let i = 1; i < pts.length - 1; i++) {
-          const vx = el.x + pts[i][0];
-          const vy = el.y + pts[i][1];
-          ctx.fillStyle = handleBg;
-          ctx.strokeStyle = primaryColor;
-          ctx.lineWidth = strokeW;
-          ctx.beginPath();
-          ctx.arc(vx, vy, 5.5 / zoom, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        }
-
-        // 3. End handle: hollow circular handle with theme bg
+      // Intermediate vertex handles if multi-point arrow/line
+      for (let i = 1; i < pts.length - 1; i++) {
+        const vx = el.x + pts[i][0];
+        const vy = el.y + pts[i][1];
         ctx.fillStyle = handleBg;
         ctx.strokeStyle = primaryColor;
         ctx.lineWidth = strokeW;
         ctx.beginPath();
-        ctx.arc(endX, endY, 5.5 / zoom, 0, Math.PI * 2);
+        ctx.arc(vx, vy, 5.5 / zoom, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
-      ctx.restore();
-      continue;
-    }
 
-    // Selection box for shapes, text, frames, freedraw
-    ctx.strokeStyle = 'rgba(80,80,80,0.7)';
-    ctx.lineWidth = 1.5 / zoom;
-    ctx.setLineDash([]);
-    ctx.strokeRect(rx, ry, rw, rh);
-
-    // Corner handles
-    const handleSize = 8 / zoom;
-    const corners = [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]];
-
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = 'rgba(80,80,80,0.7)';
-    ctx.lineWidth = 1.5 / zoom;
-    for (const [hx, hy] of corners) {
-      ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-      ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-    }
-
-    // Rotation handle (frames cannot be rotated)
-    if (el.type !== ELEMENT_TYPES.FRAME) {
-      const rotHandleX = rx + rw / 2;
-      const rotHandleY = ry - 20 / zoom;
-      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
-      ctx.lineWidth = 1 / zoom;
-      ctx.setLineDash([]);
+      // 3. End handle: hollow circular handle with theme bg
+      ctx.fillStyle = handleBg;
+      ctx.strokeStyle = primaryColor;
+      ctx.lineWidth = strokeW;
       ctx.beginPath();
-      ctx.moveTo(rx + rw / 2, ry);
-      ctx.lineTo(rotHandleX, rotHandleY);
-      ctx.stroke();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
-      ctx.beginPath();
-      ctx.arc(rotHandleX, rotHandleY, 5 / zoom, 0, Math.PI * 2);
+      ctx.arc(endX, endY, 5.5 / zoom, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
-
-    // For selected frames, highlight the tag pill with purple selection outline
-    if (el.type === ELEMENT_TYPES.FRAME) {
-      const name = el.name || 'Frame';
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const textMetrics = ctx.measureText(name);
-      const pillWidth = Math.max(54, textMetrics.width + 16);
-      const pillHeight = 22;
-      const pillX = localBounds.x;
-      const pillY = localBounds.y - pillHeight - 4;
-      ctx.strokeStyle = 'rgba(80,80,80,0.7)';
-      ctx.lineWidth = 1.5 / zoom;
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 5);
-      else ctx.rect(pillX, pillY, pillWidth, pillHeight);
-      ctx.stroke();
-    }
-
     ctx.restore();
+    return;
   }
+
+  // Selection box for shapes, text, frames, freedraw
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = 1.5 / zoom;
+  ctx.setLineDash([]);
+  ctx.strokeRect(rx, ry, rw, rh);
+
+  // Corner handles
+  const handleSize = 8 / zoom;
+  const corners = [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]];
+
+  ctx.fillStyle = isLight ? '#ffffff' : '#18181b';
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = 1.5 / zoom;
+  for (const [hx, hy] of corners) {
+    ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+    ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+  }
+
+  // Rotation handle (frames cannot be rotated)
+  if (el.type !== ELEMENT_TYPES.FRAME) {
+    const rotHandleX = rx + rw / 2;
+    const rotHandleY = ry - 20 / zoom;
+    ctx.strokeStyle = primaryColor;
+    ctx.lineWidth = 1 / zoom;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(rx + rw / 2, ry);
+    ctx.lineTo(rotHandleX, rotHandleY);
+    ctx.stroke();
+
+    ctx.fillStyle = isLight ? '#ffffff' : '#18181b';
+    ctx.strokeStyle = primaryColor;
+    ctx.beginPath();
+    ctx.arc(rotHandleX, rotHandleY, 5 / zoom, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // For selected frames, highlight the tag pill with purple selection outline
+  if (el.type === ELEMENT_TYPES.FRAME) {
+    const name = el.name || 'Frame';
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const textMetrics = ctx.measureText(name);
+    const pillWidth = Math.max(54, textMetrics.width + 16);
+    const pillHeight = 22;
+    const pillX = localBounds.x;
+    const pillY = localBounds.y - pillHeight - 4;
+    ctx.strokeStyle = primaryColor;
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 5);
+    else ctx.rect(pillX, pillY, pillWidth, pillHeight);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// Render hit-test overlay (selection box + handles)
+export function renderSelectionOverlay(ctx, elements, zoom = 1) {
+  if (!elements || elements.length === 0) return;
+  const validElements = elements.filter(el => !el.isDeleted);
+  if (validElements.length === 0) return;
+
+  // Single element or standard multi-selection (up to 16 elements):
+  // Render dedicated individual handles directly on each element
+  if (validElements.length <= 16) {
+    for (const el of validElements) {
+      renderSingleElementSelection(ctx, el, zoom);
+    }
+    return;
+  }
+
+  // Multi-element selection: compute unified group bounding box (eliminates thousands of redundant handle calls)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < validElements.length; i++) {
+    const el = validElements[i];
+    const b = el.type === ELEMENT_TYPES.TEXT ? getTextElementBounds(el) : getCachedElementBounds(el);
+    const left = Math.min(b.x, b.x + b.width);
+    const right = Math.max(b.x, b.x + b.width);
+    const top = Math.min(b.y, b.y + b.height);
+    const bottom = Math.max(b.y, b.y + b.height);
+
+    if (left < minX) minX = left;
+    if (top < minY) minY = top;
+    if (right > maxX) maxX = right;
+    if (bottom > maxY) maxY = bottom;
+  }
+
+  if (minX === Infinity || maxX === -Infinity) return;
+
+  ctx.save();
+
+  // Draw unified group selection box
+  const padding = 6 / zoom;
+  const rx = minX - padding;
+  const ry = minY - padding;
+  const rw = (maxX - minX) + padding * 2;
+  const rh = (maxY - minY) + padding * 2;
+
+  ctx.strokeStyle = '#6366f1';
+  ctx.lineWidth = 1.5 / zoom;
+  ctx.setLineDash([4 / zoom, 4 / zoom]);
+  ctx.strokeRect(rx, ry, rw, rh);
+  ctx.setLineDash([]);
+
+  // Corner resize handles for the entire group
+  const handleSize = 8 / zoom;
+  const corners = [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]];
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#6366f1';
+  ctx.lineWidth = 1.5 / zoom;
+  for (const [hx, hy] of corners) {
+    ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+    ctx.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+  }
+
+  // Rotation handle for the entire group
+  const rotHandleX = rx + rw / 2;
+  const rotHandleY = ry - 20 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(rx + rw / 2, ry);
+  ctx.lineTo(rotHandleX, rotHandleY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(rotHandleX, rotHandleY, 5 / zoom, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Floating selection pill count badge
+  const countText = `${validElements.length} shapes`;
+  ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const textW = ctx.measureText ? ctx.measureText(countText).width : 60;
+  const pillW = textW + 14;
+  const pillH = 20 / zoom;
+  const pillX = rx;
+  const pillY = ry - pillH - 6 / zoom;
+
+  ctx.fillStyle = '#6366f1';
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pillW, pillH, 4 / zoom);
+    ctx.fill();
+  } else {
+    ctx.fillRect(pillX, pillY, pillW, pillH);
+  }
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(countText, pillX + 7, pillY + pillH / 2);
+
+  ctx.restore();
 }
 
 export function renderElementToCanvas(el, ctx, options = {}) {

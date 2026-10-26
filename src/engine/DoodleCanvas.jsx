@@ -1,7 +1,7 @@
 import React, {
   lazy, Suspense, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState, useImperativeHandle, forwardRef
 } from 'react';
-import { renderElement, renderSelectionOverlay, measureText, getTextElementBounds } from './renderer/render.js';
+import { renderElement, renderSelectionOverlay, renderBatchedFreedrawRun, measureText, getTextElementBounds } from './renderer/render.js';
 import {
   getElementAtPoint, getElementsInRect, isPointOnFrameLabel,
   getResizeHandleAt, getCursorForHandle, RESIZE_HANDLES
@@ -53,6 +53,8 @@ import {
 import { adaptDefaultStrokeColors } from './themeColors.js';
 import { drawDotGrid } from './renderer/paperGrid.js';
 import { buildDataDiagram } from '../utils/dataDiagram.js';
+import { proceduralAudio } from '../utils/proceduralAudio.js';
+import { createSmartCluster, recomputeClusterAutoHug } from './layout/smartCluster.js';
 
 const CanvasContextMenu = lazy(() => import('./components/CanvasContextMenu.jsx').then(module => ({ default: module.CanvasContextMenu })));
 const LayersPanel = lazy(() => import('./components/LayersPanel.jsx').then(module => ({ default: module.LayersPanel })));
@@ -93,10 +95,20 @@ const TOOL_CURSORS = {
 };
 
 // ──────────────────────────────────────────────
-//  Helper: apply grid snap
+//  Helper: apply grid snap with tactile audio feedback
 // ──────────────────────────────────────────────
+let lastSnapSoundTime = 0;
 function snap(v, gridSize) {
-  return gridSize ? snapToGrid(v, gridSize) : v;
+  if (!gridSize) return v;
+  const snapped = snapToGrid(v, gridSize);
+  if (Math.abs(snapped - v) > 0.6) {
+    const now = performance.now();
+    if (now - lastSnapSoundTime > 90) {
+      lastSnapSoundTime = now;
+      proceduralAudio.playSnapClick();
+    }
+  }
+  return snapped;
 }
 
 // ──────────────────────────────────────────────
@@ -152,6 +164,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     anchor: null,
     frame: null,
   });
+  const wheelSyncTimeoutRef = useRef(null);
+  const lastCursorHitTestRef = useRef(0);
 
   const [elements, setElementsState] = useState(() => initialData?.elements || []);
   const [frameNameEdit, setFrameNameEdit] = useState(null);
@@ -323,9 +337,37 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   }, [onSelectionChange]);
 
   // ── Derived helpers ──
+  const selectedElementsCacheRef = useRef({ elements: null, ids: null, result: [] });
   const getSelectedElements = useCallback(() => {
     const ids = appStateRef.current?.selectedElementIds || {};
-    return elementsRef.current.filter(el => ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked);
+    const elements = elementsRef.current;
+    const cache = selectedElementsCacheRef.current;
+
+    if (cache.elements === elements && cache.ids === ids) {
+      return cache.result;
+    }
+
+    const idKeys = Object.keys(ids);
+    if (idKeys.length === 0) {
+      cache.elements = elements;
+      cache.ids = ids;
+      cache.result = [];
+      return cache.result;
+    }
+
+    if (idKeys.length === 1 && ids[idKeys[0]]) {
+      const target = elements.find(el => el.id === idKeys[0] && !el.isDeleted && !el.isHidden && !el.locked);
+      cache.elements = elements;
+      cache.ids = ids;
+      cache.result = target ? [target] : [];
+      return cache.result;
+    }
+
+    const result = elements.filter(el => ids[el.id] && !el.isDeleted && !el.isHidden && !el.locked);
+    cache.elements = elements;
+    cache.ids = ids;
+    cache.result = result;
+    return result;
   }, []);
 
   const commitHistory = useCallback(() => {
@@ -401,6 +443,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       bg = '#fbf7ee';
     } else if (activeCanvasStyle === 'engineering') {
       bg = '#111215';
+    } else if (activeCanvasStyle === 'cyberpunk') {
+      bg = '#090a0f';
+    } else if (activeCanvasStyle === 'quadgrid') {
+      bg = activeTheme === 'dark' ? '#13141a' : '#fcfcfd';
     }
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cssW, cssH);
@@ -547,6 +593,78 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       ctx.stroke();
       ctx.restore();
+    } else if (activeCanvasStyle === 'cyberpunk') {
+      ctx.save();
+      const step = 20 * z;
+      const majorStep = 100 * z;
+      const startX = ((scrollX % step) + cssW) % step;
+      const startY = ((scrollY % step) + cssH) % step;
+
+      // Neon magenta minor lines
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(236, 72, 153, 0.12)';
+      ctx.beginPath();
+      for (let gx = startX; gx < cssW; gx += step) {
+        ctx.moveTo(gx, 0); ctx.lineTo(gx, cssH);
+      }
+      for (let gy = startY; gy < cssH; gy += step) {
+        ctx.moveTo(0, gy); ctx.lineTo(cssW, gy);
+      }
+      ctx.stroke();
+
+      // Neon cyan major lines
+      const majorStartX = ((scrollX % majorStep) + cssW) % majorStep;
+      const majorStartY = ((scrollY % majorStep) + cssH) % majorStep;
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.32)';
+      ctx.beginPath();
+      for (let gx = majorStartX; gx < cssW; gx += majorStep) {
+        ctx.moveTo(gx, 0); ctx.lineTo(gx, cssH);
+      }
+      for (let gy = majorStartY; gy < cssH; gy += majorStep) {
+        ctx.moveTo(0, gy); ctx.lineTo(cssW, gy);
+      }
+      ctx.stroke();
+
+      // Glowing corner intersection marks
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.65)';
+      for (let gx = majorStartX; gx < cssW; gx += majorStep) {
+        for (let gy = majorStartY; gy < cssH; gy += majorStep) {
+          ctx.fillRect(gx - 2, gy - 2, 4, 4);
+        }
+      }
+      ctx.restore();
+    } else if (activeCanvasStyle === 'quadgrid') {
+      ctx.save();
+      const step = 15 * z;
+      const majorStep = 75 * z;
+      const startX = ((scrollX % step) + cssW) % step;
+      const startY = ((scrollY % step) + cssH) % step;
+
+      // Engineer's Quad Grid 5mm lines
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = activeTheme === 'dark' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(71, 85, 105, 0.12)';
+      ctx.beginPath();
+      for (let gx = startX; gx < cssW; gx += step) {
+        ctx.moveTo(gx, 0); ctx.lineTo(gx, cssH);
+      }
+      for (let gy = startY; gy < cssH; gy += step) {
+        ctx.moveTo(0, gy); ctx.lineTo(cssW, gy);
+      }
+      ctx.stroke();
+
+      // Major grid lines
+      const majorStartX = ((scrollX % majorStep) + cssW) % majorStep;
+      const majorStartY = ((scrollY % majorStep) + cssH) % majorStep;
+      ctx.strokeStyle = activeTheme === 'dark' ? 'rgba(99, 102, 241, 0.28)' : 'rgba(71, 85, 105, 0.28)';
+      ctx.beginPath();
+      for (let gx = majorStartX; gx < cssW; gx += majorStep) {
+        ctx.moveTo(gx, 0); ctx.lineTo(gx, cssH);
+      }
+      for (let gy = majorStartY; gy < cssH; gy += majorStep) {
+        ctx.moveTo(0, gy); ctx.lineTo(cssW, gy);
+      }
+      ctx.stroke();
+      ctx.restore();
     } else if (gridSize) {
       // Standard grid if gridSize is set
       ctx.save();
@@ -608,18 +726,75 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         if (boundPreview) visibleElements[index] = boundPreview;
       }
     }
-    for (const el of visibleElements) {
+    const editingId = interaction.current.editingElementId;
+    let editingEl = null;
+    if (editingId) {
+      editingEl = elementsRef.current?.find(e => e.id === editingId);
+    }
+    let hasSelected = false;
+    for (const _ in selectedElementIds) {
+      hasSelected = true;
+      break;
+    }
+
+    let i = 0;
+    while (i < visibleElements.length) {
+      const el = visibleElements[i];
       // While editing, the DOM textarea is the visible text layer. Do not
       // paint the same text to canvas underneath it.
-      if (el.id === interaction.current.editingElementId) continue;
-      if (interaction.current.editingElementId) {
-        const editingEl = elementsRef.current?.find(e => e.id === interaction.current.editingElementId);
-        if (editingEl && el.type === ELEMENT_TYPES.TEXT && Math.abs(el.x - editingEl.x) < 2 && Math.abs(el.y - editingEl.y) < 2) {
+      if (el.id === editingId) {
+        i += 1;
+        continue;
+      }
+      if (editingEl && el.type === ELEMENT_TYPES.TEXT && Math.abs(el.x - editingEl.x) < 2 && Math.abs(el.y - editingEl.y) < 2) {
+        i += 1;
+        continue;
+      }
+
+      // High-performance batching for runs of consecutive freedraw strokes
+      // (combines thousands of strokes into 1 single GPU draw call)
+      if (
+        typeof Path2D !== 'undefined' &&
+        el.type === ELEMENT_TYPES.FREEDRAW &&
+        (!el.angle || Math.abs(el.angle) < 0.0001) &&
+        (!el.strokeStyle || el.strokeStyle === 'solid') &&
+        el.points?.length > 0
+      ) {
+        let j = i + 1;
+        while (j < visibleElements.length) {
+          const next = visibleElements[j];
+          if (
+            next.type === ELEMENT_TYPES.FREEDRAW &&
+            (!next.angle || Math.abs(next.angle) < 0.0001) &&
+            (!next.strokeStyle || next.strokeStyle === 'solid') &&
+            next.strokeColor === el.strokeColor &&
+            next.strokeWidth === el.strokeWidth &&
+            (next.opacity ?? 100) === (el.opacity ?? 100) &&
+            next.points?.length > 0
+          ) {
+            j += 1;
+          } else {
+            break;
+          }
+        }
+
+        const runCount = j - i;
+        if (runCount >= 3) {
+          renderBatchedFreedrawRun(ctx, visibleElements, i, j);
+          if (hasSelected) {
+            for (let k = i; k < j; k += 1) {
+              const runEl = visibleElements[k];
+              if (selectedElementIds[runEl.id] && !runEl.locked) selectedEls.push(runEl);
+            }
+          }
+          i = j;
           continue;
         }
       }
+
       renderElement(ctx, el, imageCache.current);
-      if (selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
+      if (hasSelected && selectedElementIds[el.id] && !el.locked) selectedEls.push(el);
+      i += 1;
     }
 
     // Render in-progress drawing element
@@ -868,6 +1043,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (pendingWheelRef.current.frame !== null) {
       cancelAnimationFrame(pendingWheelRef.current.frame);
     }
+    if (wheelSyncTimeoutRef.current) {
+      clearTimeout(wheelSyncTimeoutRef.current);
+    }
   }, []);
 
   // Sync collaborators with collaboratorsRef and redraw
@@ -943,6 +1121,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     const ix = snap(sx, gridSize);
     const iy = snap(sy, gridSize);
 
+    if (tool === 'freedraw') {
+      proceduralAudio.startDrawingSound('pencil');
+    } else if (tool !== 'selection' && tool !== 'hand' && tool !== 'laser') {
+      proceduralAudio.startDrawingSound('marker');
+    }
+
     if (as.showWelcomeScreen) {
       setAppState({ showWelcomeScreen: false });
     }
@@ -968,45 +1152,61 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (tool === 'selection') {
       // Check resize handles first
       const selectedEls = getSelectedElements();
+      let targetEl = null;
+      let handle = null;
       if (selectedEls.length === 1) {
-        const handle = getResizeHandleAt(selectedEls[0], sx, sy, as.zoom.value);
-        if (handle) {
-          if (handle === RESIZE_HANDLES.ROTATION) {
-            interaction.current.isRotating = true;
-            interaction.current.resizeHandle = handle;
-            interaction.current.resizeStartState = selectedEls[0].type === ELEMENT_TYPES.FREEDRAW
-              ? normalizeFreedrawElement(selectedEls[0])
-              : { ...selectedEls[0] };
-          } else {
-            interaction.current.isResizing = true;
-            let startState = selectedEls[0].type === ELEMENT_TYPES.FREEDRAW
-              ? normalizeFreedrawElement(selectedEls[0])
-              : { ...selectedEls[0] };
-
-            // When dragging an arrow/line midpoint handle, bend/curve by inserting a new point at that segment
-            if ((startState.type === ELEMENT_TYPES.ARROW || startState.type === ELEMENT_TYPES.LINE) && handle.startsWith('midpoint_')) {
-              const segIdx = parseInt(handle.split('_')[1], 10);
-              const pts = [...(startState.points || [])];
-              const p1 = pts[segIdx];
-              const p2 = pts[segIdx + 1];
-              const midPoint = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
-              pts.splice(segIdx + 1, 0, midPoint);
-              startState = {
-                ...startState,
-                points: pts,
-              };
-              interaction.current.resizeHandle = `point_${segIdx + 1}`;
-            } else {
-              interaction.current.resizeHandle = handle;
-            }
-            interaction.current.resizeStartState = startState;
+        targetEl = selectedEls[0];
+        handle = getResizeHandleAt(targetEl, sx, sy, as.zoom.value);
+      } else if (selectedEls.length <= 16) {
+        for (let i = selectedEls.length - 1; i >= 0; i--) {
+          const selEl = selectedEls[i];
+          const h = getResizeHandleAt(selEl, sx, sy, as.zoom.value);
+          if (h) {
+            targetEl = selEl;
+            handle = h;
+            break;
           }
-          return;
         }
       }
 
+      if (targetEl && handle) {
+        if (handle === RESIZE_HANDLES.ROTATION) {
+          interaction.current.isRotating = true;
+          interaction.current.resizeHandle = handle;
+          interaction.current.resizeStartState = targetEl.type === ELEMENT_TYPES.FREEDRAW
+            ? normalizeFreedrawElement(targetEl)
+            : { ...targetEl };
+        } else {
+          interaction.current.isResizing = true;
+          let startState = targetEl.type === ELEMENT_TYPES.FREEDRAW
+            ? normalizeFreedrawElement(targetEl)
+            : { ...targetEl };
+
+          // When dragging an arrow/line midpoint handle, bend/curve by inserting a new point at that segment
+          if ((startState.type === ELEMENT_TYPES.ARROW || startState.type === ELEMENT_TYPES.LINE) && handle.startsWith('midpoint_')) {
+            const segIdx = parseInt(handle.split('_')[1], 10);
+            const pts = [...(startState.points || [])];
+            const p1 = pts[segIdx];
+            const p2 = pts[segIdx + 1];
+            const midPoint = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+            pts.splice(segIdx + 1, 0, midPoint);
+            startState = {
+              ...startState,
+              points: pts,
+            };
+            interaction.current.resizeHandle = `point_${segIdx + 1}`;
+          } else {
+            interaction.current.resizeHandle = handle;
+          }
+          interaction.current.resizeStartState = startState;
+        }
+        return;
+      }
+
       // Hit test
-      const rawHit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy, {
+      const spatialCandidates = getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy);
+      const candidates = (spatialCandidates && spatialCandidates.length > 0) ? spatialCandidates : elementsRef.current;
+      const rawHit = getElementAtPoint(candidates, sx, sy, {
         preferFrameIds: Object.keys(as.selectedElementIds || {}).filter(id => as.selectedElementIds[id]),
       });
       if (rawHit?.type === ELEMENT_TYPES.FRAME && isPointOnFrameLabel(rawHit, sx, sy)) {
@@ -1037,11 +1237,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           } else {
             for (const member of groupMembers) nextSelectedIds[member.id] = true;
             setAppState({ selectedElementIds: nextSelectedIds });
+            scheduleRender();
           }
         } else if (!isAlreadySelected) {
           nextSelectedIds = {};
           for (const m of groupMembers) nextSelectedIds[m.id] = true;
           setAppState({ selectedElementIds: nextSelectedIds });
+          scheduleRender();
         }
 
         interaction.current.isDragging = true;
@@ -1052,9 +1254,9 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           if ((nextSelectedIds[el.id] || el.id === hit.id) && !el.isDeleted && !el.isHidden && !el.locked) {
             startPositions[el.id] = {
               ...el,
-              ...(Array.isArray(el.points) ? { points: el.points.map(point => [...point]) } : {}),
-              ...(Array.isArray(el.pressures) ? { pressures: [...el.pressures] } : {}),
-              ...(Array.isArray(el.groupIds) ? { groupIds: [...el.groupIds] } : {}),
+              points: el.points, // Points are relative and immutable during drag translation
+              pressures: el.pressures,
+              groupIds: el.groupIds,
             };
           }
         }
@@ -1218,6 +1420,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     // Broadcast pointer to collaborators
     if (isCollaborating && onPointerUpdate) {
       onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
+    }
+
+    if (e.buttons > 0) {
+      proceduralAudio.updateDrawingSpeed(e.clientX, e.clientY);
     }
 
     if (ia.isRotating) {
@@ -1786,19 +1992,40 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       return;
     }
 
-    // Update cursor
+    // Update cursor with zero style-thrashing and O(1) checks
     const tool = as.activeTool?.type || 'selection';
     if (tool === 'selection') {
-      const selectedEls = getSelectedElements();
-      if (selectedEls.length === 1) {
-        const handle = getResizeHandleAt(selectedEls[0], sx, sy, as.zoom.value);
-        if (handle) {
-          canvasRef.current.style.cursor = getCursorForHandle(handle);
-          return;
+      const selectedIds = as.selectedElementIds || {};
+      let numSelected = 0;
+      for (const k in selectedIds) {
+        if (selectedIds[k]) {
+          numSelected++;
+          if (numSelected > 16) break;
         }
       }
-      const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
-      canvasRef.current.style.cursor = hit ? 'move' : 'default';
+      if (numSelected >= 1 && numSelected <= 16) {
+        const selectedEls = getSelectedElements();
+        for (let i = selectedEls.length - 1; i >= 0; i--) {
+          const el = selectedEls[i];
+          const handle = getResizeHandleAt(el, sx, sy, as.zoom.value);
+          if (handle) {
+            const handleCursor = getCursorForHandle(handle);
+            if (canvasRef.current && canvasRef.current.style.cursor !== handleCursor) {
+              canvasRef.current.style.cursor = handleCursor;
+            }
+            return;
+          }
+        }
+      }
+      const now = performance.now();
+      if (now - lastCursorHitTestRef.current > 24) {
+        lastCursorHitTestRef.current = now;
+        const hit = getElementAtPoint(getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy), sx, sy);
+        const targetCursor = hit ? 'move' : 'default';
+        if (canvasRef.current && canvasRef.current.style.cursor !== targetCursor) {
+          canvasRef.current.style.cursor = targetCursor;
+        }
+      }
     }
   }, [getScenePoint, getSelectedElements, setAppState, setElements, scheduleRender, flushPan, onPointerUpdate, isCollaborating, isSimulationActive]);
 
@@ -1806,6 +2033,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     try {
       canvasRef.current?.releasePointerCapture?.(e.pointerId);
     } catch {}
+
+    proceduralAudio.stopDrawingSound();
 
     const ia = interaction.current;
     const as = appStateRef.current;
@@ -1878,6 +2107,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       commitHistory();
       notifyChange();
+      scheduleRender();
       return;
     }
 
@@ -1885,12 +2115,19 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.isSelectingRect = false;
       const rect = ia.selectionRect;
       ia.selectionRect = null;
-      if (rect && (rect.width > 2 || rect.height > 2)) {
-        const selectionCandidates = getVisibleSceneElements(
+      if (rect && (Math.abs(rect.width) > 2 || Math.abs(rect.height) > 2)) {
+        const normRect = {
+          x: rect.width < 0 ? rect.x + rect.width : rect.x,
+          y: rect.height < 0 ? rect.y + rect.height : rect.y,
+          width: Math.abs(rect.width),
+          height: Math.abs(rect.height),
+        };
+        const spatialCandidates = getVisibleSceneElements(
           getSceneSpatialIndex(elementsRef.current),
-          { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          normRect,
         );
-        const enclosed = getElementsInRect(selectionCandidates, rect.x, rect.y, rect.width, rect.height);
+        const candidates = (spatialCandidates && spatialCandidates.length > 0) ? spatialCandidates : elementsRef.current;
+        const enclosed = getElementsInRect(candidates, normRect.x, normRect.y, normRect.width, normRect.height);
         const ids = {};
         for (const el of enclosed) ids[el.id] = true;
         setAppState(prev => ({ selectedElementIds: e.shiftKey ? { ...(prev?.selectedElementIds || {}), ...ids } : ids }));
@@ -2054,14 +2291,22 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
       scrollX -= x;
       scrollY -= y;
-      setAppState({
+      const nextAppState = {
+        ...appStateRef.current,
         ...(nextZoom !== zoom ? { zoom: { value: nextZoom } } : {}),
         scrollX,
         scrollY,
-      });
+      };
+      appStateRef.current = nextAppState;
       scheduleRender();
+
+      // Debounce React state synchronization so rapid trackpad pinch/scroll gestures do not trigger React re-renders every frame
+      if (wheelSyncTimeoutRef.current) clearTimeout(wheelSyncTimeoutRef.current);
+      wheelSyncTimeoutRef.current = setTimeout(() => {
+        setAppStateRaw(appStateRef.current);
+      }, 50);
     });
-  }, [getCanvasPoint, scheduleRender, setAppState]);
+  }, [getCanvasPoint, scheduleRender, setAppStateRaw]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2339,7 +2584,29 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements]);
 
-
+  const handleEncloseInSmartCluster = useCallback((customTitle) => {
+    const selectedIds = appStateRef.current.selectedElementIds || {};
+    const selected = elementsRef.current.filter((el) => selectedIds[el.id] && !el.isDeleted);
+    if (selected.length === 0) {
+      onToast?.('Select one or more elements to enclose in a smart cluster.');
+      return;
+    }
+    const { clusterElement, updatedChildElements } = createSmartCluster(selected, {
+      name: customTitle || 'Smart Cluster',
+      strokeColor: theme === 'dark' ? '#818cf8' : '#6366f1',
+    });
+    const childMap = new Map(updatedChildElements.map((el) => [el.id, el]));
+    const nextElements = [
+      clusterElement,
+      ...elementsRef.current.map((el) => childMap.get(el.id) || el),
+    ];
+    commitHistory();
+    setElements(nextElements);
+    setAppState((prev) => ({ ...prev, selectedElementIds: { [clusterElement.id]: true } }));
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Enclosed ${selected.length} elements in ${clusterElement.name}`);
+  }, [commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
 
   // ── Action Handlers (usable in shortcuts and components) ──
   const handleAction = useCallback((action) => {
@@ -2491,8 +2758,10 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       branchChildNode('down');
     } else if (action === 'createPresentationFrame') {
       createPresentationFrame('16:9');
+    } else if (action === 'encloseCluster') {
+      handleEncloseInSmartCluster();
     }
-  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, createPresentationFrame, onToast]);
+  }, [commitHistory, notifyChange, scheduleRender, setAppState, setElements, branchChildNode, createPresentationFrame, handleEncloseInSmartCluster, onToast]);
 
   const selectLayer = useCallback((elementId, extendSelection) => {
     const target = elementsRef.current.find(el => el.id === elementId && !el.isDeleted);
@@ -3633,6 +3902,98 @@ return { total, count: values.length };`,
     onToast?.('Added Reactive Variable Slider');
   }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
 
+  const importDataDiagram = useCallback((rows) => {
+    const canvas = canvasRef.current;
+    if (!canvas) throw new Error('The canvas is not ready for importing data.');
+    const generated = buildDataDiagram(rows, { theme });
+    const canvasWidth = canvas.clientWidth;
+    const canvasHeight = canvas.clientHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+    const zoom = Math.min(
+      1.5,
+      Math.max(0.1, Math.min(
+        (canvasWidth - 80) / generated.bounds.width,
+        (canvasHeight - 80) / generated.bounds.height,
+      )),
+    );
+    const offsetX = Math.round(centerX - generated.bounds.width / 2);
+    const offsetY = Math.round(centerY - generated.bounds.height / 2);
+    const newElements = generated.elements.map((element) => ({
+      ...element,
+      x: element.x + offsetX,
+      y: element.y + offsetY,
+    }));
+    const selectedElementIds = Object.fromEntries(
+      newElements
+        .filter((element) => element.type === ELEMENT_TYPES.RECTANGLE)
+        .map((element) => [element.id, true])
+    );
+
+    commitHistory();
+    setElements((previous) => [...previous, ...newElements]);
+    setAppState((previous) => ({
+      selectedElementIds,
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+      zoom: { value: zoom },
+      scrollX: canvasWidth / 2 - centerX * zoom,
+      scrollY: canvasHeight / 2 - centerY * zoom,
+    }));
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Created ${generated.nodeCount} data nodes and ${generated.connectionCount} connections.`);
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
+  const handleInsertInteractiveStencil = useCallback((stencilType = 'toggle', options = {}) => {
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas?.clientWidth || window.innerWidth;
+    const canvasHeight = canvas?.clientHeight || window.innerHeight;
+    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
+
+    const dimensions = {
+      toggle: { width: 280, height: 110 },
+      tabs: { width: 340, height: 130 },
+      dropdown: { width: 280, height: 120 },
+      phone: { width: 260, height: 380 },
+    }[stencilType] || { width: 280, height: 120 };
+
+    const docElement = {
+      id: `stencil_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: 'embeddable',
+      x: Math.round(centerX - dimensions.width / 2),
+      y: Math.round(centerY - dimensions.height / 2),
+      width: dimensions.width,
+      height: dimensions.height,
+      strokeColor: theme === 'dark' ? '#818cf8' : '#6366f1',
+      backgroundColor: theme === 'dark' ? '#141418' : '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      docType: 'interactive_stencil',
+      stencilType,
+      title: options.title || (stencilType === 'phone' ? 'Interactive Device' : 'UI Stencil'),
+      label: options.label,
+      tabs: options.tabs,
+      options: options.options,
+      state: options.state || {},
+      isDeleted: false,
+    };
+
+    commitHistory();
+    setElements((prev) => [...prev, docElement]);
+    setAppState((prev) => ({
+      ...prev,
+      selectedElementIds: { [docElement.id]: true },
+      activeTool: { type: 'selection' },
+      showWelcomeScreen: false,
+    }));
+    notifyChange();
+    scheduleRender();
+    onToast?.(`Added interactive ${stencilType} stencil`);
+  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
+
   // ── Imperative Doodle Engine API ──
   useImperativeHandle(ref, () => {
     const api = {
@@ -3933,6 +4294,9 @@ return { total, count: values.length };`,
       insertInteractiveTable: handleInsertInteractiveTable,
       insertLiveDataCard: handleInsertLiveDataCard,
       insertReactiveSlider: handleInsertReactiveSlider,
+      importDataDiagram,
+      encloseInSmartCluster: handleEncloseInSmartCluster,
+      insertInteractiveStencil: handleInsertInteractiveStencil,
       togglePhysicsPlayground: () => setIsPhysicsModeActive(prev => !prev),
       toggleIsometric3D: () => setIsIsometric3DActive(prev => !prev),
       toBlob: () => exportToBlob(),
@@ -3953,6 +4317,8 @@ return { total, count: values.length };`,
     handleInsertInteractiveTable,
     handleInsertLiveDataCard,
     handleInsertReactiveSlider,
+    handleEncloseInSmartCluster,
+    handleInsertInteractiveStencil,
     notifyChange,
     scheduleRender,
     setAppState,
@@ -3961,6 +4327,7 @@ return { total, count: values.length };`,
     updateLayerProperty,
     moveLayer,
     handleAction,
+    importDataDiagram,
   ]);
 
   // Theme change - update background and shape drawing default color
@@ -4248,48 +4615,6 @@ return { total, count: values.length };`,
     notifyChange();
     scheduleRender();
   };
-
-  const importDataDiagram = useCallback((rows) => {
-    const canvas = canvasRef.current;
-    if (!canvas) throw new Error('The canvas is not ready for importing data.');
-    const generated = buildDataDiagram(rows, { theme });
-    const canvasWidth = canvas.clientWidth;
-    const canvasHeight = canvas.clientHeight;
-    const [centerX, centerY] = canvasToScene(canvasWidth / 2, canvasHeight / 2);
-    const zoom = Math.min(
-      1.5,
-      Math.max(0.1, Math.min(
-        (canvasWidth - 80) / generated.bounds.width,
-        (canvasHeight - 80) / generated.bounds.height,
-      )),
-    );
-    const offsetX = Math.round(centerX - generated.bounds.width / 2);
-    const offsetY = Math.round(centerY - generated.bounds.height / 2);
-    const newElements = generated.elements.map((element) => ({
-      ...element,
-      x: element.x + offsetX,
-      y: element.y + offsetY,
-    }));
-    const selectedElementIds = Object.fromEntries(
-      newElements
-        .filter((element) => element.type === ELEMENT_TYPES.RECTANGLE)
-        .map((element) => [element.id, true])
-    );
-
-    commitHistory();
-    setElements((previous) => [...previous, ...newElements]);
-    setAppState((previous) => ({
-      selectedElementIds,
-      activeTool: { type: 'selection' },
-      showWelcomeScreen: false,
-      zoom: { value: zoom },
-      scrollX: canvasWidth / 2 - centerX * zoom,
-      scrollY: canvasHeight / 2 - centerY * zoom,
-    }));
-    notifyChange();
-    scheduleRender();
-    onToast?.(`Created ${generated.nodeCount} data nodes and ${generated.connectionCount} connections.`);
-  }, [canvasToScene, commitHistory, notifyChange, onToast, scheduleRender, setAppState, setElements, theme]);
 
   const saveChangeBaseline = () => {
     try {

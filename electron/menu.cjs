@@ -1,6 +1,6 @@
 const { Menu, shell, app, dialog } = require('electron');
-const { getRecentFiles, clearRecentFiles } = require('./store');
-const { checkUpdate } = require('./updater');
+const { getRecentFiles, clearRecentFiles } = require('./store.cjs');
+const { checkUpdate } = require('./updater.cjs');
 
 function buildApplicationMenu({ onNew, onNewWindow, onOpen, onSave, onSaveAs, onExport, onPrint, onPreferences }) {
   const isMac = process.platform === 'darwin';

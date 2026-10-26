@@ -79,30 +79,81 @@ export function buildSceneSpatialIndex(elements, cellSize = DEFAULT_CELL_SIZE) {
 }
 
 export function getVisibleSceneElements(index, viewport, padding = 0) {
-  if (!index) return [];
+  if (!index || !index.entries.length) return [];
 
-  const range = getCellRange({
-    x: viewport.x - padding,
-    y: viewport.y - padding,
-    width: viewport.width + padding * 2,
-    height: viewport.height + padding * 2,
-  }, index.cellSize);
+  // Ultra-fast path: If the entire scene bounds are contained inside the viewport, return all elements directly in O(1)
+  const sb = index.sceneBounds;
+  if (
+    sb &&
+    sb.minX !== Infinity &&
+    viewport.x - padding <= sb.minX &&
+    viewport.y - padding <= sb.minY &&
+    viewport.x + viewport.width + padding >= sb.maxX &&
+    viewport.y + viewport.height + padding >= sb.maxY
+  ) {
+    if (!index._cachedAllElements || index._cachedAllElements.length !== index.entries.length) {
+      index._cachedAllElements = index.entries.map((e) => e.element);
+    }
+    return index._cachedAllElements;
+  }
 
-  const candidates = new Set(index.overflow);
-  if (cellCount(range) > MAX_QUERY_CELLS) {
-    index.entries.forEach((entry) => candidates.add(entry));
+  const range = getCellRange(
+    {
+      x: viewport.x - padding,
+      y: viewport.y - padding,
+      width: viewport.width + padding * 2,
+      height: viewport.height + padding * 2,
+    },
+    index.cellSize
+  );
+
+  const total = index.entries.length;
+  if (!index._visibleFlags || index._visibleFlags.length < total) {
+    index._visibleFlags = new Uint8Array(Math.max(total, 1024));
   } else {
+    index._visibleFlags.fill(0, 0, total);
+  }
+  const visibleFlags = index._visibleFlags;
+
+  if (cellCount(range) > MAX_QUERY_CELLS) {
+    for (let i = 0; i < total; i++) {
+      if (boundsIntersectViewport(index.entries[i].bounds, viewport, padding)) {
+        visibleFlags[i] = 1;
+      }
+    }
+  } else {
+    // Check overflow entries
+    const overflow = index.overflow;
+    for (let i = 0; i < overflow.length; i++) {
+      const entry = overflow[i];
+      if (boundsIntersectViewport(entry.bounds, viewport, padding)) {
+        visibleFlags[entry.order] = 1;
+      }
+    }
+    // Check grid cell buckets
     for (let x = range.minX; x <= range.maxX; x += 1) {
       for (let y = range.minY; y <= range.maxY; y += 1) {
-        index.cells.get(getCellKey(x, y))?.forEach((entry) => candidates.add(entry));
+        const bucket = index.cells.get(getCellKey(x, y));
+        if (bucket) {
+          for (let i = 0; i < bucket.length; i++) {
+            const entry = bucket[i];
+            if (!visibleFlags[entry.order] && boundsIntersectViewport(entry.bounds, viewport, padding)) {
+              visibleFlags[entry.order] = 1;
+            }
+          }
+        }
       }
     }
   }
 
-  return Array.from(candidates)
-    .filter((entry) => boundsIntersectViewport(entry.bounds, viewport, padding))
-    .sort((first, second) => first.order - second.order)
-    .map((entry) => entry.element);
+  // Linear assembly preserves exact original canvas stacking Z-order with zero sorting overhead
+  const result = [];
+  for (let i = 0; i < total; i++) {
+    if (visibleFlags[i]) {
+      result.push(index.entries[i].element);
+    }
+  }
+  return result;
 }
 
 export function getSceneAlignmentCandidates(index, bounds, threshold) {
@@ -138,29 +189,45 @@ export function getSceneElementsAtPoint(index, x, y, padding = 32) {
 }
 
 export function getVisibleSceneElementsDuringDrag(index, viewport, padding, movedIds, offset) {
-  if (!index) return [];
+  if (!index || !index.entries.length) return [];
 
-  const elementsById = new Map();
-  for (const element of getVisibleSceneElements(index, viewport, padding)) {
-    if (!movedIds.has(element.id)) elementsById.set(element.id, element);
+  const total = index.entries.length;
+  const result = [];
+  const hasOffset = offset && (offset.x !== 0 || offset.y !== 0);
+  const offsetX = hasOffset ? offset.x : 0;
+  const offsetY = hasOffset ? offset.y : 0;
+
+  const vpMinX = viewport.x - padding;
+  const vpMaxX = viewport.x + viewport.width + padding;
+  const vpMinY = viewport.y - padding;
+  const vpMaxY = viewport.y + viewport.height + padding;
+
+  for (let i = 0; i < total; i++) {
+    const entry = index.entries[i];
+    const element = entry.element;
+    if (element.isDeleted || element.isHidden) continue;
+
+    if (movedIds && movedIds.has(element.id)) {
+      if (element.locked) continue;
+      const b = entry.bounds;
+      const bMinX = Math.min(b.x, b.x + b.width) + offsetX;
+      const bMaxX = Math.max(b.x, b.x + b.width) + offsetX;
+      const bMinY = Math.min(b.y, b.y + b.height) + offsetY;
+      const bMaxY = Math.max(b.y, b.y + b.height) + offsetY;
+
+      if (bMaxX >= vpMinX && bMinX <= vpMaxX && bMaxY >= vpMinY && bMinY <= vpMaxY) {
+        result.push(hasOffset ? {
+          ...element,
+          x: element.x + offsetX,
+          y: element.y + offsetY,
+        } : element);
+      }
+    } else {
+      if (boundsIntersectViewport(entry.bounds, viewport, padding)) {
+        result.push(element);
+      }
+    }
   }
 
-  for (const id of movedIds) {
-    const original = index.elementsById.get(id);
-    if (!original || original.isDeleted || original.isHidden || original.locked) continue;
-    const bounds = getCachedElementBounds(original);
-    if (!boundsIntersectViewport({
-      ...bounds,
-      x: bounds.x + offset.x,
-      y: bounds.y + offset.y,
-    }, viewport, padding)) continue;
-    elementsById.set(id, {
-      ...original,
-      x: original.x + offset.x,
-      y: original.y + offset.y,
-    });
-  }
-
-  return Array.from(elementsById.values())
-    .sort((first, second) => index.orderById.get(first.id) - index.orderById.get(second.id));
+  return result;
 }

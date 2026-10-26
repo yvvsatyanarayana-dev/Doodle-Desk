@@ -127,6 +127,14 @@ export function getElementBounds(el) {
 
 export function getCachedElementBounds(el) {
   if (!el || typeof el !== 'object') return getElementBounds(el);
+  if (el._fastBounds &&
+      el._fbX === el.x && el._fbY === el.y &&
+      el._fbW === el.width && el._fbH === el.height &&
+      el._fbA === el.angle && el._fbPts === el.points &&
+      el._fbText === el.text && el._fbFontSize === el.fontSize &&
+      el._fbLineHeight === el.lineHeight) {
+    return el._fastBounds;
+  }
   const cached = elementBoundsCache.get(el);
   if (cached &&
       cached.x === el.x && cached.y === el.y &&
@@ -137,6 +145,18 @@ export function getCachedElementBounds(el) {
     return cached.bounds;
   }
   const bounds = getElementBounds(el);
+  try {
+    el._fastBounds = bounds;
+    el._fbX = el.x;
+    el._fbY = el.y;
+    el._fbW = el.width;
+    el._fbH = el.height;
+    el._fbA = el.angle;
+    el._fbPts = el.points;
+    el._fbText = el.text;
+    el._fbFontSize = el.fontSize;
+    el._fbLineHeight = el.lineHeight;
+  } catch {}
   elementBoundsCache.set(el, {
     x: el.x,
     y: el.y,
@@ -179,8 +199,12 @@ export function getCommonBounds(elements) {
 
 // Hit testing a point in a rectangle
 export function isPointInRect(px, py, rx, ry, rw, rh, tolerance = 0) {
-  return px >= rx - tolerance && px <= rx + rw + tolerance &&
-         py >= ry - tolerance && py <= ry + rh + tolerance;
+  const minX = Math.min(rx, rx + rw);
+  const maxX = Math.max(rx, rx + rw);
+  const minY = Math.min(ry, ry + rh);
+  const maxY = Math.max(ry, ry + rh);
+  return px >= minX - tolerance && px <= maxX + tolerance &&
+         py >= minY - tolerance && py <= maxY + tolerance;
 }
 
 // Hit testing a point near a line segment

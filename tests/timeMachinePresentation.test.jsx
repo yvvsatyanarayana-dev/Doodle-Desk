@@ -170,4 +170,98 @@ describe('CanvasTimeMachine presentation-style layout and coexistence', () => {
     });
     document.body.removeChild(container);
   });
+
+  it('supports 3D Director mode toggle, slide thumbnails tray, and editable speaker notes', () => {
+    const mockElements = [
+      { id: 'f1', type: 'frame', name: 'Overview', notes: 'First frame notes', x: 0, y: 0, width: 800, height: 600 },
+      { id: 'f2', type: 'frame', name: 'Architecture', notes: 'Second frame notes', x: 900, y: 0, width: 800, height: 600 },
+    ];
+    const updateScene = vi.fn();
+    const scrollToContent = vi.fn();
+    const setActiveTool = vi.fn();
+
+    const mockApi = {
+      getSceneElements: () => mockElements,
+      updateScene,
+      scrollToContent,
+      setActiveTool,
+    };
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <PresentationMode
+          isActive={true}
+          onClose={vi.fn()}
+          doodleAPI={mockApi}
+          standalone={false}
+        />
+      );
+    });
+
+    // Check Director mode toggle button exists
+    const directorBtn = container.querySelector('button[aria-label="3D Director mode"]');
+    expect(directorBtn).toBeTruthy();
+    expect(directorBtn.classList.contains('active')).toBe(true);
+
+    // Toggle 3D Director mode
+    act(() => {
+      directorBtn.click();
+    });
+    expect(directorBtn.classList.contains('active')).toBe(false);
+
+    // Check Laser pointer button
+    const laserBtn = container.querySelector('button[aria-label="Laser pointer"]');
+    expect(laserBtn).toBeTruthy();
+    act(() => {
+      laserBtn.click();
+    });
+    expect(setActiveTool).toHaveBeenCalledWith({ type: 'laser' });
+
+    // Open Slide Tray
+    const trayBtn = container.querySelector('button[aria-label="Slide tray"]');
+    expect(trayBtn).toBeTruthy();
+    act(() => {
+      trayBtn.click();
+    });
+    expect(container.textContent).toContain('Overview');
+    expect(container.textContent).toContain('Architecture');
+
+    // Open Speaker Notes Drawer
+    const notesBtn = container.querySelector('button[aria-label="Speaker notes"]');
+    expect(notesBtn).toBeTruthy();
+    act(() => {
+      notesBtn.click();
+    });
+
+    const notesTextarea = container.querySelector('textarea[aria-label="Speaker notes content"]');
+    expect(notesTextarea).toBeTruthy();
+    expect(notesTextarea.value).toBe('First frame notes');
+
+    // Edit notes
+    act(() => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      nativeSetter.call(notesTextarea, 'Updated notes for frame 1');
+      notesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+      notesTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(updateScene).toHaveBeenCalled();
+
+    // Navigate to next slide
+    const nextBtn = container.querySelector('button[aria-label="Next slide"]');
+    expect(nextBtn).toBeTruthy();
+    act(() => {
+      nextBtn.click();
+    });
+    expect(scrollToContent).toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
+  });
 });
+

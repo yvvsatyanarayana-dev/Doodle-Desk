@@ -20,6 +20,14 @@ import {
   Film,
   Camera,
   BookOpen,
+  Smartphone,
+  Search,
+  FileCode,
+  History,
+  Target,
+  Package,
+  FolderSync,
+  Cpu,
 } from 'lucide-react';
 
 /**
@@ -70,6 +78,22 @@ function CanvasExtraToolsDropdownComponent({
   onOpenNapkinScanner,
   onTogglePhysicsPlayground,
   onToggleIsometric3D,
+  onToggleTrafficSimulator,
+  onEncloseCluster,
+  onInsertInteractiveStencil,
+  onToggleSpatial3DHolo,
+  onOpenFreehandMath,
+  onOpenTopologyBeautifier,
+  onOpenPrototypePlayer,
+  onOpenLocalAiCopilot,
+  onOpenCanvasQueryBar,
+  onOpenMultiView,
+  onOpenFormalSpecs,
+  onOpenSimulationCenter,
+  onOpenSemanticCheckpoints,
+  onOpenFocusModeSwitcher,
+  onOpenPluginsManager,
+  onOpenLocalSyncConfig,
 }) {
   const activeAPI = (typeof window !== 'undefined' && window.__doodleAPI) || doodleAPI || canvasAPI || null;
   const [isOpen, setIsOpen] = useState(false);
@@ -281,6 +305,131 @@ function CanvasExtraToolsDropdownComponent({
         zIndex: 10000,
       }}
     >
+      {/* Local AI Copilot */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenLocalAiCopilot) onOpenLocalAiCopilot();
+          else window.__openLocalAiCopilot?.();
+        }}
+      >
+        <Sparkles size={15} className="canvas-tool-menu-icon" style={{ color: '#10b981' }} />
+        <span className="canvas-tool-menu-label font-medium text-emerald-400">Local AI Copilot (Offline)</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+A</span>
+      </div>
+
+      {/* Canvas Query Language (CQL) Bar */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenCanvasQueryBar) onOpenCanvasQueryBar();
+          else window.__openCanvasQueryBar?.();
+        }}
+      >
+        <Search size={15} className="canvas-tool-menu-icon" style={{ color: '#10b981' }} />
+        <span className="canvas-tool-menu-label">Canvas Query Bar (CQL)</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+F</span>
+      </div>
+
+      {/* Knowledge Graph Multi-View */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenMultiView) onOpenMultiView();
+          else window.__openMultiView?.();
+        }}
+      >
+        <Table size={15} className="canvas-tool-menu-icon" style={{ color: '#14b8a6' }} />
+        <span className="canvas-tool-menu-label">Knowledge Graph Multi-View</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+M</span>
+      </div>
+
+      {/* Executable Formal Specs (TLA+/Alloy/XState) */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenFormalSpecs) onOpenFormalSpecs();
+          else window.__openFormalSpecs?.();
+        }}
+      >
+        <FileCode size={15} className="canvas-tool-menu-icon" style={{ color: '#f59e0b' }} />
+        <span className="canvas-tool-menu-label">Formal Specs (TLA+/Alloy)</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+D</span>
+      </div>
+
+      {/* Simulation Center */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenSimulationCenter) onOpenSimulationCenter();
+          else window.__openSimulationCenter?.();
+        }}
+      >
+        <Activity size={15} className="canvas-tool-menu-icon" style={{ color: '#10b981' }} />
+        <span className="canvas-tool-menu-label">Executable Simulation Center</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+S</span>
+      </div>
+
+      {/* Semantic History & Checkpoints */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenSemanticCheckpoints) onOpenSemanticCheckpoints();
+          else window.__openSemanticCheckpoints?.();
+        }}
+      >
+        <History size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">Semantic Checkpoints & ADR</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+H</span>
+      </div>
+
+      {/* Focus Mode Switcher */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenFocusModeSwitcher) onOpenFocusModeSwitcher();
+          else window.__openFocusModeSwitcher?.();
+        }}
+      >
+        <Target size={15} className="canvas-tool-menu-icon" style={{ color: '#ec4899' }} />
+        <span className="canvas-tool-menu-label">Focus Mode Presets</span>
+      </div>
+
+      {/* WASM Plugins Manager */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenPluginsManager) onOpenPluginsManager();
+          else window.__openPluginsManager?.();
+        }}
+      >
+        <Package size={15} className="canvas-tool-menu-icon" style={{ color: '#f59e0b' }} />
+        <span className="canvas-tool-menu-label">WASM Plugins Manager</span>
+      </div>
+
+      {/* Local-First Sync Config */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenLocalSyncConfig) onOpenLocalSyncConfig();
+          else window.__openLocalSyncConfig?.();
+        }}
+      >
+        <FolderSync size={15} className="canvas-tool-menu-icon" style={{ color: '#14b8a6' }} />
+        <span className="canvas-tool-menu-label">Local-First Sync & Infrastructure</span>
+      </div>
+
+      <div className="canvas-tool-menu-divider" />
+
       {/* Frame tool (F) */}
       <div className="canvas-tool-menu-item" onClick={handleSelectFrame}>
         <Frame size={15} className="canvas-tool-menu-icon" style={{ color: '#f59e0b' }} />
@@ -386,7 +535,7 @@ function CanvasExtraToolsDropdownComponent({
           onOpenInsertDocument?.();
         }}
       >
-        <FileText size={15} className="canvas-tool-menu-icon" style={{ color: '#38bdf8' }} />
+        <FileText size={15} className="canvas-tool-menu-icon" style={{ color: '#2dd4bf' }} />
         <span className="canvas-tool-menu-label">Document Card (Markdown & PDF)</span>
       </div>
 
@@ -492,7 +641,7 @@ function CanvasExtraToolsDropdownComponent({
           }
         }}
       >
-        <Orbit size={15} className="canvas-tool-menu-icon" style={{ color: '#818cf8' }} />
+        <Orbit size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
         <span className="canvas-tool-menu-label">Physics & Gravity Mode</span>
         <span className="canvas-tool-menu-shortcut">Shift+P</span>
       </div>
@@ -509,7 +658,7 @@ function CanvasExtraToolsDropdownComponent({
           }
         }}
       >
-        <Box size={15} className="canvas-tool-menu-icon" style={{ color: '#3b82f6' }} />
+        <Box size={15} className="canvas-tool-menu-icon" style={{ color: '#14b8a6' }} />
         <span className="canvas-tool-menu-label">2.5D Isometric 3D View</span>
         <span className="canvas-tool-menu-shortcut">Shift+I</span>
       </div>
@@ -602,6 +751,100 @@ function CanvasExtraToolsDropdownComponent({
       >
         <Camera size={15} className="canvas-tool-menu-icon" style={{ color: '#34d399' }} />
         <span className="canvas-tool-menu-label">Napkin-to-Vector Scanner</span>
+      </div>
+
+      <div className="canvas-tool-menu-divider" />
+
+      {/* Interactive Prototype Player */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenPrototypePlayer) {
+            onOpenPrototypePlayer();
+          } else if (typeof window !== 'undefined' && window.__doodleOpenPrototypePlayer) {
+            window.__doodleOpenPrototypePlayer();
+          }
+        }}
+      >
+        <Smartphone size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">Interactive Prototype Player</span>
+        <span className="canvas-tool-menu-shortcut">Alt+P</span>
+      </div>
+
+      {/* Network Traffic Simulator */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onToggleTrafficSimulator) {
+            onToggleTrafficSimulator();
+          } else {
+            activeAPI?.toggleTrafficSimulator?.();
+          }
+        }}
+      >
+        <Radio size={15} className="canvas-tool-menu-icon" style={{ color: '#2dd4bf' }} />
+        <span className="canvas-tool-menu-label">Network Traffic Simulator</span>
+        <span className="canvas-tool-menu-shortcut">Live</span>
+      </div>
+
+      {/* Smart Magnetic Cluster Enclosure */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onEncloseCluster) {
+            onEncloseCluster();
+          } else {
+            activeAPI?.encloseInSmartCluster?.();
+          }
+        }}
+      >
+        <Frame size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">Enclose in Smart Cluster</span>
+      </div>
+
+            {/* 3D Spatial Holo-Canvas & Parallax Studio */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onToggleSpatial3DHolo) onToggleSpatial3DHolo();
+          else activeAPI?.toggleSpatial3DHolo?.();
+        }}
+      >
+        <Box size={15} className="canvas-tool-menu-icon" style={{ color: '#06b6d4' }} />
+        <span className="canvas-tool-menu-label">3D Spatial Holo-Canvas</span>
+        <span className="canvas-tool-menu-shortcut">Shift+3</span>
+      </div>
+
+      {/* Freehand Math Equation Recognizer & Grapher */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenFreehandMath) onOpenFreehandMath();
+          else activeAPI?.openFreehandMath?.();
+        }}
+      >
+        <Activity size={15} className="canvas-tool-menu-icon" style={{ color: '#2dd4bf' }} />
+        <span className="canvas-tool-menu-label">Freehand Math Grapher</span>
+        <span className="canvas-tool-menu-shortcut">Shift+M</span>
+      </div>
+
+      {/* AI Smart Auto-Layout */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenTopologyBeautifier) onOpenTopologyBeautifier();
+          else activeAPI?.openTopologyBeautifier?.();
+        }}
+      >
+        <Wand2 size={15} className="canvas-tool-menu-icon" style={{ color: '#a855f7' }} />
+        <span className="canvas-tool-menu-label">AI Smart Auto-Layout</span>
+        <span className="canvas-tool-menu-shortcut">Shift+A</span>
       </div>
     </div>
   );

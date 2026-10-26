@@ -6,6 +6,8 @@ import { ReactiveSliderCard } from '../src/components/ReactiveSliderCard.jsx';
 import { WhiteboardAnimationStudio } from '../src/components/WhiteboardAnimationStudio.jsx';
 import { NeuralKnowledgeConstellationModal } from '../src/components/NeuralKnowledgeConstellationModal.jsx';
 import { NapkinToVectorScannerModal } from '../src/components/NapkinToVectorScannerModal.jsx';
+import { Spatial3DHoloCanvas } from '../src/components/Spatial3DHoloCanvas.jsx';
+import { FreehandMathRecognizerModal } from '../src/components/FreehandMathRecognizerModal.jsx';
 
 describe('Next-Gen Powerhouse Canvas Features', () => {
   let container;
@@ -195,6 +197,70 @@ describe('Next-Gen Powerhouse Canvas Features', () => {
 
     await act(async () => {
       insertBtn.click();
+    });
+
+    expect(mockAPI.updateScene).toHaveBeenCalled();
+  });
+
+  it('renders Spatial3DHoloCanvas with DoodleDesk authentic studio theme and camera controls', async () => {
+    await act(async () => {
+      root.render(
+        <Spatial3DHoloCanvas
+          isActive={true}
+          onClose={vi.fn()}
+          doodleAPI={mockAPI}
+          theme="dark"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('3D Spatial Canvas');
+    expect(container.textContent).toContain('Drag to Orbit • Right-drag to Pan • Scroll to Zoom');
+    expect(container.textContent).toContain('Isometric 45°');
+    expect(container.textContent).toContain('Cinematic 3D');
+    expect(container.textContent).toContain('Subtle Tilt');
+    expect(container.textContent).toContain('Top-Down 2D');
+    expect(container.textContent).toContain('Smart Tiers');
+    expect(container.textContent).toContain('Layer Stack');
+    expect(container.textContent).toContain('Flat 3D');
+    expect(container.textContent).toContain('Canvas Floor');
+    expect(container.textContent).toContain('Floor Shadows');
+    expect(container.textContent).toContain('Snapshot');
+
+    // Verify it does NOT contain the old gaudy placeholders
+    expect(container.textContent).not.toContain('Z+65');
+  });
+
+  it('renders FreehandMathRecognizerModal with authentic handwriting pad and analytical metrics', async () => {
+    await act(async () => {
+      root.render(
+        <FreehandMathRecognizerModal
+          isOpen={true}
+          onClose={vi.fn()}
+          doodleAPI={mockAPI}
+          theme="dark"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Freehand Math Equation Recognizer & Grapher');
+    expect(container.textContent).toContain('Draw / Scribble Math Below');
+    expect(container.textContent).toContain('Formula: f(x) =');
+    expect(container.textContent).toContain('Live Variables');
+    expect(container.textContent).toContain('Roots (f(x)=0)');
+    expect(container.textContent).toContain('Extrema (Peaks/Valleys)');
+    expect(container.textContent).toContain('Tangent Slope');
+    expect(container.textContent).toContain('Stamp as Vector Doodle');
+    expect(container.textContent).toContain('Insert Interactive Card');
+
+    // Test stamp doodle
+    const stampBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent.includes('Stamp as Vector Doodle')
+    );
+    expect(stampBtn).toBeTruthy();
+
+    await act(async () => {
+      stampBtn.click();
     });
 
     expect(mockAPI.updateScene).toHaveBeenCalled();

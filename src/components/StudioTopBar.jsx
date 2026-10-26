@@ -34,6 +34,7 @@ import {
   Focus,
   Headphones,
   Timer,
+  Smartphone,
 } from 'lucide-react';
 import { WorkspaceIconBadge } from './WorkspaceIcons';
 import WorkspaceDropdown from './WorkspaceDropdown';
@@ -62,6 +63,8 @@ function StudioTopBarComponent({
   isFocusModeActive,
   onOpenTemplates,
   onTogglePresentation,
+  onOpenPrototypePlayer,
+  onOpenCanvasQueryBar,
   onToggleMiniMap,
   isMiniMapOpen,
   onRenameTitle,
@@ -709,6 +712,27 @@ function StudioTopBarComponent({
             <Play size={13} />
           </button>
 
+          <button
+            className="studio-capsule-btn"
+            onClick={() => onOpenPrototypePlayer?.()}
+            title="Interactive Click-Through Prototype Player (Alt+P)"
+            aria-label="Interactive prototype player"
+          >
+            <Smartphone size={13} />
+          </button>
+
+          <button
+            className="studio-capsule-btn"
+            onClick={() => {
+              if (onOpenCanvasQueryBar) onOpenCanvasQueryBar();
+              else window.__openCanvasQueryBar?.();
+            }}
+            title="Canvas Query Language (CQL) Bar (Ctrl+Shift+F)"
+            aria-label="Canvas Query Language Bar"
+          >
+            <Search size={13} />
+          </button>
+
           <div className="studio-canvas-menu-wrapper" ref={canvasMenuRef}>
             <button
               className={`studio-capsule-btn ${isCanvasMenuOpen ? 'active' : ''}`}
@@ -988,3 +1012,6 @@ function StudioTopBarComponent({
 }
 
 export const StudioTopBar = memo(StudioTopBarComponent);
+
+
+export default StudioTopBar;

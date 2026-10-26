@@ -5,6 +5,7 @@ import {
   ELEMENT_TYPES,
   generateId,
 } from '../engine/elements.js';
+import { parseSqlDdl, parseOpenApiSpec } from './schemaParsers.js';
 
 export const MAX_DATA_DIAGRAM_RECORDS = 500;
 
@@ -84,6 +85,11 @@ export function parseDataDiagramFile(text, fileName = '') {
     throw new Error('The selected file is empty.');
   }
 
+  // SQL DDL detection
+  if (/\.sql$/i.test(fileName) || /CREATE\s+TABLE/i.test(text)) {
+    return parseSqlDdl(text);
+  }
+
   let rows;
   if (/\.csv$/i.test(fileName)) {
     rows = parseCsv(text.replace(/^\uFEFF/, ''));
@@ -94,6 +100,12 @@ export function parseDataDiagramFile(text, fileName = '') {
     } catch (error) {
       throw new Error(`Could not parse JSON: ${error.message}`);
     }
+
+    // OpenAPI / Swagger detection
+    if (parsed && (parsed.openapi || parsed.swagger || parsed.paths)) {
+      return parseOpenApiSpec(parsed);
+    }
+
     rows = Array.isArray(parsed) ? parsed : (parsed?.records || parsed?.data);
     if (!Array.isArray(rows)) {
       throw new Error('JSON must be an array of records or an object containing a "records" or "data" array.');

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -51,6 +51,8 @@ if (typeof window !== 'undefined') {
 // Render directly without React.StrictMode to avoid expensive duplicate Doodle canvas initializations
 ReactDOM.createRoot(document.getElementById('root')).render(
   <ErrorBoundary>
-    <App />
+    <Suspense fallback={<div style={{ width: '100vw', height: '100vh', backgroundColor: '#121214' }} />}>
+      <App />
+    </Suspense>
   </ErrorBoundary>
 );

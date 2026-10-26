@@ -8,10 +8,13 @@ export class HistoryManager {
     this._undo = []; // Array of { snapshot: string, timestamp: number, count: number }
     this._redo = []; // Array of { snapshot: string, timestamp: number, count: number }
     this._lastCommit = null;
+    this._lastElementsRef = null;
   }
 
   // Record current state (call after every committed action)
   record(elements) {
+    if (this._lastElementsRef && this._lastElementsRef === elements) return;
+    this._lastElementsRef = elements;
     const snapshot = JSON.stringify(elements);
     if (snapshot === this._lastCommit) return;
     this._lastCommit = snapshot;

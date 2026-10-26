@@ -12,6 +12,10 @@ export class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
+    if (error && typeof error.message === 'string' && (error.message.includes('A component suspended') || error.message.includes('startTransition'))) {
+      console.warn('ErrorBoundary intercepted unhandled Suspense Promise, recovering automatically:', error);
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 
@@ -98,7 +102,7 @@ export class ErrorBoundary extends React.Component {
                 fontSize: '22px',
                 fontWeight: 700,
                 margin: '0 0 10px 0',
-                color: '#ffffff',
+                color: '#09090b',
               }}
             >
               Doodle Desk Recovered Gracefully
@@ -130,7 +134,7 @@ export class ErrorBoundary extends React.Component {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  backgroundColor: '#3b82f6',
+                  backgroundColor: '#10b981',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '10px',

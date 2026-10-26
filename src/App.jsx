@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, startTransition, useState, useEffect, useRef, useCallback } from 'react';
 import { Link2, Sparkles, X } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useFileActions } from './hooks/useFileActions';
@@ -38,12 +38,12 @@ const PrecisionRulerOverlay = lazy(() => import('./components/PrecisionRulerOver
 const WireframeToCodeModal = lazy(() => import('./components/WireframeToCodeModal').then((module) => ({ default: module.WireframeToCodeModal })));
 const InsertDocumentModal = lazy(() => import('./components/InsertDocumentModal').then((module) => ({ default: module.InsertDocumentModal })));
 const AmbientSoundStudio = lazy(() => import('./components/AmbientSoundStudio').then((module) => ({ default: module.AmbientSoundStudio })));
-import { InteractiveTableFlashcardsModal } from './components/InteractiveTableFlashcardsModal';
-import { WhiteboardAnimationStudio } from './components/WhiteboardAnimationStudio';
-import { NeuralKnowledgeConstellationModal } from './components/NeuralKnowledgeConstellationModal';
-import { NapkinToVectorScannerModal } from './components/NapkinToVectorScannerModal';
+const InteractiveTableFlashcardsModal = lazy(() => import('./components/InteractiveTableFlashcardsModal').then((module) => ({ default: module.InteractiveTableFlashcardsModal })));
+const WhiteboardAnimationStudio = lazy(() => import('./components/WhiteboardAnimationStudio').then((module) => ({ default: module.WhiteboardAnimationStudio })));
+const NeuralKnowledgeConstellationModal = lazy(() => import('./components/NeuralKnowledgeConstellationModal').then((module) => ({ default: module.NeuralKnowledgeConstellationModal })));
+const NapkinToVectorScannerModal = lazy(() => import('./components/NapkinToVectorScannerModal').then((module) => ({ default: module.NapkinToVectorScannerModal })));
 import { ambientAudio, playChime } from './utils/ambientAudioEngine';
-import { ThemedConfirmDialog } from './components/ThemedConfirmDialog';
+const ThemedConfirmDialog = lazy(() => import('./components/ThemedConfirmDialog').then((module) => ({ default: module.ThemedConfirmDialog })));
 import DoodleCanvas, { FONT_FAMILY } from './engine/DoodleCanvas.jsx';
 import { exportToCanvas } from './engine/exports.js';
 import { WelcomeScreen } from './engine/WelcomeScreen.jsx';
@@ -53,6 +53,20 @@ import { CustomLaserPointer } from './components/CustomLaserPointer';
 import { UpdateReceiverToast } from './components/UpdateReceiverToast';
 import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
 import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
+import { parseDataDiagramFile } from './utils/dataDiagram.js';
+const NetworkTrafficSimulator = lazy(() => import('./components/NetworkTrafficSimulator.jsx'));
+const Spatial3DHoloCanvas = lazy(() => import('./components/Spatial3DHoloCanvas.jsx'));
+const FreehandMathRecognizerModal = lazy(() => import('./components/FreehandMathRecognizerModal.jsx'));
+const InteractivePrototypePlayer = lazy(() => import('./components/InteractivePrototypePlayer.jsx'));
+const LocalAiCopilotModal = lazy(() => import('./components/LocalAiCopilotModal.jsx'));
+const CanvasQueryBar = lazy(() => import('./components/CanvasQueryBar.jsx'));
+const CanvasMultiViewModal = lazy(() => import('./components/CanvasMultiViewModal.jsx'));
+const FormalSpecsModal = lazy(() => import('./components/FormalSpecsModal.jsx'));
+const SimulationCenterModal = lazy(() => import('./components/SimulationCenterModal.jsx'));
+const SemanticCheckpointsModal = lazy(() => import('./components/SemanticCheckpointsModal.jsx'));
+const FocusModeSwitcherModal = lazy(() => import('./components/FocusModeSwitcherModal.jsx'));
+const PluginsManagerModal = lazy(() => import('./components/PluginsManagerModal.jsx'));
+const LocalSyncConfigModal = lazy(() => import('./components/LocalSyncConfigModal.jsx'));
 
 export default function App() {
   const doodleCanvasRef = useRef(null);
@@ -116,6 +130,17 @@ export default function App() {
   const [walkthroughPath, setWalkthroughPath] = useState([]);
   const [, setCanvasSelection] = useState({});
   const [isFocusModeActive, setIsFocusModeActive] = useState(false);
+  // Next-Gen Strategic Features States
+  const [isLocalAiCopilotOpen, setIsLocalAiCopilotOpen] = useState(false);
+  const [isCanvasQueryBarOpen, setIsCanvasQueryBarOpen] = useState(false);
+  const [isMultiViewOpen, setIsMultiViewOpen] = useState(false);
+  const [isFormalSpecsOpen, setIsFormalSpecsOpen] = useState(false);
+  const [isSimulationCenterOpen, setIsSimulationCenterOpen] = useState(false);
+  const [isCheckpointsOpen, setIsCheckpointsOpen] = useState(false);
+  const [isFocusModeSwitcherOpen, setIsFocusModeSwitcherOpen] = useState(false);
+  const [isPluginsManagerOpen, setIsPluginsManagerOpen] = useState(false);
+  const [isLocalSyncConfigOpen, setIsLocalSyncConfigOpen] = useState(false);
+  const [currentFocusModeId, setCurrentFocusModeId] = useState('developer');
 
   // Powerhouse features: Wireframe-to-code, Document Cards, Ambient Soundscapes & Pomodoro
   const [isWireframeToCodeOpen, setIsWireframeToCodeOpen] = useState(false);
@@ -125,6 +150,11 @@ export default function App() {
   const [isAnimationStudioOpen, setIsAnimationStudioOpen] = useState(false);
   const [isKnowledgeConstellationOpen, setIsKnowledgeConstellationOpen] = useState(false);
   const [isNapkinScannerOpen, setIsNapkinScannerOpen] = useState(false);
+  const [isTrafficSimulatorOpen, setIsTrafficSimulatorOpen] = useState(false);
+  const [isSpatial3DHoloActive, setIsSpatial3DHoloActive] = useState(false);
+  const [isFreehandMathOpen, setIsFreehandMathOpen] = useState(false);
+  const [isPrototypePlayerOpen, setIsPrototypePlayerOpen] = useState(false);
+  const [prototypePlayerStartFrameId, setPrototypePlayerStartFrameId] = useState('');
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [pomodoroState, setPomodoroState] = useState({
     isRunning: false,
@@ -562,6 +592,47 @@ export default function App() {
     doodleAPI?.setActiveTool({ type: tool });
   }, [doodleAPI]);
 
+  // Handlers for Next-Gen Strategic Features
+  const handleAddElements = useCallback((newElements) => {
+    const api = doodleCanvasRef.current || doodleAPI;
+    if (!api || !Array.isArray(newElements) || newElements.length === 0) return;
+    const current = api.getSceneElements?.() || [];
+
+    const idMap = {};
+    newElements.forEach((el) => {
+      if (el && el.id && el.type !== 'frame') idMap[el.id] = true;
+    });
+
+    api.updateScene({
+      elements: [...current, ...newElements],
+      appState: Object.keys(idMap).length > 0 ? { selectedElementIds: idMap } : {},
+      commitToHistory: true,
+    });
+
+    setTimeout(() => {
+      api.scrollToContent?.(newElements, { fitToContent: true, animate: true, padding: 140 });
+    }, 60);
+  }, [doodleAPI]);
+
+  const handleRestoreElements = useCallback((restoredElements) => {
+    const api = doodleCanvasRef.current || doodleAPI;
+    if (!api || !Array.isArray(restoredElements)) return;
+    api.updateScene({ elements: restoredElements });
+  }, [doodleAPI]);
+
+  const handleHighlightElements = useCallback((elementIds) => {
+    const api = doodleCanvasRef.current || doodleAPI;
+    if (!api || !Array.isArray(elementIds) || elementIds.length === 0) return;
+    const idMap = {};
+    elementIds.forEach(id => { idMap[id] = true; });
+    api.updateScene({ appState: { selectedElementIds: idMap } });
+    const elements = api.getSceneElements?.() || [];
+    const target = elements.find(el => idMap[el.id]);
+    if (target) {
+      api.scrollToContent([target], { animate: true, duration: 300 });
+    }
+  }, [doodleAPI]);
+
   // Bridge custom tools to native toolbar menu
   useEffect(() => {
     window.__doodleIsDrawToShapeActive = isDrawToShapeActive;
@@ -577,12 +648,32 @@ export default function App() {
     window.__doodleOpenAnimationStudio = () => setIsAnimationStudioOpen(true);
     window.__doodleOpenKnowledgeConstellation = () => setIsKnowledgeConstellationOpen(true);
     window.__doodleOpenNapkinScanner = () => setIsNapkinScannerOpen(true);
+    window.__doodleOpenPrototypePlayer = handleOpenPrototypePlayer;
+    window.__openLocalAiCopilot = () => setIsLocalAiCopilotOpen(true);
+    window.__openCanvasQueryBar = () => setIsCanvasQueryBarOpen(true);
+    window.__openMultiView = () => setIsMultiViewOpen(true);
+    window.__openFormalSpecs = () => setIsFormalSpecsOpen(true);
+    window.__openSimulationCenter = () => setIsSimulationCenterOpen(true);
+    window.__openSemanticCheckpoints = () => setIsCheckpointsOpen(true);
+    window.__openFocusModeSwitcher = () => setIsFocusModeSwitcherOpen(true);
+    window.__openPluginsManager = () => setIsPluginsManagerOpen(true);
+    window.__openLocalSyncConfig = () => setIsLocalSyncConfigOpen(true);
 
     return () => {
       delete window.__openTableFlashcards;
       delete window.__doodleOpenAnimationStudio;
       delete window.__doodleOpenKnowledgeConstellation;
       delete window.__doodleOpenNapkinScanner;
+      delete window.__doodleOpenPrototypePlayer;
+      delete window.__openLocalAiCopilot;
+      delete window.__openCanvasQueryBar;
+      delete window.__openMultiView;
+      delete window.__openFormalSpecs;
+      delete window.__openSimulationCenter;
+      delete window.__openSemanticCheckpoints;
+      delete window.__openFocusModeSwitcher;
+      delete window.__openPluginsManager;
+      delete window.__openLocalSyncConfig;
     };
   }, [
     isDrawToShapeActive,
@@ -714,6 +805,14 @@ export default function App() {
       },
     });
   }, [doodleAPI, effectiveTheme]);
+
+  const handleSelectFocusMode = useCallback((mode) => {
+    if (!mode) return;
+    setCurrentFocusModeId(mode.id);
+    if (mode.canvasStyle) {
+      handleSetCanvasStyle(mode.canvasStyle);
+    }
+  }, [handleSetCanvasStyle]);
 
   // Load the default canvas font after the first paint so font decoding does not delay startup.
   useEffect(() => {
@@ -971,6 +1070,55 @@ export default function App() {
         return;
       }
 
+      // Next-Gen Feature Shortcuts
+      // Ctrl+Shift+A (Local AI Copilot)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'a' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsLocalAiCopilotOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+F (Canvas Query Language Bar)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'f' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsCanvasQueryBarOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+M (Knowledge Graph Multi-View)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'm' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsMultiViewOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+D (Formal Specifications)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'd' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFormalSpecsOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+S (Executable Simulation Center)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 's' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSimulationCenterOpen(true);
+        return;
+      }
+
+      // Ctrl+Shift+H (Semantic History & Checkpoints)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'h' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsCheckpointsOpen(true);
+        return;
+      }
+
       // Ctrl+K (Command Palette)
       if (isCtrlOrCmd && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -1030,7 +1178,23 @@ export default function App() {
         return;
       }
 
-      // Shift+A (AI Smart Auto-Layout)
+      // Shift+3 (3D Spatial Holo-Canvas & Parallax)
+      if (e.shiftKey && (e.key === '3' || e.code === 'Digit3') && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSpatial3DHoloActive((prev) => !prev);
+        return;
+      }
+
+      // Shift+M (Freehand Math Equation Recognizer & Grapher)
+      if (e.shiftKey && e.key.toLowerCase() === 'm' && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFreehandMathOpen((prev) => !prev);
+        return;
+      }
+
+      // Shift+A (AI Smart Auto-Layout / Topology Beautifier)
       if (e.shiftKey && e.key.toLowerCase() === 'a' && !isCtrlOrCmd && !e.altKey && !isInputFocused) {
         e.preventDefault();
         e.stopPropagation();
@@ -1067,6 +1231,14 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         handleToggleLaser();
+        return;
+      }
+
+      // Alt+P (Interactive Prototype Player)
+      if (e.altKey && e.key.toLowerCase() === 'p' && !isCtrlOrCmd && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleOpenPrototypePlayer();
         return;
       }
 
@@ -1213,9 +1385,27 @@ export default function App() {
         name.endsWith('.svg')
       )) {
         await loadFileFromDisk(filePath);
+      } else if (
+        name.endsWith('.sql') ||
+        name.endsWith('.json') ||
+        name.endsWith('.yaml') ||
+        name.endsWith('.yml') ||
+        name.endsWith('.csv')
+      ) {
+        try {
+          const content = await file.text();
+          const rows = parseDataDiagramFile(content, file.name);
+          if (rows && rows.length > 0 && doodleAPI?.importDataDiagram) {
+            doodleAPI.importDataDiagram(rows);
+            showToast(`Generated schema diagram from ${file.name}`);
+          }
+        } catch (err) {
+          console.error('Failed to parse dropped schema/data file:', err);
+          showToast(`Could not parse ${file.name}: ${err.message}`);
+        }
       }
     }
-  }, [loadFileFromDisk]);
+  }, [loadFileFromDisk, doodleAPI, showToast]);
 
   const currentFileName = activeFile?.name || customTitle || (currentFilePath ? currentFilePath.split(/[\\/]/).pop() : 'Untitled');
 
@@ -1331,6 +1521,13 @@ export default function App() {
     return window.electronAPI.on('file:print-canvas', handlePrintCanvas);
   }, [handlePrintCanvas]);
 
+  const handleOpenPrototypePlayer = useCallback((frameId) => {
+    startTransition(() => {
+      setPrototypePlayerStartFrameId(frameId || '');
+      setIsPrototypePlayerOpen(true);
+    });
+  }, []);
+
   const handleFreeDrawCommit = useCallback((stroke) => {
     if (!isDrawToShapeActive || !doodleAPI || !stroke?.points?.length) return;
     const recognized = recognizeShape(stroke);
@@ -1394,6 +1591,9 @@ export default function App() {
         isFocusModeActive={isFocusModeActive}
         onOpenTemplates={handleOpenTemplates}
         onTogglePresentation={() => setIsPresentationActive((prev) => !prev)}
+        onOpenPrototypePlayer={handleOpenPrototypePlayer}
+        onOpenLocalAiCopilot={() => setIsLocalAiCopilotOpen(true)}
+        onOpenCanvasQueryBar={() => setIsCanvasQueryBarOpen(true)}
         onToggleMiniMap={() => setIsMiniMapOpen((prev) => !prev)}
         isMiniMapOpen={isMiniMapOpen}
         onRenameTitle={handleRenameTitle}
@@ -1537,6 +1737,15 @@ export default function App() {
 
       <CanvasExtraToolsDropdown
         doodleAPI={doodleAPI}
+        onOpenLocalAiCopilot={() => setIsLocalAiCopilotOpen(true)}
+        onOpenCanvasQueryBar={() => setIsCanvasQueryBarOpen(true)}
+        onOpenMultiView={() => setIsMultiViewOpen(true)}
+        onOpenFormalSpecs={() => setIsFormalSpecsOpen(true)}
+        onOpenSimulationCenter={() => setIsSimulationCenterOpen(true)}
+        onOpenSemanticCheckpoints={() => setIsCheckpointsOpen(true)}
+        onOpenFocusModeSwitcher={() => setIsFocusModeSwitcherOpen(true)}
+        onOpenPluginsManager={() => setIsPluginsManagerOpen(true)}
+        onOpenLocalSyncConfig={() => setIsLocalSyncConfigOpen(true)}
         isDrawToShapeActive={isDrawToShapeActive}
         onToggleDrawToShape={handleToggleDrawToShape}
         isLaserActive={isLaserActive}
@@ -1584,10 +1793,17 @@ export default function App() {
         onOpenNapkinScanner={() => setIsNapkinScannerOpen(true)}
         onTogglePhysicsPlayground={() => doodleAPI?.togglePhysicsPlayground?.()}
         onToggleIsometric3D={() => doodleAPI?.toggleIsometric3D?.()}
+        onToggleTrafficSimulator={() => startTransition(() => setIsTrafficSimulatorOpen((prev) => !prev))}
+        onEncloseCluster={() => doodleAPI?.encloseInSmartCluster?.()}
+        onInsertInteractiveStencil={(type, opts) => doodleAPI?.insertInteractiveStencil?.(type, opts)}
+        onToggleSpatial3DHolo={() => startTransition(() => setIsSpatial3DHoloActive((prev) => !prev))}
+        onOpenFreehandMath={() => startTransition(() => setIsFreehandMathOpen(true))}
+        onOpenTopologyBeautifier={() => setIsAutoLayoutOpen(true)}
+        onOpenPrototypePlayer={handleOpenPrototypePlayer}
       />
 
       {isLaserActive && (
-        <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} />
+        <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} doodleAPI={doodleAPI} />
       )}
 
       <CanvasTopRightSettings
@@ -1625,6 +1841,15 @@ export default function App() {
       {/* Command Palette (Ctrl+K) */}
       {isCommandPaletteOpen && <Suspense fallback={null}><CommandPalette
         isOpen={isCommandPaletteOpen}
+        onOpenLocalAiCopilot={() => setIsLocalAiCopilotOpen(true)}
+        onOpenCanvasQueryBar={() => setIsCanvasQueryBarOpen(true)}
+        onOpenMultiView={() => setIsMultiViewOpen(true)}
+        onOpenFormalSpecs={() => setIsFormalSpecsOpen(true)}
+        onOpenSimulationCenter={() => setIsSimulationCenterOpen(true)}
+        onOpenSemanticCheckpoints={() => setIsCheckpointsOpen(true)}
+        onOpenFocusModeSwitcher={() => setIsFocusModeSwitcherOpen(true)}
+        onOpenPluginsManager={() => setIsPluginsManagerOpen(true)}
+        onOpenLocalSyncConfig={() => setIsLocalSyncConfigOpen(true)}
         onClose={() => setIsCommandPaletteOpen(false)}
         doodleAPI={doodleAPI}
         effectiveTheme={effectiveTheme}
@@ -1814,6 +2039,20 @@ export default function App() {
         onClose={() => setIsStickyNotesOpen(false)}
         doodleAPI={doodleAPI}
       /></Suspense>}
+
+      {/* Interactive Click-Through Prototype Player (Figma-Style Simulator) */}
+      {isPrototypePlayerOpen && (
+        <Suspense fallback={null}>
+          <InteractivePrototypePlayer
+            isOpen={isPrototypePlayerOpen}
+            onClose={() => setIsPrototypePlayerOpen(false)}
+            doodleAPI={doodleAPI}
+            initialFrameId={prototypePlayerStartFrameId}
+            theme={effectiveTheme}
+            onToast={showToast}
+          />
+        </Suspense>
+      )}
 
       {/* Precision Ruler & Compass Guide Overlay */}
       {isRulerActive && (
@@ -2060,64 +2299,242 @@ export default function App() {
 
       {/* Interactive Table Flashcards Practice Environment */}
       {activeFlashcardTable && (
-        <InteractiveTableFlashcardsModal
-          isOpen={Boolean(activeFlashcardTable)}
-          onClose={() => setActiveFlashcardTable(null)}
-          tableElement={activeFlashcardTable}
-          isDark={effectiveTheme === 'dark'}
-        />
+        <Suspense fallback={null}>
+          <InteractiveTableFlashcardsModal
+            isOpen={Boolean(activeFlashcardTable)}
+            onClose={() => setActiveFlashcardTable(null)}
+            tableElement={activeFlashcardTable}
+            isDark={effectiveTheme === 'dark'}
+          />
+        </Suspense>
       )}
 
       {/* Whiteboard Animation & Storyboard Studio */}
       {isAnimationStudioOpen && (
-        <WhiteboardAnimationStudio
-          isOpen={isAnimationStudioOpen}
-          onClose={() => setIsAnimationStudioOpen(false)}
-          doodleAPI={doodleAPI}
-          isDark={effectiveTheme === 'dark'}
-        />
+        <Suspense fallback={null}>
+          <WhiteboardAnimationStudio
+            isOpen={isAnimationStudioOpen}
+            onClose={() => setIsAnimationStudioOpen(false)}
+            doodleAPI={doodleAPI}
+            isDark={effectiveTheme === 'dark'}
+          />
+        </Suspense>
       )}
 
       {/* 3D Neural Knowledge Constellation & Backlinks */}
       {isKnowledgeConstellationOpen && (
-        <NeuralKnowledgeConstellationModal
-          isOpen={isKnowledgeConstellationOpen}
-          onClose={() => setIsKnowledgeConstellationOpen(false)}
-          doodleAPI={doodleAPI}
-          isDark={effectiveTheme === 'dark'}
-        />
+        <Suspense fallback={null}>
+          <NeuralKnowledgeConstellationModal
+            isOpen={isKnowledgeConstellationOpen}
+            onClose={() => setIsKnowledgeConstellationOpen(false)}
+            doodleAPI={doodleAPI}
+            isDark={effectiveTheme === 'dark'}
+          />
+        </Suspense>
       )}
 
       {/* Napkin & Sketch-to-Vector Camera Scanner */}
       {isNapkinScannerOpen && (
-        <NapkinToVectorScannerModal
-          isOpen={isNapkinScannerOpen}
-          onClose={() => setIsNapkinScannerOpen(false)}
-          doodleAPI={doodleAPI}
-          isDark={effectiveTheme === 'dark'}
-        />
+        <Suspense fallback={null}>
+          <NapkinToVectorScannerModal
+            isOpen={isNapkinScannerOpen}
+            onClose={() => setIsNapkinScannerOpen(false)}
+            doodleAPI={doodleAPI}
+            isDark={effectiveTheme === 'dark'}
+          />
+        </Suspense>
+      )}
+
+      {/* Network Traffic & Data-Flow Simulator */}
+      {isTrafficSimulatorOpen && (
+        <Suspense fallback={null}>
+          <NetworkTrafficSimulator
+            isActive={isTrafficSimulatorOpen}
+            onClose={() => setIsTrafficSimulatorOpen(false)}
+            doodleAPI={doodleAPI}
+          />
+        </Suspense>
+      )}
+
+      {/* 3D Spatial Holo-Canvas & Parallax Studio */}
+      {isSpatial3DHoloActive && (
+        <Suspense fallback={null}>
+          <Spatial3DHoloCanvas
+            isActive={isSpatial3DHoloActive}
+            onClose={() => setIsSpatial3DHoloActive(false)}
+            doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {/* Freehand Math Equation Recognizer & Grapher */}
+      {isFreehandMathOpen && (
+        <Suspense fallback={null}>
+          <FreehandMathRecognizerModal
+            isOpen={isFreehandMathOpen}
+            onClose={() => setIsFreehandMathOpen(false)}
+            doodleAPI={doodleAPI}
+            theme={effectiveTheme}
+          />
+        </Suspense>
+      )}
+
+      {/* Local AI Copilot ("Offline Cursor") */}
+      {isLocalAiCopilotOpen && (
+        <Suspense fallback={null}>
+          <LocalAiCopilotModal
+            isOpen={isLocalAiCopilotOpen}
+            onClose={() => setIsLocalAiCopilotOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            selectedElements={(doodleCanvasRef.current || doodleAPI)?.getSelectedElements?.() || []}
+            doodleAPI={doodleCanvasRef.current || doodleAPI}
+            onAddElements={handleAddElements}
+            onHighlightElements={handleHighlightElements}
+            isDark={effectiveTheme === 'dark'}
+            onOpenFlashcards={(deck) => {
+              setIsLocalAiCopilotOpen(false);
+              if (deck && deck.length > 0) {
+                setActiveFlashcardTable({
+                  id: 'ai-flashcards',
+                  tableData: {
+                    headers: ['Question', 'Answer'],
+                    rows: deck.map(c => [c.question, c.answer]),
+                  },
+                });
+              }
+            }}
+          />
+        </Suspense>
+      )}
+
+      {/* Canvas Query Language (CQL) Floating Search Bar */}
+      {isCanvasQueryBarOpen && (
+        <Suspense fallback={null}>
+          <CanvasQueryBar
+            isOpen={isCanvasQueryBarOpen}
+            onClose={() => setIsCanvasQueryBarOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            onSelectElements={(ids) => {
+              const api = doodleCanvasRef.current || doodleAPI;
+              const idMap = {};
+              ids.forEach(id => { idMap[id] = true; });
+              api?.updateScene?.({ appState: { selectedElementIds: idMap } });
+            }}
+            onHighlightElements={handleHighlightElements}
+          />
+        </Suspense>
+      )}
+
+      {/* Knowledge Graph Multi-View */}
+      {isMultiViewOpen && (
+        <Suspense fallback={null}>
+          <CanvasMultiViewModal
+            isOpen={isMultiViewOpen}
+            onClose={() => setIsMultiViewOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            onSelectElement={(id) => {
+              const api = doodleCanvasRef.current || doodleAPI;
+              api?.updateScene?.({ appState: { selectedElementIds: { [id]: true } } });
+              const el = (api?.getSceneElements?.() || []).find(e => e.id === id);
+              if (el) api?.scrollToContent?.([el], { animate: true });
+            }}
+          />
+        </Suspense>
+      )}
+
+      {/* Executable Formal Specifications (TLA+, Alloy, XState) */}
+      {isFormalSpecsOpen && (
+        <Suspense fallback={null}>
+          <FormalSpecsModal
+            isOpen={isFormalSpecsOpen}
+            onClose={() => setIsFormalSpecsOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            onHighlightElements={handleHighlightElements}
+          />
+        </Suspense>
+      )}
+
+      {/* Executable Simulation Layer */}
+      {isSimulationCenterOpen && (
+        <Suspense fallback={null}>
+          <SimulationCenterModal
+            isOpen={isSimulationCenterOpen}
+            onClose={() => setIsSimulationCenterOpen(false)}
+            onAddElements={handleAddElements}
+            isDark={effectiveTheme === 'dark'}
+          />
+        </Suspense>
+      )}
+
+      {/* Semantic History & Checkpoints */}
+      {isCheckpointsOpen && (
+        <Suspense fallback={null}>
+          <SemanticCheckpointsModal
+            isOpen={isCheckpointsOpen}
+            onClose={() => setIsCheckpointsOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            onRestoreElements={handleRestoreElements}
+          />
+        </Suspense>
+      )}
+
+      {/* Focus Mode Presets */}
+      {isFocusModeSwitcherOpen && (
+        <Suspense fallback={null}>
+          <FocusModeSwitcherModal
+            isOpen={isFocusModeSwitcherOpen}
+            onClose={() => setIsFocusModeSwitcherOpen(false)}
+            currentModeId={currentFocusModeId}
+            onSelectMode={handleSelectFocusMode}
+          />
+        </Suspense>
+      )}
+
+      {/* WASM Plugins Manager */}
+      {isPluginsManagerOpen && (
+        <Suspense fallback={null}>
+          <PluginsManagerModal
+            isOpen={isPluginsManagerOpen}
+            onClose={() => setIsPluginsManagerOpen(false)}
+          />
+        </Suspense>
+      )}
+
+      {/* Local-First Sync & Infrastructure */}
+      {isLocalSyncConfigOpen && (
+        <Suspense fallback={null}>
+          <LocalSyncConfigModal
+            isOpen={isLocalSyncConfigOpen}
+            onClose={() => setIsLocalSyncConfigOpen(false)}
+            elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
+            onRestoreElements={handleRestoreElements}
+          />
+        </Suspense>
       )}
 
       {/* Global Themed Alert & Dialog */}
       {globalDialog && (
-        <ThemedConfirmDialog
-          isOpen={!!globalDialog}
-          title={globalDialog.title || 'Doodle Desk'}
-          subtitle={globalDialog.subtitle || 'Notice'}
-          message={globalDialog.message}
-          confirmText={globalDialog.confirmText || 'OK'}
-          cancelText={globalDialog.cancelText || 'Cancel'}
-          danger={globalDialog.danger || false}
-          isAlert={globalDialog.isAlert !== false}
-          onConfirm={() => {
-            globalDialog.onConfirm?.();
-            setGlobalDialog(null);
-          }}
-          onCancel={() => {
-            globalDialog.onCancel?.();
-            setGlobalDialog(null);
-          }}
-        />
+        <Suspense fallback={null}>
+          <ThemedConfirmDialog
+            isOpen={!!globalDialog}
+            title={globalDialog.title || 'Doodle Desk'}
+            subtitle={globalDialog.subtitle || 'Notice'}
+            message={globalDialog.message}
+            confirmText={globalDialog.confirmText || 'OK'}
+            cancelText={globalDialog.cancelText || 'Cancel'}
+            danger={globalDialog.danger || false}
+            isAlert={globalDialog.isAlert !== false}
+            onConfirm={() => {
+              globalDialog.onConfirm?.();
+              setGlobalDialog(null);
+            }}
+            onCancel={() => {
+              globalDialog.onCancel?.();
+              setGlobalDialog(null);
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

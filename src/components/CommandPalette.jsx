@@ -45,6 +45,11 @@ import {
   Brain,
   Film,
   Camera,
+  FileCode,
+  History,
+  Target,
+  Package,
+  FolderSync,
 } from 'lucide-react';
 import {
   generateFlowchart,
@@ -95,6 +100,15 @@ export function CommandPalette({
   onOpenTableFlashcards,
   onTogglePhysicsPlayground,
   onToggleIsometric3D,
+  onOpenLocalAiCopilot,
+  onOpenCanvasQueryBar,
+  onOpenMultiView,
+  onOpenFormalSpecs,
+  onOpenSimulationCenter,
+  onOpenSemanticCheckpoints,
+  onOpenFocusModeSwitcher,
+  onOpenPluginsManager,
+  onOpenLocalSyncConfig,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [query, setQuery] = useState('');
@@ -390,6 +404,187 @@ export function CommandPalette({
       action: () => {
         onSetCanvasStyle('standard');
         onClose();
+      },
+    },
+
+    // Next-Gen Strategic Features (features.md)
+    {
+      id: 'local_ai_copilot',
+      title: 'Local AI Copilot ("Offline Cursor" — Architecture Synthesizer, Explain, Audit & SPOF)...',
+      category: 'AI & Analysis',
+      icon: <Sparkles size={14} />,
+      shortcut: 'Ctrl+Shift+A',
+      action: () => {
+        onClose();
+        if (onOpenLocalAiCopilot) onOpenLocalAiCopilot();
+        else window.__openLocalAiCopilot?.();
+      },
+    },
+    {
+      id: 'canvas_query_language',
+      title: 'Canvas Query Language (CQL) Bar (Search, Filter, Count & Trace Topology)...',
+      category: 'Knowledge Graph',
+      icon: <Search size={14} />,
+      shortcut: 'Ctrl+Shift+F',
+      action: () => {
+        onClose();
+        if (onOpenCanvasQueryBar) onOpenCanvasQueryBar();
+        else window.__openCanvasQueryBar?.();
+      },
+    },
+    {
+      id: 'knowledge_graph_multiview',
+      title: 'Knowledge Graph Multi-View (Canvas ↔ Entity Table ↔ DAG Graph ↔ Kanban)...',
+      category: 'Knowledge Graph',
+      icon: <Table size={14} />,
+      shortcut: 'Ctrl+Shift+M',
+      action: () => {
+        onClose();
+        if (onOpenMultiView) onOpenMultiView();
+        else window.__openMultiView?.();
+      },
+    },
+    {
+      id: 'executable_formal_specs',
+      title: 'Executable Formal Specifications (Statecharts to TLA+, Alloy & XState v5)...',
+      category: 'Formal Methods',
+      icon: <FileCode size={14} />,
+      shortcut: 'Ctrl+Shift+D',
+      action: () => {
+        onClose();
+        if (onOpenFormalSpecs) onOpenFormalSpecs();
+        else window.__openFormalSpecs?.();
+      },
+    },
+    {
+      id: 'simulation_center',
+      title: 'Executable Mental Models (Queueing Little\'s Law, Raft Consensus & Digital Logic)...',
+      category: 'Simulation',
+      icon: <Activity size={14} />,
+      shortcut: 'Ctrl+Shift+S',
+      action: () => {
+        onClose();
+        if (onOpenSimulationCenter) onOpenSimulationCenter();
+        else window.__openSimulationCenter?.();
+      },
+    },
+    {
+      id: 'semantic_checkpoints_adr',
+      title: 'Semantic History & Checkpoints (Structural Diff, Branching & Auto-ADR)...',
+      category: 'History & Milestones',
+      icon: <History size={14} />,
+      shortcut: 'Ctrl+Shift+H',
+      action: () => {
+        onClose();
+        if (onOpenSemanticCheckpoints) onOpenSemanticCheckpoints();
+        else window.__openSemanticCheckpoints?.();
+      },
+    },
+    {
+      id: 'focus_mode_switcher',
+      title: 'Focus Mode Presets (Architect, Teacher, Developer, Designer, Researcher)...',
+      category: 'Workspace Presets',
+      icon: <Target size={14} />,
+      action: () => {
+        onClose();
+        if (onOpenFocusModeSwitcher) onOpenFocusModeSwitcher();
+        else window.__openFocusModeSwitcher?.();
+      },
+    },
+    {
+      id: 'wasm_plugins_manager',
+      title: 'WASM Plugin Ecosystem Manager (Sandboxed Offline Extensions & Stencils)...',
+      category: 'Extensions',
+      icon: <Package size={14} />,
+      action: () => {
+        onClose();
+        if (onOpenPluginsManager) onOpenPluginsManager();
+        else window.__openPluginsManager?.();
+      },
+    },
+    {
+      id: 'local_first_sync_config',
+      title: 'Local-First Sync & User-Owned Infrastructure (Syncthing, WebDAV, S3, Git)...',
+      category: 'Sync & Infrastructure',
+      icon: <FolderSync size={14} />,
+      action: () => {
+        onClose();
+        if (onOpenLocalSyncConfig) onOpenLocalSyncConfig();
+        else window.__openLocalSyncConfig?.();
+      },
+    },
+    {
+      id: 'export_mermaid_diagram',
+      title: 'Export Diagram as Mermaid Flowchart (Lossless Mermaid Syntax)...',
+      category: 'Export',
+      icon: <Download size={14} />,
+      action: () => {
+        onClose();
+        const elements = activeAPI?.getSceneElements?.() || [];
+        import('../engine/exports.js').then(({ exportToMermaid }) => {
+          const code = exportToMermaid(elements);
+          navigator.clipboard.writeText(code);
+          alert('Copied Mermaid flowchart syntax to clipboard!');
+        });
+      },
+    },
+    {
+      id: 'export_plantuml_diagram',
+      title: 'Export Diagram as PlantUML Specification...',
+      category: 'Export',
+      icon: <Download size={14} />,
+      action: () => {
+        onClose();
+        const elements = activeAPI?.getSceneElements?.() || [];
+        import('../engine/exports.js').then(({ exportToPlantUML }) => {
+          const code = exportToPlantUML(elements);
+          navigator.clipboard.writeText(code);
+          alert('Copied PlantUML specification to clipboard!');
+        });
+      },
+    },
+    {
+      id: 'export_c4_model',
+      title: 'Export Diagram as C4 Model Architecture...',
+      category: 'Export',
+      icon: <Download size={14} />,
+      action: () => {
+        onClose();
+        const elements = activeAPI?.getSceneElements?.() || [];
+        import('../engine/exports.js').then(({ exportToC4Model }) => {
+          const code = exportToC4Model(elements);
+          navigator.clipboard.writeText(code);
+          alert('Copied C4 Model architecture code to clipboard!');
+        });
+      },
+    },
+    {
+      id: 'create_adr_from_selection',
+      title: 'Create Architecture Decision Record (ADR) from Selection...',
+      category: 'Documentation',
+      icon: <FileText size={14} />,
+      action: () => {
+        onClose();
+        const elements = activeAPI?.getSelectedElements?.() || activeAPI?.getSceneElements?.() || [];
+        import('../engine/exports.js').then(({ generateArchitectureDecisionRecord }) => {
+          const adr = generateArchitectureDecisionRecord(elements);
+          navigator.clipboard.writeText(adr);
+          alert('Generated Architecture Decision Record (ADR) and copied to clipboard!');
+        });
+      },
+    },
+    {
+      id: 'export_shortcuts_markdown',
+      title: 'Export Keyboard Shortcut Cheat Sheet as Markdown...',
+      category: 'Documentation',
+      icon: <FileText size={14} />,
+      action: () => {
+        onClose();
+        import('../engine/exports.js').then(({ exportShortcutsToMarkdown }) => {
+          const md = exportShortcutsToMarkdown();
+          navigator.clipboard.writeText(md);
+          alert('Copied complete Keyboard Shortcut Cheat Sheet in Markdown to clipboard!');
+        });
       },
     },
 
@@ -865,7 +1060,7 @@ export function CommandPalette({
     if (!listRef.current) return;
     const activeEl = listRef.current.querySelector('.cmd-item.active');
     if (activeEl) {
-      activeEl.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      activeEl?.scrollIntoView?.({ block: 'nearest', behavior: 'auto' });
     }
   }, [selectedIndex]);
 

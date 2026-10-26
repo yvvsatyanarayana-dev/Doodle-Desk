@@ -57,7 +57,8 @@ export function PropertiesPanel({
   const primaryEl = selectedElements[0] || {};
   const isText = hasSelection ? selectedElements.some((e) => e.type === 'text') : activeTool === 'text';
   const isFreedraw = hasSelection ? selectedElements.every((e) => e.type === 'freedraw') : activeTool === 'freedraw';
-  const isLinearOrFreedraw = isFreedraw || (hasSelection ? selectedElements.every((e) => e.type === 'line' || e.type === 'arrow') : (activeTool === 'line' || activeTool === 'arrow'));
+  const isLineOrArrow = !isFreedraw && (hasSelection ? selectedElements.every((e) => e.type === 'line' || e.type === 'arrow') : (activeTool === 'line' || activeTool === 'arrow'));
+  const isLinearOrFreedraw = isFreedraw || isLineOrArrow;
 
   const strokeColor = primaryEl.strokeColor ?? appState.currentItemStrokeColor ?? '#1e1e1e';
   const bgColor = primaryEl.backgroundColor ?? appState.currentItemBackgroundColor ?? 'transparent';
@@ -433,6 +434,57 @@ export function PropertiesPanel({
                 >
                   <svg width="18" height="18" viewBox="0 0 20 20" stroke="currentColor" fill="none">
                     <path d="M 5 16 L 5 9 Q 5 5 9 5 L 16 5" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Line & Arrow Routing: Straight, Curved, Orthogonal Elbow */}
+          {isLineOrArrow && (
+            <div>
+              <div className="control-label">Connector Routing</div>
+              <div className="buttonList">
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${(!primaryEl.routing || primaryEl.routing === 'straight') && roundness !== 'elbow' ? 'active' : ''}`}
+                  onClick={() => {
+                    onUpdateProperty('routing', 'straight');
+                    onUpdateProperty('roundness', 'sharp');
+                  }}
+                  title="Straight line"
+                  aria-label="Straight line"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" stroke="currentColor" fill="none">
+                    <line x1="4" y1="16" x2="16" y2="4" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${primaryEl.routing === 'curved' && roundness !== 'elbow' ? 'active' : ''}`}
+                  onClick={() => {
+                    onUpdateProperty('routing', 'curved');
+                    onUpdateProperty('roundness', 'round');
+                  }}
+                  title="Curved connector"
+                  aria-label="Curved connector"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" stroke="currentColor" fill="none">
+                    <path d="M 4 16 Q 6 4 16 4" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`ToolIcon ToolIcon_type_radio ${primaryEl.routing === 'orthogonal' || roundness === 'elbow' ? 'active' : ''}`}
+                  onClick={() => {
+                    onUpdateProperty('routing', 'orthogonal');
+                    onUpdateProperty('roundness', 'elbow');
+                  }}
+                  title="Orthogonal Elbow (90°)"
+                  aria-label="Orthogonal Elbow connector"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" stroke="currentColor" fill="none">
+                    <path d="M 4 16 L 10 16 L 10 4 L 16 4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
               </div>

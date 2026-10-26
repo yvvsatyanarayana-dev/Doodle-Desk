@@ -1,6 +1,6 @@
 const { BrowserWindow, screen, dialog, app } = require('electron');
 const path = require('path');
-const { getSetting, setSetting } = require('./store');
+const { getSetting, setSetting } = require('./store.cjs');
 
 const windows = new Set();
 let isQuitting = false;
@@ -57,7 +57,7 @@ function createWindow(initialFilePath = null) {
     autoHideMenuBar: true,
     trafficLightPosition: isMac ? { x: 14, y: 14 } : undefined,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false,

@@ -2,3 +2,10 @@
 // can use React Fast Refresh (HMR) without needing a full page reload on edits.
 export { exportToCanvas, exportToBlob, exportToSvg, loadFromJSON, loadFromBlob } from './io/export.js';
 export { generateInteractiveHtml } from './io/exportInteractiveHtml.js';
+export {
+  exportToMermaid,
+  exportToPlantUML,
+  exportToC4Model,
+  generateArchitectureDecisionRecord,
+  exportShortcutsToMarkdown,
+} from '../utils/schemaParsers.js';
