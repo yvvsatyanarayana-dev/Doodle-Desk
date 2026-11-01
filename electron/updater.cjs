@@ -8,6 +8,8 @@ let lastStatus = {
   version: app ? app.getVersion() : '1.0.0',
 };
 
+let isSilentBackgroundCheck = false;
+
 function setupAutoUpdater(getMainWindow) {
   // Configure electron-updater defaults
   autoUpdater.autoDownload = true;
@@ -16,9 +18,11 @@ function setupAutoUpdater(getMainWindow) {
 
   autoUpdater.on('checking-for-update', () => {
     lastStatus = { status: 'checking', version: app.getVersion() };
-    const win = getMainWindow();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('updater:status', lastStatus);
+    if (!isSilentBackgroundCheck) {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('updater:status', lastStatus);
+      }
     }
   });
 
@@ -63,20 +67,34 @@ function setupAutoUpdater(getMainWindow) {
       status: 'not-available',
       version: info?.version || app.getVersion(),
     };
-    const win = getMainWindow();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('updater:status', lastStatus);
+    if (!isSilentBackgroundCheck) {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('updater:status', lastStatus);
+      }
     }
   });
 
   autoUpdater.on('error', (err) => {
+    // Sanitize user-facing message from raw HTTP 404/network dumps
+    let userFriendlyError = 'Could not check for updates.';
+    const rawMsg = err?.message || '';
+    if (rawMsg.includes('404') || rawMsg.includes('Cannot find latest')) {
+      userFriendlyError = 'No new update releases published yet.';
+    } else if (rawMsg.includes('net::ERR_') || rawMsg.includes('ENOTFOUND') || rawMsg.includes('ETIMEDOUT')) {
+      userFriendlyError = 'Network connection unavailable.';
+    }
+
     lastStatus = {
       status: 'error',
-      error: err.message,
+      error: userFriendlyError,
     };
-    const win = getMainWindow();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('updater:status', lastStatus);
+    // In silent background checks, never harass the user with 404 or connection errors
+    if (!isSilentBackgroundCheck) {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('updater:status', lastStatus);
+      }
     }
   });
 
@@ -108,6 +126,7 @@ function setupAutoUpdater(getMainWindow) {
 }
 
 function checkUpdate(manual = false, win = null) {
+  isSilentBackgroundCheck = !manual;
   // Development mode safety check
   if (!app.isPackaged) {
     const devStatus = {

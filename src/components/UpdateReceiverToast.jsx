@@ -29,10 +29,10 @@ export function UpdateReceiverToast() {
       setIsDismissed(false);
 
       // Auto-dismiss transient states after 4.5 seconds
-      if (data.status === 'not-available' || data.status === 'dev-mode') {
+      if (data.status === 'not-available' || data.status === 'dev-mode' || data.status === 'error') {
         const timer = setTimeout(() => {
           setIsDismissed(true);
-        }, 4500);
+        }, 5000);
         return () => clearTimeout(timer);
       }
     });
@@ -229,8 +229,19 @@ export function UpdateReceiverToast() {
             <AlertCircle size={16} />
           </div>
           <div className="update-toast-text">
-            <span className="update-toast-title">Update Check Failed</span>
-            <span className="update-toast-desc">{updateState.error || 'Could not connect to GitHub'}</span>
+            <span className="update-toast-title">Update Check</span>
+            <span className="update-toast-desc">
+              {(() => {
+                const msg = updateState.error || '';
+                if (msg.includes('404') || msg.includes('latest.yml') || msg.includes('Cannot find')) {
+                  return 'You are on the latest version or no release has been published yet.';
+                }
+                if (msg.length > 90) {
+                  return 'Unable to reach the update server. Please check your internet connection.';
+                }
+                return msg || 'Could not connect to update service.';
+              })()}
+            </span>
           </div>
           <button
             type="button"
