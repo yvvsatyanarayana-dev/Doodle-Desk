@@ -5,7 +5,7 @@ const fs = require('fs');
 const { createWindow, getAllWindows, getFocusedWindow, setIsQuitting } = require('./windows.cjs');
 const { setupMenu, rebuildMenu } = require('./menu.cjs');
 const { getSettings, getSetting, setSetting, resetSettings, addRecentFile, getRecentFiles, clearRecentFiles } = require('./store.cjs');
-const { isSupportedFile, parseFilePathFromArgv, queueFileToOpen, getQueuedFiles, registerProtocol } = require('./fileAssociation.cjs');
+const { isSupportedFile, parseFilePathFromArgv, parseCollabRoomFromArgv, queueFileToOpen, getQueuedFiles, registerProtocol } = require('./fileAssociation.cjs');
 const { setupAutoUpdater, checkUpdate, getLastStatus, quitAndInstall } = require('./updater.cjs');
 
 // Process-level crash & rejection prevention
@@ -33,6 +33,10 @@ if (process.platform === 'win32') {
 if (!getSetting('hardwareAcceleration', true)) {
   app.disableHardwareAcceleration();
 }
+
+// Enable WebRTC audio autoplay and device capture for live collaboration
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('enable-features', 'WebRTCPeerConnectionWithContext,AudioWorklet');
 
 let tray = null;
 
@@ -104,8 +108,27 @@ function getDoodleVaultPath() {
   return vaultPath;
 }
 
+let queuedCollabRoomCode = parseCollabRoomFromArgv(process.argv);
+
 // Second instance event handler (Windows / Linux)
 app.on('second-instance', (event, argv, workingDirectory) => {
+  // Check for collaboration deep link (e.g. doodle-desk://join?room=DOODLE-XXXXXX)
+  const roomCode = parseCollabRoomFromArgv(argv);
+  if (roomCode) {
+    const wins = getAllWindows();
+    const focused = getFocusedWindow() || wins.find(w => !w.isDestroyed());
+    if (focused && !focused.isDestroyed()) {
+      if (focused.isMinimized()) focused.restore();
+      focused.focus();
+      focused.webContents.send('collab:join-room', roomCode);
+      return;
+    } else {
+      queuedCollabRoomCode = roomCode;
+      createWindow();
+      return;
+    }
+  }
+
   const files = parseFilePathFromArgv(argv);
   if (files.length > 0) {
     for (const file of files) {
@@ -135,6 +158,22 @@ app.on('open-file', (event, filePath) => {
 // Protocol handler (macOS / Windows open-url)
 app.on('open-url', (event, url) => {
   event.preventDefault();
+  const roomCode = parseCollabRoomFromArgv([url]);
+  if (roomCode) {
+    const wins = getAllWindows();
+    const focused = getFocusedWindow() || wins.find(w => !w.isDestroyed());
+    if (focused && !focused.isDestroyed()) {
+      if (focused.isMinimized()) focused.restore();
+      focused.focus();
+      focused.webContents.send('collab:join-room', roomCode);
+      return;
+    } else {
+      queuedCollabRoomCode = roomCode;
+      if (app.isReady()) createWindow();
+      return;
+    }
+  }
+
   const files = parseFilePathFromArgv([url]);
   if (files.length > 0) {
     if (app.isReady()) {
@@ -143,6 +182,12 @@ app.on('open-url', (event, url) => {
       for (const file of files) queueFileToOpen(file);
     }
   }
+});
+
+ipcMain.handle('collab:get-initial-room', () => {
+  const code = queuedCollabRoomCode;
+  queuedCollabRoomCode = null;
+  return code;
 });
 
 app.whenReady().then(() => {
@@ -163,6 +208,49 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('Failed to initialize Doodle Vault:', err);
     dialog.showErrorBox('Doodle Vault unavailable', `Doodle Desk could not create or access the vault folder.\n\n${err.message}`);
+  }
+
+  // Handle media and screen capture permissions in Electron for live collaboration
+  const allowedPermissions = [
+    'media',
+    'microphone',
+    'camera',
+    'audio-capture',
+    'video-capture',
+    'display-capture',
+    'notifications',
+  ];
+  if (session.defaultSession.setPermissionRequestHandler) {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      callback(allowedPermissions.includes(permission));
+    });
+  }
+  if (session.defaultSession.setPermissionCheckHandler) {
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+      return allowedPermissions.includes(permission);
+    });
+  }
+  if (session.defaultSession.setDevicePermissionHandler) {
+    session.defaultSession.setDevicePermissionHandler(() => true);
+  }
+
+  // Handle WebRTC getDisplayMedia screen capture in Electron
+  if (session.defaultSession.setDisplayMediaRequestHandler) {
+    session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+      try {
+        const { desktopCapturer } = require('electron');
+        const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+        const primary = sources.find(s => s.id.startsWith('screen:')) || sources[0];
+        if (primary) {
+          callback({ video: primary });
+        } else {
+          callback({});
+        }
+      } catch (err) {
+        console.warn('DisplayMediaRequestHandler error:', err);
+        callback({});
+      }
+    });
   }
 
   // Remove X-Frame-Options and relax Content-Security-Policy frame-ancestors for canvas web embeds
@@ -926,7 +1014,8 @@ ipcMain.handle('window:close-response', (event, action) => {
 
   if (action === 'discard' || action === 'saved') {
     win._forceClose = true;
-    win.close();
+    win._isDirty = false;
+    win.destroy();
   }
   // If 'cancel', do nothing
 });
@@ -934,6 +1023,16 @@ ipcMain.handle('window:close-response', (event, action) => {
 // Open New Window
 ipcMain.handle('window:open-new', (event, filePath) => {
   createWindow(filePath);
+});
+
+// Cross-window live collaboration relay
+ipcMain.on('collab:relay', (event, payload) => {
+  const senderWebContents = event.sender;
+  for (const win of getAllWindows()) {
+    if (!win.isDestroyed() && win.webContents !== senderWebContents) {
+      win.webContents.send('collab:relay', payload);
+    }
+  }
 });
 
 // Settings IPC

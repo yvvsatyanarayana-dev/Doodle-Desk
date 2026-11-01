@@ -242,6 +242,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
   themeRef.current = theme;
 
   const collaboratorsRef = useRef(new Map());
+  const collabLaserTrailsRef = useRef(new Map());
+  const isCollaboratingRef = useRef(isCollaborating);
+  isCollaboratingRef.current = isCollaborating;
+  const onPointerUpdateRef = useRef(onPointerUpdate);
+  onPointerUpdateRef.current = onPointerUpdate;
+  const lastPointerRef = useRef({ x: 0, y: 0 });
 
   const historyRef = useRef(new HistoryManager());
   const timeMachineOriginalRef = useRef(null);
@@ -332,6 +338,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const previousIds = Object.keys(previousSelection);
       if (nextIds.length !== previousIds.length || nextIds.some((id) => !previousSelection[id])) {
         onSelectionChange?.(next.selectedElementIds);
+        if (isCollaboratingRef.current && onPointerUpdateRef.current && lastPointerRef.current) {
+          onPointerUpdateRef.current({
+            pointer: lastPointerRef.current,
+            button: 'up',
+            selectedElementIds: next.selectedElementIds,
+          });
+        }
       }
     }
   }, [onSelectionChange]);
@@ -685,12 +698,14 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     // Transform to scene space
     ctx.save();
-    ctx.translate(scrollX, scrollY);
+    const sX = scrollX || 0;
+    const sY = scrollY || 0;
+    ctx.translate(sX, sY);
     ctx.scale(z, z);
 
     const viewport = {
-      x: -scrollX / z,
-      y: -scrollY / z,
+      x: -sX / z,
+      y: -sY / z,
       width: cssW / z,
       height: cssH / z,
     };
@@ -862,62 +877,298 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         ? Array.from(activeCollabs.values())
         : Object.values(activeCollabs);
 
+      // 1. Render remote collaborator selections (Excalidraw style dashed boxes)
+      collabsList.forEach((collab) => {
+        if (!collab || !collab.selectedElementIds) return;
+        const rawColor = collab.color;
+        const color = (typeof rawColor === 'object' && rawColor !== null)
+          ? (rawColor.background || rawColor.stroke || '#3b82f6')
+          : (rawColor || '#3b82f6');
+
+        const selectedIds = Object.keys(collab.selectedElementIds).filter(
+          (id) => collab.selectedElementIds[id]
+        );
+        if (selectedIds.length === 0) return;
+
+        const currentElements = elementsRef.current || [];
+        const elementsMap = new Map(currentElements.map((el) => [el.id, el]));
+
+        selectedIds.forEach((id) => {
+          const el = elementsMap.get(id);
+          if (!el || el.isDeleted || el.isHidden) return;
+
+          const bounds = getElementBounds(el);
+          const pad = 5 / z;
+          const rx = bounds.x - pad;
+          const ry = bounds.y - pad;
+          const rw = bounds.width + pad * 2;
+          const rh = bounds.height + pad * 2;
+
+          ctx.save();
+          // Dashed collaborator bounding box
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5 / z;
+          ctx.setLineDash([5 / z, 4 / z]);
+          ctx.strokeRect(rx, ry, rw, rh);
+          ctx.setLineDash([]);
+
+          // Translucent fill tint
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.08;
+          ctx.fillRect(rx, ry, rw, rh);
+
+          // Collaborator label badge on top-left of selection
+          if (collab.username) {
+            ctx.globalAlpha = 0.95;
+            const badgeFontSize = Math.max(9, Math.min(12, 10 / z));
+            ctx.font = `600 ${badgeFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            const textMetrics = ctx.measureText(collab.username);
+            const badgeW = (textMetrics ? textMetrics.width : 50) + 10 / z;
+            const badgeH = 16 / z;
+            const badgeX = rx;
+            const badgeY = ry - badgeH - 3 / z;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 3 / z);
+            else ctx.rect(badgeX, badgeY, badgeW, badgeH);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(collab.username, badgeX + badgeW / 2, badgeY + badgeH / 2);
+          }
+
+          ctx.restore();
+        });
+      });
+
+      // 2. Render collaborator pointer cursors, laser pointers & live badges
+      let hasActiveLaserTrails = false;
+      const now = performance.now();
+
       collabsList.forEach((collab) => {
         if (!collab || !collab.pointer) return;
         const cx = collab.pointer.x;
         const cy = collab.pointer.y;
         if (typeof cx !== 'number' || typeof cy !== 'number') return;
-        const color = collab.color || '#111111';
+        const rawColor = collab.color;
+        const color = (typeof rawColor === 'object' && rawColor !== null)
+          ? (rawColor.background || rawColor.stroke || '#3b82f6')
+          : (rawColor || '#3b82f6');
 
-        ctx.save();
+        const isLaser = collab.pointer.tool === 'laser';
 
-        // 1. If clicking (button === 'down'), draw click ripple
-        if (collab.button === 'down') {
+        if (isLaser) {
+          const laserMode = collab.pointer.laserMode || 'beam';
+          const laserHue = (laserMode === 'sparks' || laserMode === 'fireflies')
+            ? '#38bdf8'
+            : (laserMode === 'ribbon' ? '#10b981' : (laserMode === 'spotlight' ? '#818cf8' : (color || '#f43f5e')));
+
+          const trailKey = collab.id || collab.username || 'default';
+          let trail = collabLaserTrailsRef.current.get(trailKey) || [];
+
+          // Record new laser point if moved or button state changed
+          const lastPt = trail[trail.length - 1];
+          const isButtonDown = collab.button === 'down';
+          if (!lastPt || Math.hypot(lastPt.x - cx, lastPt.y - cy) > 0.5 || lastPt.isDrawing !== isButtonDown) {
+            trail.push({
+              x: cx,
+              y: cy,
+              time: now,
+              isDrawing: isButtonDown,
+              color: laserHue,
+              mode: laserMode,
+            });
+            if (trail.length > 150) trail.shift();
+            collabLaserTrailsRef.current.set(trailKey, trail);
+          }
+
+          // Prune expired trail points (1200ms when drawing, 400ms when moving)
+          trail = trail.filter((pt) => now - pt.time < (pt.isDrawing ? 1200 : 400));
+          collabLaserTrailsRef.current.set(trailKey, trail);
+
+          if (trail.length > 0) {
+            hasActiveLaserTrails = true;
+          }
+
+          // 1. Draw glowing laser trails
+          if (trail.length > 1) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            for (let i = 1; i < trail.length; i++) {
+              const p1 = trail[i - 1];
+              const p2 = trail[i];
+              const maxAge = p2.isDrawing ? 1200 : 400;
+              const age = now - p2.time;
+              if (age >= maxAge) continue;
+              const progress = Math.max(0, 1 - age / maxAge);
+
+              // Outer vibrant glow stroke
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.strokeStyle = laserHue;
+              ctx.lineWidth = Math.max(1 / z, (p2.isDrawing ? 5.5 : 2.8) * progress / z);
+              ctx.shadowColor = laserHue;
+              ctx.shadowBlur = (p2.isDrawing ? 14 : 7) / z;
+              ctx.globalAlpha = progress * 0.92;
+              ctx.stroke();
+
+              // Inner intense white beam core
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = Math.max(0.8 / z, (p2.isDrawing ? 2.2 : 1.2) * progress / z);
+              ctx.shadowBlur = 0;
+              ctx.globalAlpha = progress * 0.95;
+              ctx.stroke();
+
+              // Sparks particle effects for sparks/fireflies mode
+              if (p2.mode === 'sparks' || p2.mode === 'fireflies') {
+                const sparkCount = p2.isDrawing ? 2 : 1;
+                for (let s = 0; s < sparkCount; s++) {
+                  const sparkAge = (now - p2.time) / 1000;
+                  const sparkX = p2.x + Math.sin(p2.time + s * 1.5) * (7 * progress) / z;
+                  const sparkY = p2.y + Math.cos(p2.time + s * 2.1) * (7 * progress) / z - (sparkAge * 10) / z;
+                  ctx.beginPath();
+                  ctx.arc(sparkX, sparkY, Math.max(0.6 / z, 1.8 * progress / z), 0, Math.PI * 2);
+                  ctx.fillStyle = s % 2 === 0 ? '#38bdf8' : '#a855f7';
+                  ctx.shadowColor = ctx.fillStyle;
+                  ctx.shadowBlur = 4 / z;
+                  ctx.globalAlpha = progress * 0.85;
+                  ctx.fill();
+                }
+              }
+            }
+            ctx.restore();
+          }
+
+          // 2. Draw glowing laser pointer head (pulsing bead)
+          ctx.save();
+          if (collab.button === 'down') {
+            ctx.beginPath();
+            ctx.arc(cx, cy, 14 / z, 0, Math.PI * 2);
+            ctx.fillStyle = laserHue;
+            ctx.globalAlpha = 0.28;
+            ctx.shadowColor = laserHue;
+            ctx.shadowBlur = 12 / z;
+            ctx.fill();
+          }
+
+          // Outer halo
           ctx.beginPath();
-          ctx.arc(cx, cy, 14 / z, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.globalAlpha = 0.25;
+          ctx.arc(cx, cy, 7 / z, 0, Math.PI * 2);
+          ctx.fillStyle = laserHue;
+          ctx.globalAlpha = 0.38;
+          ctx.shadowColor = laserHue;
+          ctx.shadowBlur = 14 / z;
           ctx.fill();
-        }
 
-        // 2. Sleek pointer cursor arrow
-        ctx.fillStyle = color;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.2 / z;
-        ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + 4 / z, cy + 16 / z);
-        ctx.lineTo(cx + 8 / z, cy + 12 / z);
-        ctx.lineTo(cx + 14 / z, cy + 12 / z);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        // 3. Name pill
-        if (collab.username) {
-          const fontSize = Math.max(10, Math.min(13, 11 / z));
-          ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-          const textMetrics = ctx.measureText(collab.username);
-          const badgeW = textMetrics.width + 12 / z;
-          const badgeH = 18 / z;
-          const badgeX = cx + 12 / z;
-          const badgeY = cy + 12 / z;
-
-          ctx.fillStyle = color;
+          // Middle vibrant bead
           ctx.beginPath();
-          if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / z);
-          else ctx.rect(badgeX, badgeY, badgeW, badgeH);
+          ctx.arc(cx, cy, 4.2 / z, 0, Math.PI * 2);
+          ctx.fillStyle = laserHue;
+          ctx.globalAlpha = 0.92;
           ctx.fill();
 
+          // Bright center white core
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2 / z, 0, Math.PI * 2);
           ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(collab.username, badgeX + badgeW / 2, badgeY + badgeH / 2);
-        }
+          ctx.globalAlpha = 1;
+          ctx.fill();
 
-        ctx.restore();
+          // 3. Laser presenter badge
+          if (collab.username) {
+            const fontSize = Math.max(9, Math.min(12, 10 / z));
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            const labelText = `⚡ ${collab.username}`;
+            const textMetrics = ctx.measureText(labelText);
+            const badgeW = (textMetrics ? textMetrics.width : 55) + 14 / z;
+            const badgeH = 18 / z;
+            const badgeX = cx + 10 / z;
+            const badgeY = cy + 10 / z;
+
+            // Glassy dark badge with colored laser border
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 9 / z);
+            else ctx.rect(badgeX, badgeY, badgeW, badgeH);
+            ctx.fillStyle = 'rgba(15, 17, 23, 0.92)';
+            ctx.shadowColor = laserHue;
+            ctx.shadowBlur = 6 / z;
+            ctx.globalAlpha = 1;
+            ctx.fill();
+
+            ctx.strokeStyle = laserHue;
+            ctx.lineWidth = 1 / z;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(labelText, badgeX + badgeW / 2, badgeY + badgeH / 2);
+          }
+          ctx.restore();
+        } else {
+          ctx.save();
+
+          // 1. If clicking (button === 'down'), draw click ripple
+          if (collab.button === 'down') {
+            ctx.beginPath();
+            ctx.arc(cx, cy, 14 / z, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.25;
+            ctx.fill();
+          }
+
+          // 2. Sleek pointer cursor arrow
+          ctx.fillStyle = color;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2 / z;
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + 4 / z, cy + 16 / z);
+          ctx.lineTo(cx + 8 / z, cy + 12 / z);
+          ctx.lineTo(cx + 14 / z, cy + 12 / z);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // 3. Name pill
+          if (collab.username) {
+            const fontSize = Math.max(10, Math.min(13, 11 / z));
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+            const textMetrics = ctx.measureText(collab.username);
+            const badgeW = (textMetrics ? textMetrics.width : 50) + 12 / z;
+            const badgeH = 18 / z;
+            const badgeX = cx + 12 / z;
+            const badgeY = cy + 12 / z;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4 / z);
+            else ctx.rect(badgeX, badgeY, badgeW, badgeH);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(collab.username, badgeX + badgeW / 2, badgeY + badgeH / 2);
+          }
+
+          ctx.restore();
+        }
       });
+
+      if (hasActiveLaserTrails) {
+        scheduleRender();
+      }
     }
 
     ctx.restore();
@@ -1056,6 +1307,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       } else if (typeof collaborators === 'object') {
         collaboratorsRef.current = new Map(Object.entries(collaborators));
       }
+      // Clean up trails for users who left
+      const currentIds = new Set(Array.from(collaboratorsRef.current.keys()));
+      collabLaserTrailsRef.current.forEach((_, key) => {
+        if (!currentIds.has(key)) {
+          collabLaserTrailsRef.current.delete(key);
+        }
+      });
       scheduleRender();
     }
   }, [collaborators, scheduleRender]);
@@ -1199,6 +1457,55 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             interaction.current.resizeHandle = handle;
           }
           interaction.current.resizeStartState = startState;
+          let boundTextStartState = null;
+          let boundTextId = null;
+          if (targetEl.boundElements?.length) {
+            const textBound = targetEl.boundElements.find(b => b.type === 'text');
+            if (textBound) {
+              const textEl = elementsRef.current.find(e => e.id === textBound.id && !e.isDeleted);
+              if (textEl) {
+                boundTextStartState = { ...textEl };
+                boundTextId = textEl.id;
+              }
+            }
+          }
+          if (!boundTextStartState) {
+            const childText = elementsRef.current.find(e => e.containerId === targetEl.id && !e.isDeleted);
+            if (childText) {
+              boundTextStartState = { ...childText };
+              boundTextId = childText.id;
+            }
+          }
+          if (!boundTextStartState && [
+            ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND,
+            ELEMENT_TYPES.TRIANGLE, ELEMENT_TYPES.STAR, ELEMENT_TYPES.HEXAGON,
+            ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
+            ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM
+          ].includes(targetEl.type)) {
+            const insideText = elementsRef.current.find(e =>
+              e.type === ELEMENT_TYPES.TEXT &&
+              !e.isDeleted && !e.isHidden && !e.locked &&
+              e.x >= targetEl.x - 10 &&
+              e.x + (e.width || 0) <= targetEl.x + targetEl.width + 10 &&
+              e.y >= targetEl.y - 10 &&
+              e.y + (e.height || 0) <= targetEl.y + targetEl.height + 10
+            );
+            if (insideText) {
+              boundTextStartState = { ...insideText };
+              boundTextId = insideText.id;
+              setElements(prev => prev.map(el => {
+                if (el.id === targetEl.id) {
+                  return { ...el, boundElements: [{ id: insideText.id, type: 'text' }] };
+                }
+                if (el.id === insideText.id) {
+                  return { ...el, containerId: targetEl.id, textAlign: el.textAlign || 'center', verticalAlign: el.verticalAlign || 'middle' };
+                }
+                return el;
+              }));
+            }
+          }
+          interaction.current.boundTextStartState = boundTextStartState;
+          interaction.current.boundTextId = boundTextId;
         }
         return;
       }
@@ -1214,12 +1521,38 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         return;
       }
       if (rawHit) {
-        // If clicking inside a container (such as text on a sticky note), select the container box
-        const hit = rawHit.containerId
-          ? (elementsRef.current.find(e => e.id === rawHit.containerId && !e.isDeleted) || rawHit)
-          : rawHit;
-
         const selectedIds = as?.selectedElementIds || {};
+        let hit = rawHit;
+
+        // Hierarchical container vs bound text selection:
+        // Clicking directly on bound text selects and moves the text
+        if (rawHit.type === ELEMENT_TYPES.TEXT) {
+          hit = rawHit;
+        } else if ([
+          ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND,
+          ELEMENT_TYPES.TRIANGLE, ELEMENT_TYPES.STAR, ELEMENT_TYPES.HEXAGON,
+          ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
+          ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM
+        ].includes(rawHit.type)) {
+          // If the bound text is already selected or the container was already selected,
+          // clicking inside over its bound text targets the text for moving/editing
+          const textBound = rawHit.boundElements?.find(b => b.type === 'text');
+          const boundTextEl = elementsRef.current.find(e =>
+            !e.isDeleted && !e.isHidden && (
+              (textBound && e.id === textBound.id) || e.containerId === rawHit.id
+            )
+          );
+          if (boundTextEl) {
+            const tb = getTextElementBounds(boundTextEl);
+            const pad = 14 / (as.zoom?.value || 1);
+            if (sx >= tb.x - pad && sx <= tb.x + tb.width + pad && sy >= tb.y - pad && sy <= tb.y + tb.height + pad) {
+              if (selectedIds[boundTextEl.id] || selectedIds[rawHit.id]) {
+                hit = boundTextEl;
+              }
+            }
+          }
+        }
+
         const isAlreadySelected = selectedIds[hit.id];
 
         // If hit belongs to a group, gather all sibling elements in the topmost group
@@ -1309,6 +1642,54 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     if (tool === 'text') {
+      const spatialCandidates = getSceneElementsAtPoint(getSceneSpatialIndex(elementsRef.current), sx, sy);
+      const candidates = (spatialCandidates && spatialCandidates.length > 0) ? spatialCandidates : elementsRef.current;
+      const hitTarget = getElementAtPoint(candidates, sx, sy);
+
+      if (hitTarget?.type === ELEMENT_TYPES.TEXT) {
+        startTextEditOnElement(hitTarget);
+        return;
+      }
+
+      if (hitTarget && [
+        ELEMENT_TYPES.RECTANGLE, ELEMENT_TYPES.ELLIPSE, ELEMENT_TYPES.DIAMOND,
+        ELEMENT_TYPES.TRIANGLE, ELEMENT_TYPES.STAR, ELEMENT_TYPES.HEXAGON,
+        ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
+        ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM
+      ].includes(hitTarget.type)) {
+        // If container already has bound text, edit that bound text
+        const textBound = hitTarget.boundElements?.find(b => b.type === 'text');
+        const boundTextEl = elementsRef.current.find(el =>
+          !el.isDeleted && ((textBound && el.id === textBound.id) || el.containerId === hitTarget.id)
+        );
+        if (boundTextEl) {
+          startTextEditOnElement(boundTextEl);
+          return;
+        }
+
+        // Empty container: bind new text element centered inside container
+        finishTextEdit();
+        const as = appStateRef.current;
+        const calculatedFontSize = as.currentItemFontSize || Math.max(16, Math.min(60, Math.round(Math.min(hitTarget.width, hitTarget.height) * 0.12)));
+        const textEl = createTextElement(hitTarget.x + 10, hitTarget.y + hitTarget.height / 2 - calculatedFontSize * 0.6, '', {
+          strokeColor: hitTarget.strokeColor || as.currentItemStrokeColor || '#ffffff',
+          fontFamily: as.currentItemFontFamily || 5,
+          fontSize: calculatedFontSize,
+          textAlign: 'center',
+          verticalAlign: 'middle',
+          width: Math.max(20, hitTarget.width - 20),
+          containerId: hitTarget.id,
+        });
+        const updatedShapes = elementsRef.current.map(el => el.id === hitTarget.id ? {
+          ...el,
+          boundElements: [{ id: textEl.id, type: 'text' }]
+        } : el);
+        setElements([...updatedShapes, textEl]);
+        setAppState({ selectedElementIds: { [textEl.id]: true }, activeTool: { type: 'selection' }, showWelcomeScreen: false });
+        startTextEditOnElement(textEl);
+        return;
+      }
+
       startTextEdit(sx, sy);
       return;
     }
@@ -1393,7 +1774,15 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     if (ia.isPanning) {
       if (isCollaborating && onPointerUpdate) {
         const [sx, sy] = getScenePoint(e);
-        onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
+        onPointerUpdate({
+          pointer: {
+            x: sx,
+            y: sy,
+            tool: as.activeTool?.type || 'selection',
+            laserMode: window.__doodleLaserMode || 'beam',
+          },
+          button: e.buttons > 0 ? 'down' : 'up',
+        });
       }
       const dx = e.clientX - ia.dragLastX;
       const dy = e.clientY - ia.dragLastY;
@@ -1412,6 +1801,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     }
 
     const [sx, sy] = getScenePoint(e);
+    lastPointerRef.current = { x: sx, y: sy };
     const as = appStateRef.current;
     const gridSize = as.gridSize;
     const ix = snap(sx, gridSize);
@@ -1419,7 +1809,16 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
 
     // Broadcast pointer to collaborators
     if (isCollaborating && onPointerUpdate) {
-      onPointerUpdate({ pointer: { x: sx, y: sy }, button: e.buttons > 0 ? 'down' : 'up' });
+      onPointerUpdate({
+        pointer: {
+          x: sx,
+          y: sy,
+          tool: as.activeTool?.type || 'selection',
+          laserMode: window.__doodleLaserMode || 'beam',
+        },
+        button: e.buttons > 0 ? 'down' : 'up',
+        selectedElementIds: as.selectedElementIds || {},
+      });
     }
 
     if (e.buttons > 0) {
@@ -1607,29 +2006,99 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
         ]);
       }
 
-      // If resizing a container with bound text (e.g. sticky note), update bound text dimensions
+      // If resizing a container with bound text (e.g. rectangle, ellipse, diamond, sticky note),
+      // resize the text inside along with the rectangle proportionally and keep it centered
       let boundTextUpdates = null;
-      if (el.boundElements?.length) {
+      let targetBoundTextId = ia.boundTextId;
+      if (!targetBoundTextId && el.boundElements?.length) {
         const textBound = el.boundElements.find(b => b.type === 'text');
-        if (textBound) {
+        if (textBound) targetBoundTextId = textBound.id;
+      }
+      if (!targetBoundTextId) {
+        const childText = elementsRef.current.find(b => b.containerId === el.id && !b.isDeleted);
+        if (childText) targetBoundTextId = childText.id;
+      }
+
+      if (targetBoundTextId) {
+        const textStart = ia.boundTextStartState || elementsRef.current.find(b => b.id === targetBoundTextId && !b.isDeleted);
+        if (textStart && textStart.text) {
+          const origContainerW = Math.max(10, el.width || 1);
+          const origContainerH = Math.max(10, el.height || 1);
+          const scaleX = w / origContainerW;
+          const scaleY = h / origContainerH;
+
+          let scale = 1;
+          if (handle === 'e' || handle === 'w') {
+            scale = scaleX;
+          } else if (handle === 'n' || handle === 's') {
+            scale = scaleY;
+          } else {
+            // Corner resize: scale proportionally with the rectangle
+            scale = Math.min(scaleX, scaleY);
+          }
+
+          const origFontSize = textStart.fontSize || 20;
+          let newFontSize = Math.max(8, Math.min(240, Math.round(origFontSize * Math.max(0.1, scale))));
+
+          const targetInnerW = Math.max(16, w - 24);
+          const targetInnerH = Math.max(16, h - 20);
+
+          // Ensure scaled font size fits comfortably inside container
+          let metrics = measureText(textStart.text || ' ', newFontSize, textStart.fontFamily, targetInnerW);
+          while (newFontSize > 8 && (metrics.height > targetInnerH || (metrics.lines && metrics.lines.some(l => measureText(l, newFontSize, textStart.fontFamily).width > targetInnerW)))) {
+            newFontSize = Math.max(8, newFontSize - 1);
+            metrics = measureText(textStart.text || ' ', newFontSize, textStart.fontFamily, targetInnerW);
+          }
+
+          // Calculate vertical positioning inside container, preserving custom moved offset
+          const origContainerY = ia.resizeStartState ? ia.resizeStartState.y : el.y;
+          const hasCustomY = Math.abs((textStart.y - origContainerY) - Math.max(0, (origContainerH - (textStart.height || metrics.height)) / 2)) > 15;
+          let textY = y + 10;
+          if (hasCustomY) {
+            const relRatio = Math.max(0, Math.min(1, (textStart.y - origContainerY) / origContainerH));
+            textY = y + Math.max(8, Math.min(h - metrics.height - 8, relRatio * h));
+          } else {
+            const vAlign = textStart.verticalAlign || 'middle';
+            if (vAlign === 'middle') {
+              textY = y + Math.max(0, (h - metrics.height) / 2);
+            } else if (vAlign === 'bottom') {
+              textY = y + Math.max(0, h - metrics.height - 10);
+            }
+          }
+
           boundTextUpdates = {
-            id: textBound.id,
-            x: x + 16,
-            y: y + 16,
-            width: Math.max(10, w - 32),
-            height: Math.max(10, h - 32),
+            id: targetBoundTextId,
+            x: x + 10,
+            y: textY,
+            width: targetInnerW,
+            height: metrics.height,
+            fontSize: newFontSize,
+          };
+        } else if (textStart) {
+          boundTextUpdates = {
+            id: targetBoundTextId,
+            x: x + 10,
+            y: y + Math.max(0, (h - (textStart.height || 24)) / 2),
+            width: Math.max(16, w - 20),
+            height: Math.max(16, h - 20),
           };
         }
       }
 
       setElements(prev => prev.map(e2 => {
         if (e2.id === el.id) {
+          const currentBound = e2.boundElements || [];
+          const hasBoundText = currentBound.some(b => b.type === 'text');
+          const nextBoundElements = (!hasBoundText && boundTextUpdates)
+            ? [...currentBound, { id: boundTextUpdates.id, type: 'text' }]
+            : e2.boundElements;
           return {
             ...e2,
             x,
             y,
             width: w,
             height: h,
+            ...(nextBoundElements !== e2.boundElements ? { boundElements: nextBoundElements } : {}),
             ...(updatedFontSize ? { fontSize: updatedFontSize } : {}),
             ...(updatedPoints ? { points: updatedPoints } : {}),
             version: (e2.version || 1) + 1,
@@ -1643,6 +2112,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             y: boundTextUpdates.y,
             width: boundTextUpdates.width,
             height: boundTextUpdates.height,
+            containerId: el.id,
+            ...(boundTextUpdates.fontSize ? { fontSize: boundTextUpdates.fontSize } : {}),
             version: (e2.version || 1) + 1,
             versionNonce: versionNonce(),
           };
@@ -1734,15 +2205,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       const allIdsToMove = ia.dragMoveIds || new Set(Object.keys(ids).filter(id => ids[id]));
       const currentElements = elementsRef.current;
 
-      // Expand to all boundElements, containerIds, and shared groupIds
+      // Expand to all boundElements, and shared groupIds
       if (!ia.dragMoveIds) {
         for (const el of currentElements) {
           if (allIdsToMove.has(el.id)) {
             if (el.boundElements) {
               for (const b of el.boundElements) allIdsToMove.add(b.id);
-            }
-            if (el.containerId) {
-              allIdsToMove.add(el.containerId);
             }
             if (el.groupIds?.length) {
               for (const other of currentElements) {
@@ -2055,6 +2523,8 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ia.isResizing = false;
       ia.resizeHandle = null;
       ia.resizeStartState = null;
+      ia.boundTextStartState = null;
+      ia.boundTextId = null;
       commitHistory();
       notifyChange();
       return;
@@ -2087,6 +2557,50 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           };
         }));
       }
+
+      // Check if any bound text was dragged out of its container
+      if (ia.dragMoveIds && ia.dragMoveIds.size > 0) {
+        const movedIds = ia.dragMoveIds;
+        setElements(prev => {
+          let hasChanges = false;
+          const unbindTextIds = new Set();
+          const containersToUpdate = new Map();
+
+          for (const el of prev) {
+            if (el.type === ELEMENT_TYPES.TEXT && el.containerId && movedIds.has(el.id)) {
+              const container = prev.find(c => c.id === el.containerId && !c.isDeleted);
+              if (container) {
+                const tb = getTextElementBounds(el);
+                const intersects = (
+                  tb.x + tb.width > container.x &&
+                  tb.x < container.x + container.width &&
+                  tb.y + tb.height > container.y &&
+                  tb.y < container.y + container.height
+                );
+                if (!intersects) {
+                  unbindTextIds.add(el.id);
+                  const remaining = (container.boundElements || []).filter(b => b.id !== el.id);
+                  containersToUpdate.set(container.id, remaining.length > 0 ? remaining : null);
+                  hasChanges = true;
+                }
+              }
+            }
+          }
+
+          if (!hasChanges) return prev;
+
+          return prev.map(el => {
+            if (unbindTextIds.has(el.id)) {
+              return { ...el, containerId: null, version: (el.version || 1) + 1, versionNonce: versionNonce() };
+            }
+            if (containersToUpdate.has(el.id)) {
+              return { ...el, boundElements: containersToUpdate.get(el.id), version: (el.version || 1) + 1, versionNonce: versionNonce() };
+            }
+            return el;
+          });
+        });
+      }
+
       ia.isDragging = false;
       ia.hasAltDuplicated = false;
       ia.dragStartPositions = null;
@@ -2622,9 +3136,33 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
           .map(el => el.id)
       );
       if (deletableIds.size === 0) return;
+
+      // Also cascade delete bound text elements if their container is deleted
+      for (const el of elementsRef.current) {
+        if (deletableIds.has(el.id)) {
+          if (el.boundElements) {
+            for (const b of el.boundElements) {
+              if (b.id) deletableIds.add(b.id);
+            }
+          }
+          for (const c of elementsRef.current) {
+            if (c.containerId === el.id) deletableIds.add(c.id);
+          }
+        }
+      }
+
       commitHistory();
       setElements(prev => {
-        const next = prev.map(el => (deletableIds.has(el.id) ? { ...el, isDeleted: true } : el));
+        const next = prev.map(el => {
+          if (deletableIds.has(el.id)) return { ...el, isDeleted: true };
+          if (el.boundElements?.length) {
+            const remaining = el.boundElements.filter(b => !deletableIds.has(b.id));
+            if (remaining.length !== el.boundElements.length) {
+              return { ...el, boundElements: remaining.length > 0 ? remaining : null };
+            }
+          }
+          return el;
+        });
         if (next.filter(el => !el.isDeleted).length === 0) {
           setAppState(as => ({ ...as, showWelcomeScreen: true }));
         }
@@ -3125,10 +3663,12 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       onNavigateBoardPortal?.(hit.portalWorkspaceId, hit.portalFileId);
     } else if (hit?.type === ELEMENT_TYPES.TEXT) {
       startTextEditOnElement(hit);
-    } else if (hit?.boundElements?.length) {
+    } else if (hit && (hit.boundElements?.length || elementsRef.current.some(el => el.containerId === hit.id && !el.isDeleted))) {
       // Direct double-click editing on sticky notes and containers
-      const textBound = hit.boundElements.find(b => b.type === 'text');
-      const boundTextEl = elementsRef.current.find(el => el.id === textBound?.id && !el.isDeleted);
+      const textBound = hit.boundElements?.find(b => b.type === 'text');
+      const boundTextEl = elementsRef.current.find(el =>
+        !el.isDeleted && ((textBound && el.id === textBound.id) || el.containerId === hit.id)
+      );
       if (boundTextEl) {
         startTextEditOnElement(boundTextEl);
       } else {
@@ -3142,18 +3682,18 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       ELEMENT_TYPES.OCTAGON, ELEMENT_TYPES.CYLINDER, ELEMENT_TYPES.CLOUD,
       ELEMENT_TYPES.CAPSULE, ELEMENT_TYPES.PARALLELOGRAM
     ].includes(hit.type)) {
-      const textId = generateId();
       const as = appStateRef.current;
-      const textEl = createTextElement(hit.x + 10, hit.y + hit.height / 2 - 12, '', {
-        strokeColor: hit.strokeColor || '#ffffff',
+      const calculatedFontSize = as.currentItemFontSize || Math.max(16, Math.min(60, Math.round(Math.min(hit.width, hit.height) * 0.12)));
+      const textEl = createTextElement(hit.x + 10, hit.y + hit.height / 2 - calculatedFontSize * 0.6, '', {
+        strokeColor: hit.strokeColor || as.currentItemStrokeColor || '#ffffff',
         fontFamily: as.currentItemFontFamily || 5,
-        fontSize: as.currentItemFontSize || 20,
+        fontSize: calculatedFontSize,
         textAlign: 'center',
         verticalAlign: 'middle',
         width: Math.max(20, hit.width - 20),
         containerId: hit.id,
       });
-      const updatedShapes = elementsRef.current.map(el => el.id === hit.id ? { ...el, boundElements: [{ id: textId, type: 'text' }] } : el);
+      const updatedShapes = elementsRef.current.map(el => el.id === hit.id ? { ...el, boundElements: [{ id: textEl.id, type: 'text' }] } : el);
       setElements([...updatedShapes, textEl]);
       startTextEditOnElement(textEl);
     } else {
@@ -3326,9 +3866,40 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
             return { ...el, isDeleted: true };
           }
           const bounds = getTextElementBounds(el);
+          let newY = el.y;
+          let newX = el.x;
+          let newW = el.width;
+          if (el.containerId) {
+            const container = prev.find(c => c.id === el.containerId && !c.isDeleted);
+            if (container) {
+              newW = Math.max(20, container.width - 20);
+              const isInside = (
+                el.y >= container.y - 10 &&
+                el.y <= container.y + container.height + 10 &&
+                el.x >= container.x - 10 &&
+                el.x <= container.x + container.width + 10
+              );
+              if (isInside) {
+                newY = Math.max(container.y + 4, Math.min(container.y + container.height - bounds.height - 4, el.y));
+                newX = Math.max(container.x + 4, Math.min(container.x + container.width - newW - 4, el.x));
+              } else {
+                newX = container.x + 10;
+                const vAlign = el.verticalAlign || 'middle';
+                if (vAlign === 'middle') {
+                  newY = container.y + Math.max(0, (container.height - bounds.height) / 2);
+                } else if (vAlign === 'bottom') {
+                  newY = container.y + Math.max(0, container.height - bounds.height - 10);
+                } else {
+                  newY = container.y + 10;
+                }
+              }
+            }
+          }
           return {
             ...el,
-            width: bounds.width,
+            x: newX,
+            y: newY,
+            width: newW > 0 ? newW : bounds.width,
             height: bounds.height,
             version: (el.version || 1) + 1,
           };
@@ -4444,11 +5015,18 @@ return { total, count: values.length };`,
               const newFontSize = key === 'fontSize' ? normalizedValue : (el.fontSize || FONT_SIZE_DEFAULT);
               const newFontFamily = key === 'fontFamily' ? normalizedValue : (el.fontFamily || 5);
               const newText = key === 'text' ? normalizedValue : (el.text || ' ');
-              const metrics = measureText(newText, newFontSize, newFontFamily);
+              const container = prev.find(c => c.id === el.containerId);
+              const targetW = container ? Math.max(20, container.width - 20) : el.width;
+              const metrics = measureText(newText, newFontSize, newFontFamily, targetW);
+              let newY = el.y;
+              if (container) {
+                newY = Math.max(container.y + 4, Math.min(container.y + container.height - metrics.height - 4, el.y));
+              }
               return {
                 ...el,
                 [key]: normalizedValue,
-                width: metrics.width,
+                y: newY,
+                width: targetW,
                 height: metrics.height,
                 version: (el.version || 1) + 1,
                 versionNonce: versionNonce(),
@@ -4460,6 +5038,29 @@ return { total, count: values.length };`,
               version: (el.version || 1) + 1,
               versionNonce: versionNonce(),
             };
+          }
+          // Also apply font/stroke changes to bound text if its container shape is selected
+          if (el.containerId && selectedIds[el.containerId] && !el.isDeleted && !el.isHidden && !el.locked) {
+            if (el.type === ELEMENT_TYPES.TEXT && (key === 'fontSize' || key === 'fontFamily' || key === 'strokeColor')) {
+              const newFontSize = key === 'fontSize' ? normalizedValue : (el.fontSize || FONT_SIZE_DEFAULT);
+              const newFontFamily = key === 'fontFamily' ? normalizedValue : (el.fontFamily || 5);
+              const container = prev.find(c => c.id === el.containerId);
+              const targetW = container ? Math.max(20, container.width - 20) : el.width;
+              const metrics = measureText(el.text || ' ', newFontSize, newFontFamily, targetW);
+              let newY = el.y;
+              if (container) {
+                newY = Math.max(container.y + 4, Math.min(container.y + container.height - metrics.height - 4, el.y));
+              }
+              return {
+                ...el,
+                [key]: normalizedValue,
+                y: newY,
+                width: targetW,
+                height: metrics.height,
+                version: (el.version || 1) + 1,
+                versionNonce: versionNonce(),
+              };
+            }
           }
           return el;
         })

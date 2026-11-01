@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { copyToClipboard, getRoomInviteLink, getRoomAppDeepLink } from '../utils/collabShare.js';
 import {
   X,
   Users,
@@ -17,6 +18,11 @@ import {
   MessageSquare,
   Flame,
   ArrowRight,
+  Mic,
+  MicOff,
+  Headphones,
+  VolumeX,
+  PhoneOff,
 } from 'lucide-react';
 
 const QUICK_REACTIONS = ['🔥', '👍', '❤️', '💡', '🚀', '🎨', '👏', '🎉', '👀'];
@@ -27,6 +33,7 @@ export default function LiveCollabModal({
   status, // 'disconnected' | 'hosting' | 'joined'
   connectionError = '',
   roomId,
+  discoveredRoom = null,
   myProfile,
   setMyProfile,
   collaborators, // Map
@@ -41,6 +48,13 @@ export default function LiveCollabModal({
   sendChatMessage,
   onFollowCollaborator,
   theme = 'dark',
+  voiceState,
+  voiceError,
+  startVoiceCall,
+  leaveVoiceCall,
+  toggleVoiceMute,
+  toggleVoiceDeafen,
+  isVoiceSupported = true,
 }) {
   const [inputRoomId, setInputRoomId] = useState('');
   const [usernameInput, setUsernameInput] = useState(myProfile?.username || '');
@@ -87,20 +101,35 @@ export default function LiveCollabModal({
     }));
   };
 
-  const handleCopyCode = () => {
+  const inviteUrl = getRoomInviteLink(roomId);
+  const appDeepLink = getRoomAppDeepLink(roomId);
+  const [copiedAppDeepLink, setCopiedAppDeepLink] = useState(false);
+
+  const handleCopyCode = async () => {
     if (!roomId) return;
-    navigator.clipboard.writeText(roomId);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+    const ok = await copyToClipboard(roomId);
+    if (ok) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!roomId) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set('room', roomId);
-    navigator.clipboard.writeText(url.toString());
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    const ok = await copyToClipboard(inviteUrl);
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const handleCopyAppDeepLink = async () => {
+    if (!roomId) return;
+    const ok = await copyToClipboard(appDeepLink);
+    if (ok) {
+      setCopiedAppDeepLink(true);
+      setTimeout(() => setCopiedAppDeepLink(false), 2000);
+    }
   };
 
   const handleJoin = (e) => {
@@ -110,8 +139,8 @@ export default function LiveCollabModal({
     // Support pasting full URL
     try {
       if (target.includes('room=')) {
-        const parsed = new URL(target);
-        target = parsed.searchParams.get('room') || target;
+        const match = target.match(/room=([^&#\s]+)/i);
+        if (match && match[1]) target = decodeURIComponent(match[1]);
       }
     } catch {}
     joinSession(target);
@@ -503,6 +532,58 @@ export default function LiveCollabModal({
 
           {!isConnected ? (
             /* Disconnected View: Host or Join */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {discoveredRoom && (
+                <div
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: '14px',
+                    background: isLightTheme ? '#ecfdf5' : 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid ' + (isLightTheme ? '#a7f3d0' : 'rgba(16, 185, 129, 0.3)'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                    </span>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13px', color: isLightTheme ? '#065f46' : '#34d399' }}>
+                        Active Local Session Found
+                      </div>
+                      <div style={{ fontSize: '12px', color: isLightTheme ? '#047857' : '#a7f3d0', marginTop: 1 }}>
+                        <strong>{discoveredRoom.hostName || 'A collaborator'}</strong> is currently live in room{' '}
+                        <code style={{ fontFamily: 'monospace', fontWeight: 700 }}>{discoveredRoom.roomId}</code>.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => joinSession(discoveredRoom.roomId)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#10b981',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '9px 16px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <span>Join Session</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               {/* Host Card */}
               <div
@@ -634,6 +715,7 @@ export default function LiveCollabModal({
                 </form>
               </div>
             </div>
+            </div>
           ) : (
             /* Connected View: Room Info, Collaborators, Live Chat */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -660,47 +742,104 @@ export default function LiveCollabModal({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={handleCopyCode}
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: T.btnBg,
-                      border: '1px solid ' + T.btnBorder,
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: T.btnText,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    {copiedCode ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                    {copiedCode ? 'Copied Code!' : 'Copy Code'}
-                  </button>
+                <button
+                  onClick={handleCopyCode}
+                  style={{
+                    padding: '8px 14px',
+                    backgroundColor: T.btnBg,
+                    border: '1px solid ' + T.btnBorder,
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: T.btnText,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  {copiedCode ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                  {copiedCode ? 'Copied Code!' : 'Copy Code'}
+                </button>
+              </div>
 
-                  <button
-                    onClick={handleCopyLink}
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: isLightTheme ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.15)',
-                      border: '1px solid ' + (isLightTheme ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.3)'),
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: isLightTheme ? '#059669' : '#34d399',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    {copiedLink ? <Check size={14} /> : <Share2 size={14} />}
-                    {copiedLink ? 'Copied Link!' : 'Copy Link'}
-                  </button>
+              {/* Shareable Invite URL Box */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  backgroundColor: isLightTheme ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid ' + T.borderSubtle,
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 600, color: T.textMuted, whiteSpace: 'nowrap' }}>
+                  Invite Link:
                 </div>
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteUrl}
+                  onClick={(e) => {
+                    e.target.select();
+                    handleCopyLink();
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    color: T.text,
+                    cursor: 'pointer',
+                  }}
+                  title="Click to copy invite link"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  style={{
+                    padding: '4px 8px',
+                    backgroundColor: isLightTheme ? '#ffffff' : 'rgba(255,255,255,0.08)',
+                    border: '1px solid ' + T.borderSubtle,
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: copiedLink ? '#10b981' : T.text,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  {copiedLink ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                  <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px' }}>
+                <button
+                  type="button"
+                  onClick={handleCopyAppDeepLink}
+                  style={{
+                    padding: '5px 10px',
+                    backgroundColor: 'transparent',
+                    border: '1px solid ' + (copiedAppDeepLink ? 'rgba(16, 185, 129, 0.4)' : T.borderSubtle),
+                    borderRadius: '7px',
+                    fontSize: '11px',
+                    color: copiedAppDeepLink ? '#10b981' : T.textMuted,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                  title="Copy doodle-desk:// protocol link to open directly in the desktop app"
+                >
+                  {copiedAppDeepLink ? <Check size={11} color="#10b981" /> : <Share2 size={11} />}
+                  <span>{copiedAppDeepLink ? 'Copied Desktop App Link (doodle-desk://)' : 'Copy Desktop App Link (doodle-desk://)'}</span>
+                </button>
               </div>
 
               {/* Two Column Layout: Connected Peers & Live Chat */}
@@ -753,6 +892,32 @@ export default function LiveCollabModal({
                         />
                         <span style={{ fontWeight: 600, color: T.text }}>{myProfile?.username || 'You'}</span>
                         <span style={{ fontSize: '10px', color: T.textMuted }}>(You)</span>
+                        {voiceState?.inVoice && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              background: voiceState.isMuted
+                                ? 'rgba(239, 68, 68, 0.15)'
+                                : voiceState.isSpeaking
+                                ? 'rgba(16, 185, 129, 0.2)'
+                                : 'rgba(255, 255, 255, 0.08)',
+                              color: voiceState.isMuted
+                                ? '#ef4444'
+                                : voiceState.isSpeaking
+                                ? '#10b981'
+                                : T.textMuted,
+                            }}
+                          >
+                            {voiceState.isMuted ? <MicOff size={10} /> : <Mic size={10} />}
+                            {voiceState.isSpeaking ? 'Speaking' : voiceState.isMuted ? 'Muted' : 'Voice'}
+                          </span>
+                        )}
                       </div>
                       <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 500 }}>Active</span>
                     </div>
@@ -782,6 +947,32 @@ export default function LiveCollabModal({
                             }}
                           />
                           <span style={{ color: T.text }}>{collab.username || 'Peer'}</span>
+                          {collab.inVoice && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                background: collab.isVoiceMuted
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : collab.isVoiceSpeaking
+                                  ? 'rgba(16, 185, 129, 0.2)'
+                                  : 'rgba(255, 255, 255, 0.08)',
+                                color: collab.isVoiceMuted
+                                  ? '#ef4444'
+                                  : collab.isVoiceSpeaking
+                                  ? '#10b981'
+                                  : T.textMuted,
+                              }}
+                            >
+                              {collab.isVoiceMuted ? <MicOff size={10} /> : <Mic size={10} />}
+                              {collab.isVoiceSpeaking ? 'Speaking' : collab.isVoiceMuted ? 'Muted' : 'Voice'}
+                            </span>
+                          )}
                         </div>
                         {collab.pointer && onFollowCollaborator && (
                           <button
@@ -807,7 +998,104 @@ export default function LiveCollabModal({
                       </div>
                     ))}
 
-                    {collaboratorList.length === 0 && (
+                  {/* Voice Chat Control Section */}
+                  {isVoiceSupported && (
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        padding: '12px',
+                        backgroundColor: isLightTheme ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid ' + (voiceState?.inVoice ? 'rgba(16, 185, 129, 0.3)' : T.cardBorder),
+                        borderRadius: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Radio size={14} color={voiceState?.inVoice ? '#10b981' : T.textMuted} />
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: T.text }}>Live Voice Talk</span>
+                        </div>
+                        {voiceState?.inVoice && (
+                          <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>
+                            ● Active ({(voiceState.activeCallCount || 0) + 1} in call)
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{
+                          fontSize: '11px',
+                          color: voiceState?.isSpeaking ? '#10b981' : voiceState?.isMuted ? '#ef4444' : T.textMuted,
+                          fontWeight: voiceState?.isSpeaking ? 600 : 400,
+                        }}>
+                          {voiceState?.isSpeaking
+                            ? '🎙️ You are speaking...'
+                            : voiceState?.isMuted
+                            ? '🔇 Microphone is off (Muted)'
+                            : '🎙️ Microphone is on — you can talk freely'}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            aria-label={voiceState?.isMuted ? 'Turn Mic On' : 'Turn Mic Off'}
+                            onClick={() => {
+                              if (!voiceState?.inVoice) {
+                                startVoiceCall?.();
+                              } else {
+                                toggleVoiceMute?.();
+                              }
+                            }}
+                            style={{
+                              flex: 1.2,
+                              padding: '7px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid ' + (voiceState?.isMuted ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'),
+                              backgroundColor: voiceState?.isMuted ? 'rgba(239, 68, 68, 0.14)' : 'rgba(16, 185, 129, 0.16)',
+                              color: voiceState?.isMuted ? '#ef4444' : '#10b981',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              transition: 'all 0.15s ease',
+                            }}
+                            title={voiceState?.isMuted ? 'Turn Mic On (Alt+M)' : 'Turn Mic Off (Alt+M)'}
+                          >
+                            {voiceState?.isMuted ? <MicOff size={13} /> : <Mic size={13} />}
+                            <span>{voiceState?.isMuted ? 'Turn Mic On' : 'Turn Mic Off'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={toggleVoiceDeafen}
+                            style={{
+                              flex: 1,
+                              padding: '7px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid ' + T.btnBorder,
+                              backgroundColor: T.btnBg,
+                              color: voiceState?.isDeafened ? '#f59e0b' : T.text,
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            {voiceState?.isDeafened ? <VolumeX size={12} /> : <Headphones size={12} />}
+                            <span>{voiceState?.isDeafened ? 'Undeafen' : 'Deafen'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {collaboratorList.length === 0 && (
                       <div
                         style={{
                           padding: '16px',
@@ -967,7 +1255,10 @@ export default function LiveCollabModal({
               {/* Leave Session Button */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px' }}>
                 <button
-                  onClick={leaveSession}
+                  onClick={() => {
+                    leaveSession?.();
+                    onClose?.();
+                  }}
                   style={{
                     padding: '8px 16px',
                     backgroundColor: isLightTheme ? '#fee2e2' : 'rgba(239, 68, 68, 0.12)',

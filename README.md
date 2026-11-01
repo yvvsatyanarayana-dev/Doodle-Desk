@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Electron-33.x-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" />
   <img src="https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Vite-6.x-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
-  <img src="https://img.shields.io/badge/Tests-344%20Passing%20(59%20Suites)-10b981?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-379%20Passing%20(63%20Suites)-10b981?style=flat-square&logo=vitest&logoColor=white" alt="Tests" />
   <img src="https://img.shields.io/badge/Cloud%20Dependency-0%25%20(100%25%20Offline)-10b981?style=flat-square" alt="Zero Cloud" />
   <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" />
 </p>
@@ -193,10 +193,36 @@ flowchart TD
 
 ## 🎨 Powerhouse Canvas Tools
 
+### 🎙️ Peer-to-Peer Real-Time Voice Chat & Live Calling
+- **Direct P2P WebRTC Audio Mesh:** Speak directly with room collaborators in real-time with zero cloud servers or voice recording.
+- **Voice Activity Detection (VAD):** Web Audio RMS energy monitoring that highlights speaking collaborators in real time with green soundwave animations.
+- **Studio Audio Widget:** Floating, glassmorphism audio capsule with live participant counter, audio visualizer, mic mute, and deafen controls.
+- **Hardware-Agnostic Controls:** Quick toggle mute via <kbd>Alt</kbd> + <kbd>M</kbd>, one-click speaker deafen, and graceful fallbacks for microphone permission denials.
+
+### 🖥️ Peer-to-Peer Live Screen Sharing & Canvas Annotation (Google Meet Style)
+- **Zero-Cloud Screen Sharing:** Share your canvas window, desktop screen, or application windows directly with collaborators using P2P WebRTC media streams (`getDisplayMedia` + PeerJS).
+- **Floating Studio PiP HUD:** Draggable, resizable picture-in-picture viewer with smooth drag physics, presenter identification badges, and maximize/minimize controls.
+- **Translucent Drawing Mode:** Multi-level opacity toggle (`100%` $\rightarrow$ `65%` $\rightarrow$ `35%`) allows you to see the live screen underneath while actively drawing shapes, arrows, callouts, and notes on the canvas above it.
+- **1-Click Frame Stamping ("Stamp to Canvas"):** Freeze and snapshot the current video frame directly into an image shape on the infinite canvas so all room participants can permanently annotate, measure, and comment on it.
+- **Bi-Directional Multi-Screen Support:** Anyone in the session can share their screen or view peers' streams simultaneously.
+- **Shortcut:** <kbd>Alt</kbd> + <kbd>S</kbd> to quickly start or stop screen sharing.
+
 ### 📊 Hand-Drawn Interactive Tables & 3D Flashcards
 - **Native Hand-Drawn Tables:** Organic borders, double-underlined header dividers, and flexible grid cells that look hand-sketched.
 - **In-Cell Editing:** Smooth inline typing with keyboard navigation (`Tab`, `Shift+Tab`, `Enter`).
 - **3D Study Flashcards:** Instantly flip any table into an interactive 3D study deck. Pick Question and Answer columns, navigate with arrow keys or `Space` to flip, track *Got It!* vs *Still Learning*, and shuffle cards.
+
+### 🌐 Human Language Learning Studio (German, English, Vocab & Speech)
+- **German (Deutsch) Studio:**
+  - **Gender Color-Coding:** Instant grammatical gender recognition with signature studio colors: `der` (Royal Blue `#3b82f6`), `die` (Rose `#f43f5e`), `das` (Emerald `#10b981`), and plural `die` (Violet `#8b5cf6`).
+  - **Case Declension Matrix:** Drop-in canvas tables for Definite Articles, Indefinite Articles, and Adjective Endings across *Nominativ, Akkusativ, Dativ, Genitiv*.
+  - **Verb Conjugations:** Interactive conjugation tables for core auxiliary, modal, and irregular verbs (*sein, haben, werden, können, müssen, sprechen*).
+- **English Studio (Word Power Made Easy style):**
+  - **Etymology Root Trees:** Radiating mind-map generators mapping Latin and Greek roots (*PHIL, CHRON, BENE, MAL, DICT, ANTHROP, PSYCHE, VERT*) to derivative words with prefixes/suffixes and definitions.
+  - **Advanced Vocabulary:** Curated GRE/TOEFL vocabulary with roots, synonyms, antonyms, and usage examples.
+- **100% Offline Audio Pronunciation:** High-quality speech synthesis via native browser/Electron SpeechSynthesis with native accents (`de-DE`, `en-US`, `es-ES`, `fr-FR`).
+- **Interactive Flashcards Integration:** One-click launch into 3D study mode with Leitner spaced repetition.
+- **Shortcut:** <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd> or Command Palette (`Ctrl+K`).
 
 ### 💻 Executable JavaScript Scratchpad Cards
 - **Sandboxed Offline Engine:** Write and evaluate JavaScript directly on your whiteboard canvas.
@@ -263,8 +289,11 @@ Doodle Desk connects directly into standard engineering formats:
 | `Shift + T` | Canvas Time Machine |
 | `Ctrl + Alt + P` | Presentation Mode |
 | `Alt + P` | Interactive Prototype Player |
+| `Alt + M` | Toggle Live Collab Voice Microphone Mute |
+| `Alt + S` | Toggle Live Collab Screen Sharing |
 | `Ctrl + Shift + F` | Canvas Query Language (CQL) Bar |
 | `Ctrl + Shift + A` | Local AI Copilot |
+| `Ctrl + Shift + L` | Human Language Learning Studio (German, English, Speech) |
 | `Ctrl + K` | Universal Command Palette |
 
 ### Drawing & Tool Selection

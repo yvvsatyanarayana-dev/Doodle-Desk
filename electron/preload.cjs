@@ -43,6 +43,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeClipboardImage: (dataUrl) => ipcRenderer.invoke('clipboard:write-image', dataUrl),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 
+  // Live Collaboration Inter-Window Relay & System Deep Links
+  relayCollabMessage: (payload) => ipcRenderer.send('collab:relay', payload),
+  onCollabRelay: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('collab:relay', handler);
+    return () => ipcRenderer.removeListener('collab:relay', handler);
+  },
+  onJoinRoomFromProtocol: (callback) => {
+    const handler = (event, roomCode) => callback(roomCode);
+    ipcRenderer.on('collab:join-room', handler);
+    return () => ipcRenderer.removeListener('collab:join-room', handler);
+  },
+  getInitialRoomCode: () => ipcRenderer.invoke('collab:get-initial-room'),
+
   // Platform info
   platform: process.platform,
 

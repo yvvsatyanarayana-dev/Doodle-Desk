@@ -50,6 +50,7 @@ import {
   Target,
   Package,
   FolderSync,
+  Languages,
 } from 'lucide-react';
 import {
   generateFlowchart,
@@ -109,6 +110,7 @@ export function CommandPalette({
   onOpenFocusModeSwitcher,
   onOpenPluginsManager,
   onOpenLocalSyncConfig,
+  onOpenLanguageStudio,
 }) {
   const activeAPI = doodleAPI || canvasAPI || (typeof window !== 'undefined' ? window.__doodleAPI : null);
   const [query, setQuery] = useState('');
@@ -418,6 +420,18 @@ export function CommandPalette({
         onClose();
         if (onOpenLocalAiCopilot) onOpenLocalAiCopilot();
         else window.__openLocalAiCopilot?.();
+      },
+    },
+    {
+      id: 'language_learning_studio',
+      title: 'Human Language Learning Studio (German Der/Die/Das, English Word Power Roots, Vocab & Speech)...',
+      category: 'Learning & Languages',
+      icon: <Languages size={14} />,
+      shortcut: 'Ctrl+Shift+L',
+      action: () => {
+        onClose();
+        if (onOpenLanguageStudio) onOpenLanguageStudio();
+        else window.__openLanguageStudio?.();
       },
     },
     {

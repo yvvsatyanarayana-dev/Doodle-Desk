@@ -986,24 +986,13 @@ textarea.font-mono {
   color: #f8fafc !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
   position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 .studio-collab-action-btn:hover {
   background: rgba(255, 255, 255, 0.18) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
-}
-
-/* Active collab session â€” subtle accent, no forced green */
-.studio-collab-action-btn[data-active='true'] {
-  background: rgba(255, 255, 255, 0.14) !important;
-  border-color: rgba(52, 211, 153, 0.5) !important;
-  color: #34d399 !important;
-}
-
-.studio-collab-action-btn[data-active='true']:hover {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(52, 211, 153, 0.7) !important;
 }
 
 [data-theme='light'] .studio-collab-action-btn {
@@ -1020,15 +1009,143 @@ textarea.font-mono {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
 }
 
-[data-theme='light'] .studio-collab-action-btn[data-active='true'] {
-  background: rgba(16, 185, 129, 0.1) !important;
-  border-color: rgba(16, 185, 129, 0.45) !important;
-  color: #059669 !important;
+/* --- Unified Live Collab Capsule (Sleek Apple/Linear Segmented Pill) --- */
+.studio-collab-capsule {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  height: 32px;
+  border-radius: 9999px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  flex-shrink: 0;
 }
 
-[data-theme='light'] .studio-collab-action-btn[data-active='true']:hover {
+.studio-collab-capsule:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.2);
+}
+
+[data-theme='light'] .studio-collab-capsule {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
+}
+
+[data-theme='light'] .studio-collab-capsule:hover {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.55);
+}
+
+/* Sub-segment buttons inside the unified capsule */
+.studio-collab-capsule-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.studio-collab-capsule-seg:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme='light'] .studio-collab-capsule-seg:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+.studio-collab-capsule-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(16, 185, 129, 0.35);
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+/* Pulsing Live Dot Indicator */
+.studio-collab-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: studioPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes studioPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.9);
+    box-shadow: 0 0 2px rgba(16, 185, 129, 0.4);
+  }
+}
+
+/* Clean Member Count Pill Badge */
+.studio-collab-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: rgba(16, 185, 129, 0.22);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  line-height: 1;
+}
+
+[data-theme='light'] .studio-collab-count-badge {
+  background: rgba(16, 185, 129, 0.18);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Microphone segment states */
+.studio-collab-mic-seg {
+  color: #10b981;
+}
+
+.studio-collab-mic-seg.muted {
+  color: #ef4444;
+}
+
+.studio-collab-mic-seg.muted:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+}
+
+.studio-collab-mic-seg.speaking {
+  color: #10b981;
   background: rgba(16, 185, 129, 0.16) !important;
-  border-color: rgba(16, 185, 129, 0.6) !important;
 }
 
 [data-theme='light'] .studio-collab-badge {
@@ -4145,9 +4262,28 @@ textarea.font-mono {
   -webkit-app-region: no-drag;
 }
 
-.studio-topbar-left { flex: 1 1 0; }
-.studio-topbar-center { flex: 0 1 auto; }
-.studio-topbar-right { flex: 1 1 0; justify-content: flex-end; }
+.studio-topbar-left {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 32%;
+  overflow: hidden;
+}
+.studio-topbar-center {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+.studio-topbar-right {
+  flex: 0 0 auto;
+  min-width: 0;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  z-index: 10;
+}
 
 .studio-brand-badge {
   display: inline-flex;
@@ -4172,9 +4308,40 @@ textarea.font-mono {
 .studio-doc-dot.dirty { background: #fbbf24; }
 .studio-center-capsule { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; background: #171719; }
 .studio-capsule-search, .studio-capsule-btn, .studio-action-btn, .studio-icon-btn { color: #d4d4d8; border: 1px solid transparent; background: transparent; cursor: pointer; }
-.studio-capsule-search { display: inline-flex; min-width: 190px; height: 28px; align-items: center; gap: 7px; padding: 0 8px; border-radius: 6px; color: #a1a1aa; }
-.studio-search-text { flex: 1; text-align: left; font-size: 11px; }
-.studio-search-kbd { color: #a1a1aa; font-size: 10px; }
+.studio-capsule-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #a1a1aa;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+  flex: 0 1 auto;
+}
+.studio-search-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-size: 11px;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+  line-height: 1 !important;
+}
+.studio-search-kbd {
+  flex-shrink: 0;
+  color: #a1a1aa;
+  font-size: 10px;
+  white-space: nowrap !important;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
 .studio-capsule-btn, .studio-icon-btn { display: inline-flex; width: 29px; height: 28px; align-items: center; justify-content: center; border-radius: 6px; }
 .studio-capsule-btn:hover, .studio-icon-btn:hover, .studio-action-btn:hover, .studio-brand-badge:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .studio-action-btn { display: inline-flex; height: 28px; align-items: center; gap: 5px; padding: 0 8px; border-radius: 6px; font-size: 12px; }
@@ -4221,11 +4388,7 @@ textarea.font-mono {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.studio-capsule-search {
-  display: flex;
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
-}
+
 
 [data-theme='light'] .minimap-canvas {
   background: #f1f5f9;
@@ -5196,18 +5359,21 @@ textarea.font-mono {
 }
 
 .studio-capsule-search {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: transparent;
-  border: none;
-  padding: 3px 8px;
+  border: 1px solid transparent;
+  padding: 0 8px;
+  height: 28px;
   font-size: 11.5px;
   color: #94a3b8;
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s ease;
-  font-family: inherit;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
 }
 
 .studio-capsule-search:hover {
@@ -6619,9 +6785,9 @@ textarea.font-mono {
   position: absolute;
   bottom: 142px;
   right: 10px;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   background: #141417;
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #94a3b8;
@@ -9135,15 +9301,15 @@ body,
 
 .live-collab-chat-toggle {
   position: fixed;
-  right: 14px;
-  bottom: 132px;
+  right: 10px;
+  bottom: 188px;
   z-index: 10002;
   width: 36px;
   height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 50%;
+  border-radius: 10px;
   color: #cbd5e1;
   background: #141417;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -9160,11 +9326,11 @@ body,
 
 .live-collab-chat-panel {
   position: fixed;
-  right: 14px;
-  bottom: 178px;
+  right: 10px;
+  bottom: 232px;
   z-index: 10001;
   width: min(280px, calc(100vw - 28px));
-  height: min(300px, calc(100dvh - 210px));
+  height: min(300px, calc(100dvh - 250px));
   min-height: 220px;
   display: flex;
   flex-direction: column;
@@ -9213,6 +9379,117 @@ body,
 .live-collab-chat-close:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
+}
+
+
+/* Live Collab Voice Banner */
+.live-collab-voice-banner {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.live-collab-voice-banner.in-voice {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.live-collab-voice-banner.muted {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.live-collab-voice-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.live-collab-voice-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #71717a;
+  display: inline-block;
+}
+
+.live-collab-voice-indicator.active {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  animation: voicePulse 1.5s infinite;
+}
+
+@keyframes voicePulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.live-collab-voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.live-collab-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  transition: all 0.15s ease;
+}
+
+.live-collab-voice-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.live-collab-voice-btn.primary {
+  background: #10b981;
+  color: #0f172a;
+  border-color: #059669;
+}
+
+.live-collab-voice-btn.primary:hover {
+  background: #34d399;
+}
+
+.live-collab-voice-btn.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.live-collab-voice-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+[data-theme='light'] .live-collab-voice-banner {
+  background: rgba(16, 185, 129, 0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .live-collab-voice-status {
+  color: #1e293b;
+}
+
+[data-theme='light'] .live-collab-voice-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
 }
 
 .live-collab-chat-messages {
@@ -9375,16 +9652,17 @@ body,
 
   .live-collab-chat-toggle {
     right: 8px;
-    bottom: 88px;
+    bottom: 188px;
     width: 34px;
     height: 34px;
+    border-radius: 8px;
   }
 
   .live-collab-chat-panel {
     right: 8px;
-    bottom: 132px;
+    bottom: 230px;
     width: min(280px, calc(100vw - 16px));
-    height: min(300px, calc(100dvh - 150px));
+    height: min(300px, calc(100dvh - 240px));
   }
 }
 
@@ -12097,3 +12375,116 @@ label.force-tool-unselected,
 .cursor-pointer { cursor: pointer; }
 .transition-colors { transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
 
+
+
+/* Collaboration Room Guidance & Sync Styles */
+.live-collab-chat-room-badge {
+  font-size: 10px;
+  font-family: monospace;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a1a1aa;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
+}
+
+.live-collab-chat-sync-btn {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: #94a3b8;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.live-collab-chat-sync-btn:hover {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.live-collab-chat-waiting-alert {
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.08);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.18);
+  font-size: 11px;
+}
+
+.live-collab-chat-copy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.live-collab-chat-copy-badge:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+.studio-collab-badge.waiting {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.studio-collab-badge.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+
+/* Responsive rules for studio center capsule to maintain centered alignment and prevent topbar crowding */
+@media (max-width: 1440px) {
+  .studio-capsule-tertiary-btn {
+    display: none !important;
+  }
+  .studio-search-text {
+    max-width: 120px !important;
+  }
+}
+
+@media (max-width: 1300px) {
+  .studio-capsule-secondary-btn {
+    display: none !important;
+  }
+  .studio-search-kbd {
+    display: none !important;
+  }
+  .studio-search-text {
+    max-width: 90px !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .studio-search-text {
+    display: none !important;
+  }
+  .studio-capsule-search {
+    width: 30px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  .studio-doc-name {
+    max-width: 85px !important;
+  }
+}
+
+@media (max-width: 840px) {
+  .studio-center-capsule {
+    gap: 1px !important;
+    padding: 2px 3px !important;
+  }
+}

@@ -7,13 +7,15 @@ import { DoodleDeskLogo } from './components/DoodleDeskLogo';
 import { StudioTopBar } from './components/StudioTopBar';
 import { MiniMapNavigator } from './components/MiniMapNavigator';
 import { LiveCollabChatPanel } from './components/LiveCollabChatPanel';
+import LiveCollabVoiceWidget from './components/LiveCollabVoiceWidget';
+import LiveCollabScreenShareViewer from './components/LiveCollabScreenShareViewer';
 import { WebFrameCard, extractElementIdFromLink } from './components/WebFrameCard';
 import { recognizeShape } from './utils/shapeRecognizer';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useLiveCollaboration } from './hooks/useLiveCollaboration';
 
 const PreferencesModal = lazy(() => import('./preferences/PreferencesModal').then((module) => ({ default: module.PreferencesModal })));
-const UnsavedChangesModal = lazy(() => import('./components/UnsavedChangesModal').then((module) => ({ default: module.UnsavedChangesModal })));
+import { UnsavedChangesModal } from './components/UnsavedChangesModal';
 const RecoveryPrompt = lazy(() => import('./components/RecoveryPrompt').then((module) => ({ default: module.RecoveryPrompt })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const TemplateLibraryModal = lazy(() => import('./components/TemplateLibraryModal').then((module) => ({ default: module.TemplateLibraryModal })));
@@ -67,6 +69,7 @@ const SemanticCheckpointsModal = lazy(() => import('./components/SemanticCheckpo
 const FocusModeSwitcherModal = lazy(() => import('./components/FocusModeSwitcherModal.jsx'));
 const PluginsManagerModal = lazy(() => import('./components/PluginsManagerModal.jsx'));
 const LocalSyncConfigModal = lazy(() => import('./components/LocalSyncConfigModal.jsx'));
+const LanguageLearningStudioModal = lazy(() => import('./components/LanguageLearningStudioModal.jsx'));
 
 export default function App() {
   const doodleCanvasRef = useRef(null);
@@ -128,7 +131,7 @@ export default function App() {
   const [isPrototypeActive, setIsPrototypeActive] = useState(false);
   const [walkthroughFrameId, setWalkthroughFrameId] = useState('');
   const [walkthroughPath, setWalkthroughPath] = useState([]);
-  const [, setCanvasSelection] = useState({});
+  const [canvasSelection, setCanvasSelection] = useState({});
   const [isFocusModeActive, setIsFocusModeActive] = useState(false);
   // Next-Gen Strategic Features States
   const [isLocalAiCopilotOpen, setIsLocalAiCopilotOpen] = useState(false);
@@ -140,6 +143,7 @@ export default function App() {
   const [isFocusModeSwitcherOpen, setIsFocusModeSwitcherOpen] = useState(false);
   const [isPluginsManagerOpen, setIsPluginsManagerOpen] = useState(false);
   const [isLocalSyncConfigOpen, setIsLocalSyncConfigOpen] = useState(false);
+  const [isLanguageStudioOpen, setIsLanguageStudioOpen] = useState(false);
   const [currentFocusModeId, setCurrentFocusModeId] = useState('developer');
 
   // Powerhouse features: Wireframe-to-code, Document Cards, Ambient Soundscapes & Pomodoro
@@ -376,6 +380,7 @@ export default function App() {
     status: collabStatus,
     connectionError: collabConnectionError,
     roomId: collabRoomId,
+    discoveredRoom: collabDiscoveredRoom,
     myProfile: collabProfile,
     setMyProfile: setCollabProfile,
     collaborators,
@@ -390,6 +395,19 @@ export default function App() {
     pendingConflict: collabPendingConflict,
     resolveOfflineConflict: resolveCollabConflict,
     offlineQueueError: collabOfflineQueueError,
+    voiceState,
+    voiceError,
+    startVoiceCall,
+    leaveVoiceCall,
+    toggleVoiceMute,
+    toggleVoiceDeafen,
+    isVoiceSupported,
+    syncSceneNow,
+    screenShareState,
+    screenShareError,
+    startScreenShare,
+    stopScreenShare,
+    isScreenShareSupported,
   } = useLiveCollaboration({
     doodleAPI,
     workspaceId: activeWorkspaceId,
@@ -400,16 +418,145 @@ export default function App() {
     if (collabPendingConflict) setIsLiveCollabModalOpen(true);
   }, [collabPendingConflict]);
 
-  // Auto-join room from URL query if present
+  // Toast notifications for peers joining and leaving
+  const prevCollabsRef = useRef(new Map());
   useEffect(() => {
+    const prev = prevCollabsRef.current;
+    if (collabStatus !== 'disconnected') {
+      collaborators.forEach((collab, id) => {
+        if (!prev.has(id)) {
+          showToast(`🟢 ${collab.username || 'Friend'} joined the room! Diagrams synchronized.`);
+        }
+      });
+      prev.forEach((collab, id) => {
+        if (!collaborators.has(id)) {
+          showToast(`${collab.username || 'Friend'} left the room.`);
+        }
+      });
+    }
+    prevCollabsRef.current = new Map(collaborators);
+  }, [collaborators, collabStatus, showToast]);
+
+  const handleFitToAllElements = useCallback(() => {
+    const elements = doodleAPI?.getSceneElements?.() || [];
+    if (elements.length > 0) {
+      doodleAPI?.scrollToContent?.(elements, { animate: true, duration: 420 });
+      showToast(`Focused viewport on all ${elements.length} diagram elements`);
+    }
+  }, [doodleAPI, showToast]);
+
+  // Capture live screen share frame directly into canvas as a diagram shape
+  const handleCaptureScreenSnapshot = useCallback((dataUrl, width, height, presenterName) => {
+    if (!doodleAPI || !dataUrl) return;
     try {
-      const params = new URLSearchParams(window.location.search);
-      const roomParam = params.get('room');
-      if (roomParam && collabStatus === 'disconnected') {
-        joinCollabSession(roomParam);
+      const fileId = `screen-snap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const mimeType = 'image/png';
+      doodleAPI.addFiles?.({
+        [fileId]: {
+          mimeType,
+          dataURL: dataUrl,
+          created: Date.now(),
+        },
+      });
+
+      const appState = doodleAPI.getAppState?.() || {};
+      const zoom = appState.zoom?.value || 1;
+      const scrollX = appState.scrollX || 0;
+      const scrollY = appState.scrollY || 0;
+      const cw = window.innerWidth;
+      const ch = window.innerHeight;
+
+      let w = Math.min(840, width);
+      let h = Math.round((height / width) * w);
+      const sceneX = Math.round((cw / 2 - w / 2 - scrollX) / zoom);
+      const sceneY = Math.round((ch / 2 - h / 2 - scrollY) / zoom);
+
+      const existingElements = doodleAPI.getSceneElements?.() || [];
+      const imageElement = {
+        id: `img-snap-${Date.now()}`,
+        type: 'image',
+        x: sceneX,
+        y: sceneY,
+        width: w,
+        height: h,
+        angle: 0,
+        strokeColor: '#3b82f6',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 0,
+        opacity: 100,
+        fileId,
+        scale: [1, 1],
+        version: 1,
+        versionNonce: Date.now(),
+        isDeleted: false,
+        name: `${presenterName}'s Screen Snapshot`,
+      };
+
+      doodleAPI.updateScene?.({
+        elements: [...existingElements, imageElement],
+        commitToHistory: true,
+      });
+
+      showToast(`📸 Stamped ${presenterName}'s screen onto canvas! Both users can now draw callouts & annotations on it.`);
+    } catch (err) {
+      console.warn('Failed to insert screen snapshot:', err);
+    }
+  }, [doodleAPI, showToast]);
+
+  // Auto-join room from URL query, hash, pathname or Electron system protocol link
+  const autoJoinedUrlRoomRef = useRef(false);
+  useEffect(() => {
+    if (!autoJoinedUrlRoomRef.current) {
+      try {
+        let roomParam = null;
+        if (window.location.search) {
+          const params = new URLSearchParams(window.location.search);
+          roomParam = params.get('room');
+        }
+        if (!roomParam && window.location.pathname) {
+          const m = window.location.pathname.match(/\/(?:join|room)\/([a-zA-Z0-9_-]+)/i);
+          if (m && m[1]) roomParam = m[1];
+        }
+        if (!roomParam && window.location.hash) {
+          const hashStr = window.location.hash.replace(/^#/, '');
+          const hashParams = new URLSearchParams(hashStr.startsWith('?') ? hashStr.slice(1) : hashStr);
+          roomParam = hashParams.get('room');
+          if (!roomParam && hashStr.includes('room=')) {
+            const m = hashStr.match(/room=([^&#\s]+)/i);
+            if (m && m[1]) roomParam = decodeURIComponent(m[1]);
+          }
+        }
+        if (roomParam) {
+          autoJoinedUrlRoomRef.current = true;
+          joinCollabSession(roomParam);
+        }
+      } catch {}
+
+      // Check system protocol link on initial Electron launch
+      if (typeof window !== 'undefined' && window.electronAPI?.getInitialRoomCode) {
+        window.electronAPI.getInitialRoomCode().then((code) => {
+          if (code && !autoJoinedUrlRoomRef.current) {
+            autoJoinedUrlRoomRef.current = true;
+            joinCollabSession(code);
+          }
+        }).catch(() => {});
       }
-    } catch {}
-  }, [joinCollabSession, collabStatus]);
+    }
+
+    // Listen for live system protocol links while app is running (e.g. clicking doodle-desk://join?room=...)
+    if (typeof window !== 'undefined' && window.electronAPI?.onJoinRoomFromProtocol) {
+      const unsubscribe = window.electronAPI.onJoinRoomFromProtocol((code) => {
+        if (code) {
+          joinCollabSession(code);
+          showToast(`Joining room ${code} from system link...`);
+        }
+      });
+      return () => unsubscribe?.();
+    }
+  }, [joinCollabSession, showToast]);
 
   useEffect(() => {
     if (collabStatus === 'disconnected') {
@@ -419,21 +566,6 @@ export default function App() {
         setIsLaserActive(false);
         window.__doodleIsLaserActive = false;
       }
-    } else if (doodleAPI) {
-      // When live collaboration starts, automatically switch to laser pointer
-      const activateLaser = () => {
-        doodleAPI.setActiveTool({ type: 'laser' });
-        setIsLaserActive(true);
-        window.__doodleIsLaserActive = true;
-      };
-
-      activateLaser();
-      const t1 = setTimeout(activateLaser, 50);
-      const t2 = setTimeout(activateLaser, 200);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
     }
   }, [collabStatus, doodleAPI]);
 
@@ -474,15 +606,20 @@ export default function App() {
   const handlePointerUpdate = useCallback(
     (payload) => {
       if (collabStatus !== 'disconnected' && payload?.pointer) {
+        const isLaser = isLaserActive || doodleAPI?.getAppState?.()?.activeTool?.type === 'laser' || window.__doodleIsLaserActive;
+        const tool = isLaser ? 'laser' : (payload.pointer.tool || 'selection');
+        const laserMode = payload.pointer.laserMode || window.__doodleLaserMode || 'beam';
         broadcastPointer(
           payload.pointer.x,
           payload.pointer.y,
           payload.button || 'up',
-          payload.selectedElementIds || {}
+          payload.selectedElementIds || canvasSelection || {},
+          tool,
+          laserMode
         );
       }
     },
-    [collabStatus, broadcastPointer]
+    [collabStatus, broadcastPointer, canvasSelection, isLaserActive, doodleAPI]
   );
 
   // Follow collaborator viewpoint
@@ -577,8 +714,10 @@ export default function App() {
       window.__doodleIsDrawToShapeActive = false;
       window.__doodleIsBucketActive = false;
       window.__doodleIsLassoActive = false;
+    } else if (collabStatus !== 'disconnected') {
+      broadcastPointer(0, 0, 'up', canvasSelection || {}, 'selection');
     }
-  }, [doodleAPI]);
+  }, [doodleAPI, collabStatus, broadcastPointer, canvasSelection]);
 
   const handleSelectCanvasTool = useCallback((tool) => {
     setIsDrawToShapeActive(false);
@@ -658,6 +797,7 @@ export default function App() {
     window.__openFocusModeSwitcher = () => setIsFocusModeSwitcherOpen(true);
     window.__openPluginsManager = () => setIsPluginsManagerOpen(true);
     window.__openLocalSyncConfig = () => setIsLocalSyncConfigOpen(true);
+    window.__openLanguageStudio = () => setIsLanguageStudioOpen(true);
 
     return () => {
       delete window.__openTableFlashcards;
@@ -674,6 +814,7 @@ export default function App() {
       delete window.__openFocusModeSwitcher;
       delete window.__openPluginsManager;
       delete window.__openLocalSyncConfig;
+      delete window.__openLanguageStudio;
     };
   }, [
     isDrawToShapeActive,
@@ -741,6 +882,7 @@ export default function App() {
     handleExport,
     handleExportPDF,
     handleCopyToClipboard,
+    handleCloseWindow,
     resolveUnsavedModal,
     loadFileFromDisk,
     markClean,
@@ -748,6 +890,7 @@ export default function App() {
     doodleAPI,
     onSaveWorkspace: saveWorkspaceDocument,
     onSaved: handleDocumentSaved,
+    onBeforeClose: leaveCollabSession,
   });
   markDocumentCleanRef.current = markClean;
 
@@ -1119,6 +1262,14 @@ export default function App() {
         return;
       }
 
+      // Ctrl+Shift+L (Human Language Learning Studio)
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'l' && !isInputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsLanguageStudioOpen((prev) => !prev);
+        return;
+      }
+
       // Ctrl+K (Command Palette)
       if (isCtrlOrCmd && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -1322,6 +1473,30 @@ export default function App() {
         e.stopPropagation();
         handleExport('png');
         return;
+      }
+
+      // Alt+S (Toggle Live Screen Share)
+      if ((e.key === 's' || e.key === 'S') && e.altKey && !hasModifier) {
+        if (collabStatus !== 'disconnected') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (screenShareState?.isSharing) {
+            stopScreenShare();
+          } else {
+            startScreenShare();
+          }
+          return;
+        }
+      }
+
+      // Alt+M (Toggle Live Collab Voice Mute)
+      if ((e.key === 'm' || e.key === 'M') && e.altKey && !hasModifier) {
+        if (voiceState?.inVoice) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleVoiceMute();
+          return;
+        }
       }
 
       // Ctrl+Shift+I (Tech & Architecture Icon Library)
@@ -1573,6 +1748,7 @@ export default function App() {
       <StudioTopBar
         currentFileName={currentFileName}
         isDirty={isDirty}
+        onRequestClose={handleCloseWindow}
         theme={effectiveTheme}
         canvasStyle={canvasStyle}
         onSetCanvasStyle={handleSetCanvasStyle}
@@ -1625,6 +1801,7 @@ export default function App() {
         collabConnectionError={collabConnectionError}
         collabPeersCount={collaborators.size}
         collabRoomId={collabRoomId}
+        discoveredRoom={collabDiscoveredRoom}
         onOpenLiveCollab={() => setIsLiveCollabModalOpen(true)}
         onStartCollab={startCollabHosting}
         onJoinCollab={(roomId) => joinCollabSession(roomId)}
@@ -1636,6 +1813,18 @@ export default function App() {
         onOpenLiveChat={() => setIsLiveChatOpen(true)}
         sendChatMessage={sendCollabChatMessage}
         onFollowCollaborator={handleFollowCollaborator}
+        voiceState={voiceState}
+        voiceError={voiceError}
+        startVoiceCall={startVoiceCall}
+        leaveVoiceCall={leaveVoiceCall}
+        toggleVoiceMute={toggleVoiceMute}
+        toggleVoiceDeafen={toggleVoiceDeafen}
+        isVoiceSupported={isVoiceSupported}
+        screenShareState={screenShareState}
+        startScreenShare={startScreenShare}
+        stopScreenShare={stopScreenShare}
+        isScreenShareSupported={isScreenShareSupported}
+        onToast={showToast}
         onExportCode={() => setIsWireframeToCodeOpen(true)}
         onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
         isSoundStudioOpen={isSoundStudioOpen}
@@ -1746,6 +1935,7 @@ export default function App() {
         onOpenFocusModeSwitcher={() => setIsFocusModeSwitcherOpen(true)}
         onOpenPluginsManager={() => setIsPluginsManagerOpen(true)}
         onOpenLocalSyncConfig={() => setIsLocalSyncConfigOpen(true)}
+        onOpenLanguageStudio={() => setIsLanguageStudioOpen(true)}
         isDrawToShapeActive={isDrawToShapeActive}
         onToggleDrawToShape={handleToggleDrawToShape}
         isLaserActive={isLaserActive}
@@ -1803,7 +1993,7 @@ export default function App() {
       />
 
       {isLaserActive && (
-        <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} doodleAPI={doodleAPI} />
+        <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} doodleAPI={doodleAPI} onPointerUpdate={handlePointerUpdate} />
       )}
 
       <CanvasTopRightSettings
@@ -1836,7 +2026,45 @@ export default function App() {
         chatMessages={collabChatMessages}
         sendChatMessage={sendCollabChatMessage}
         myProfile={collabProfile}
+        voiceState={voiceState}
+        voiceError={voiceError}
+        startVoiceCall={startVoiceCall}
+        leaveVoiceCall={leaveVoiceCall}
+        toggleVoiceMute={toggleVoiceMute}
+        toggleVoiceDeafen={toggleVoiceDeafen}
+        isVoiceSupported={isVoiceSupported}
+        roomId={collabRoomId}
+        collabPeersCount={collaborators.size}
+        syncSceneNow={syncSceneNow}
+        onToast={showToast}
+        screenShareState={screenShareState}
+        startScreenShare={startScreenShare}
+        stopScreenShare={stopScreenShare}
       />
+
+      {voiceState?.inVoice && (
+        <LiveCollabVoiceWidget
+          voiceState={voiceState}
+          voiceError={voiceError}
+          onToggleMute={toggleVoiceMute}
+          onToggleDeafen={toggleVoiceDeafen}
+          onLeaveVoice={leaveVoiceCall}
+          collaborators={collaborators}
+          isSharingScreen={screenShareState?.isSharing}
+          onToggleScreenShare={screenShareState?.isSharing ? stopScreenShare : startScreenShare}
+        />
+      )}
+
+      {/* Live Screen Share Studio Viewer & Canvas Annotation HUD */}
+      {(screenShareState?.remoteStreams.size > 0 || screenShareState?.isSharing) && (
+        <LiveCollabScreenShareViewer
+          remoteStreams={screenShareState.remoteStreams}
+          localStream={screenShareState.localStream}
+          isSharingLocal={screenShareState.isSharing}
+          onStopSharingLocal={stopScreenShare}
+          onCaptureSnapshotToCanvas={handleCaptureScreenSnapshot}
+        />
+      )}
 
       {/* Command Palette (Ctrl+K) */}
       {isCommandPaletteOpen && <Suspense fallback={null}><CommandPalette
@@ -1850,6 +2078,7 @@ export default function App() {
         onOpenFocusModeSwitcher={() => setIsFocusModeSwitcherOpen(true)}
         onOpenPluginsManager={() => setIsPluginsManagerOpen(true)}
         onOpenLocalSyncConfig={() => setIsLocalSyncConfigOpen(true)}
+        onOpenLanguageStudio={() => setIsLanguageStudioOpen(true)}
         onClose={() => setIsCommandPaletteOpen(false)}
         doodleAPI={doodleAPI}
         effectiveTheme={effectiveTheme}
@@ -1999,13 +2228,13 @@ export default function App() {
       /></Suspense>}
 
       {/* Unsaved Changes Confirmation Dialog */}
-      {showUnsavedModal && <Suspense fallback={null}><UnsavedChangesModal
+      {showUnsavedModal && <UnsavedChangesModal
         isOpen={showUnsavedModal}
         fileName={currentFileName}
         onSave={() => resolveUnsavedModal('save')}
         onDiscard={() => resolveUnsavedModal('discard')}
         onCancel={() => resolveUnsavedModal('cancel')}
-      /></Suspense>}
+      />}
 
       {/* Recovery Session Prompt Dialog */}
       {hasRecoverySession && <Suspense fallback={null}><RecoveryPrompt
@@ -2106,6 +2335,7 @@ export default function App() {
         status={collabStatus}
         connectionError={collabConnectionError}
         roomId={collabRoomId}
+        discoveredRoom={collabDiscoveredRoom}
         myProfile={collabProfile}
         setMyProfile={setCollabProfile}
         collaborators={collaborators}
@@ -2119,6 +2349,13 @@ export default function App() {
         offlineQueueError={collabOfflineQueueError}
         sendChatMessage={sendCollabChatMessage}
         onFollowCollaborator={handleFollowCollaborator}
+        voiceState={voiceState}
+        voiceError={voiceError}
+        startVoiceCall={startVoiceCall}
+        leaveVoiceCall={leaveVoiceCall}
+        toggleVoiceMute={toggleVoiceMute}
+        toggleVoiceDeafen={toggleVoiceDeafen}
+        isVoiceSupported={isVoiceSupported}
         theme={effectiveTheme}
       /></Suspense>}
 
@@ -2509,6 +2746,22 @@ export default function App() {
             onClose={() => setIsLocalSyncConfigOpen(false)}
             elements={(doodleCanvasRef.current || doodleAPI)?.getSceneElements?.() || []}
             onRestoreElements={handleRestoreElements}
+          />
+        </Suspense>
+      )}
+
+      {/* Human Language Learning Studio (German, English, Roots & Speech) */}
+      {isLanguageStudioOpen && (
+        <Suspense fallback={null}>
+          <LanguageLearningStudioModal
+            isOpen={isLanguageStudioOpen}
+            onClose={() => setIsLanguageStudioOpen(false)}
+            doodleAPI={doodleCanvasRef.current || doodleAPI}
+            onOpenFlashcards={(deck) => {
+              setIsLanguageStudioOpen(false);
+              setActiveFlashcardTable(deck);
+            }}
+            onToast={(msg) => addNotification?.(msg, 'info')}
           />
         </Suspense>
       )}

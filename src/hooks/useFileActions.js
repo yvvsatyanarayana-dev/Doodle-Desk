@@ -3,10 +3,12 @@ import { serializeAsJSON } from '../engine/elements.js';
 import { loadFromBlob, exportToBlob, exportToSvg } from '../engine/io/export.js';
 import { generateInteractiveHtml } from '../engine/io/exportInteractiveHtml.js';
 
-export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved }) {
+export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved, onBeforeClose }) {
   const activeAPI = doodleAPI || canvasAPI;
   const [currentFilePath, setCurrentFilePath] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef(false);
+  isDirtyRef.current = isDirty;
   const [pendingCloseAction, setPendingCloseAction] = useState(null); // 'new' | 'open' | 'close' | 'quit'
   const [pendingOpenPath, setPendingOpenPath] = useState(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -31,6 +33,7 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
   const onSceneChange = useCallback((elements) => {
     if (elements !== lastSceneRef.current) {
       lastSceneRef.current = elements;
+      isDirtyRef.current = true;
       setIsDirty(true);
     }
   }, []);
@@ -38,6 +41,7 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
   const markClean = useCallback((clearFilePath = false) => {
     lastSceneRef.current = activeAPI?.getSceneElementsIncludingDeleted?.() ?? null;
     if (clearFilePath) setCurrentFilePath(null);
+    isDirtyRef.current = false;
     setIsDirty(false);
     onSaved?.();
   }, [activeAPI, onSaved]);
@@ -69,13 +73,13 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
       }
 
       if (isBinary) {
-        // Base64 PNG with embedded Doodle scene
-        const byteCharacters = atob(readRes.data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        // Base64 PNG with embedded Doodle scene - optimized decoding
+        const binaryStr = atob(readRes.data);
+        const len = binaryStr.length;
+        const byteArray = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          byteArray[i] = binaryStr.charCodeAt(i);
         }
-        const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: 'image/png' });
 
         const sceneData = await loadFromBlob(blob, null, null);
@@ -501,6 +505,42 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
     window.print();
   }, []);
 
+  const handleCloseWindow = useCallback(() => {
+    if (isDirtyRef.current) {
+      setPendingCloseAction('close');
+      setShowUnsavedModal(true);
+    } else {
+      onBeforeClose?.();
+      if (window.electronAPI?.closeWindow) {
+        window.electronAPI.closeWindow();
+      } else {
+        try {
+          window.close();
+        } catch (e) {
+          console.warn('Window close warning:', e);
+        }
+      }
+    }
+  }, [onBeforeClose]);
+
+  // Standard web browser beforeunload warning when isDirty (disabled in Electron)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      // In Electron, window closing is governed by native IPC and UnsavedChangesModal
+      return;
+    }
+    const handleBrowserBeforeUnload = (e) => {
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBrowserBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBrowserBeforeUnload);
+  }, []);
+
+
   // Process Unsaved Changes Modal Decisions
   const resolveUnsavedModal = useCallback(async (decision) => {
     // decision: 'save' | 'discard' | 'cancel'
@@ -526,6 +566,11 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
       }
     }
 
+    // Reset dirty state since changes are either saved or discarded
+    isDirtyRef.current = false;
+    setIsDirty(false);
+    window.electronAPI?.updateDocumentState?.({ filePath: currentFilePath, isDirty: false });
+
     // Execute target action after save or discard
     if (pendingCloseAction === 'new') {
       performNew();
@@ -537,12 +582,21 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
         if (filePath) await loadFileFromDisk(filePath);
       }
     } else if (pendingCloseAction === 'close' || pendingCloseAction === 'quit') {
-      window.electronAPI?.respondToCloseRequest(decision === 'save' ? 'saved' : 'discard');
+      onBeforeClose?.();
+      if (window.electronAPI?.respondToCloseRequest) {
+        window.electronAPI.respondToCloseRequest(decision === 'save' ? 'saved' : 'discard');
+      } else {
+        try {
+          window.close();
+        } catch (e) {
+          console.warn('Window close warning:', e);
+        }
+      }
     }
 
     setPendingCloseAction(null);
     setPendingOpenPath(null);
-  }, [pendingCloseAction, pendingOpenPath, handleSave, performNew, loadFileFromDisk]);
+  }, [pendingCloseAction, pendingOpenPath, handleSave, performNew, loadFileFromDisk, currentFilePath, onBeforeClose]);
 
   // Bind Main IPC Events
   useEffect(() => {
@@ -560,10 +614,11 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
       window.electronAPI.on('file:copy-to-clipboard', (opts) => handleCopyToClipboard(opts)),
       window.electronAPI.on('file:print', handlePrint),
       window.electronAPI.on('window:request-close', ({ isQuitting }) => {
-        if (isDirty) {
+        if (isDirtyRef.current) {
           setPendingCloseAction(isQuitting ? 'quit' : 'close');
           setShowUnsavedModal(true);
         } else {
+          onBeforeClose?.();
           window.electronAPI.respondToCloseRequest('discard');
         }
       }),
@@ -599,6 +654,7 @@ export function useFileActions({ doodleAPI, canvasAPI, onSaveWorkspace, onSaved 
     handleExportPDF,
     handleCopyToClipboard,
     handlePrint,
+    handleCloseWindow,
     resolveUnsavedModal,
     loadFileFromDisk,
     markClean,

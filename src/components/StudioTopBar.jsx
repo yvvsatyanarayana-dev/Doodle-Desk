@@ -33,6 +33,8 @@ import {
   History,
   Focus,
   Headphones,
+  Mic,
+  MicOff,
   Timer,
   Smartphone,
 } from 'lucide-react';
@@ -45,6 +47,7 @@ import { ThemedConfirmDialog } from './ThemedConfirmDialog';
 function StudioTopBarComponent({
   currentFileName,
   isDirty,
+  onRequestClose,
   theme,
   canvasStyle = 'standard',
   onSetCanvasStyle,
@@ -90,6 +93,7 @@ function StudioTopBarComponent({
   collabConnectionError = '',
   collabPeersCount = 0,
   collabRoomId = null,
+  discoveredRoom = null,
   onOpenLiveCollab,
   onStartCollab,
   onJoinCollab,
@@ -101,6 +105,20 @@ function StudioTopBarComponent({
   onOpenLiveChat,
   sendChatMessage,
   onFollowCollaborator,
+  voiceState,
+  voiceError,
+  startVoiceCall,
+  leaveVoiceCall,
+  toggleVoiceMute,
+  toggleVoiceDeafen,
+  isVoiceSupported,
+  syncSceneNow,
+  onFitToContent,
+  onToast,
+  screenShareState,
+  startScreenShare,
+  stopScreenShare,
+  isScreenShareSupported,
   onExportCode,
   onToggleSoundStudio,
   isSoundStudioOpen,
@@ -191,6 +209,10 @@ function StudioTopBarComponent({
   };
 
   const handleClose = () => {
+    if (onRequestClose) {
+      onRequestClose();
+      return;
+    }
     if (isElectron) {
       window.electronAPI.closeWindow();
     } else {
@@ -679,13 +701,14 @@ function StudioTopBarComponent({
       <div className="studio-topbar-center app-no-drag">
         <div className="studio-center-capsule">
           <button
+            type="button"
             className="studio-capsule-search"
             onClick={onOpenCommandPalette}
             title="Command Palette (Ctrl+K)"
           >
-            <Search size={13} className="studio-search-icon" />
+            <Search size={13} className="studio-search-icon" style={{ flexShrink: 0 }} />
             <span className="studio-search-text">Search actions or tools...</span>
-            <kbd className="studio-search-kbd">Ctrl+K</kbd>
+            <kbd className="studio-search-kbd" style={{ flexShrink: 0 }}>Ctrl+K</kbd>
           </button>
 
           <button
@@ -713,7 +736,7 @@ function StudioTopBarComponent({
           </button>
 
           <button
-            className="studio-capsule-btn"
+            className="studio-capsule-btn studio-capsule-tertiary-btn"
             onClick={() => onOpenPrototypePlayer?.()}
             title="Interactive Click-Through Prototype Player (Alt+P)"
             aria-label="Interactive prototype player"
@@ -722,7 +745,7 @@ function StudioTopBarComponent({
           </button>
 
           <button
-            className="studio-capsule-btn"
+            className="studio-capsule-btn studio-capsule-secondary-btn"
             onClick={() => {
               if (onOpenCanvasQueryBar) onOpenCanvasQueryBar();
               else window.__openCanvasQueryBar?.();
@@ -733,7 +756,7 @@ function StudioTopBarComponent({
             <Search size={13} />
           </button>
 
-          <div className="studio-canvas-menu-wrapper" ref={canvasMenuRef}>
+          <div className="studio-canvas-menu-wrapper studio-capsule-secondary-btn" ref={canvasMenuRef}>
             <button
               className={`studio-capsule-btn ${isCanvasMenuOpen ? 'active' : ''}`}
               onClick={() => setIsCanvasMenuOpen(!isCanvasMenuOpen)}
@@ -767,37 +790,119 @@ function StudioTopBarComponent({
       {/* Right: Actions & Custom Window Controls */}
       <div className="studio-topbar-right app-no-drag">
 
-        {/* Live Collaboration — fixed dropdown panel (anchored between tools bar and library button) */}
-        <div ref={collabMenuRef} style={{ position: 'relative' }}>
-          <button
-            ref={collabPillRef}
-            className="studio-action-btn studio-collab-action-btn"
-            onClick={() => {
-              if (!isCollabMenuOpen && collabPillRef.current) {
-                const rect = collabPillRef.current.getBoundingClientRect();
-                const topbar = document.querySelector('.studio-topbar');
-                const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom;
-                const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
-                const libRect = libraryEl?.getBoundingClientRect();
-                const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
-                // Move to right: neatly between library button and center tool bar
-                setCollabDropPos({
-                  top: topbarBottom + 16,
-                  right: Math.max(64, libRightOffset + 12),
-                });
-              }
-              setIsCollabMenuOpen(!isCollabMenuOpen);
-            }}
-            title="Live Collaboration"
-            data-active={collabStatus !== 'disconnected'}
-          >
-            {collabStatus !== 'disconnected' ? <Wifi size={13} /> : <Radio size={13} />}
-            <span style={{ fontSize: '12px', fontWeight: 600 }}>Live</span>
-            {collabStatus !== 'disconnected' && (
-              <span className="studio-collab-badge">{collabPeersCount + 1}</span>
-            )}
-            <ChevronDown size={12} />
-          </button>
+        {/* Live Collaboration — unified capsule */}
+        <div
+          ref={collabMenuRef}
+          style={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {collabStatus === 'disconnected' ? (
+            <button
+              ref={collabPillRef}
+              className="studio-action-btn studio-collab-action-btn"
+              onClick={() => {
+                if (!isCollabMenuOpen && collabPillRef.current) {
+                  const rect = collabPillRef.current.getBoundingClientRect();
+                  const topbar = document.querySelector('.studio-topbar');
+                  const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom;
+                  const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
+                  const libRect = libraryEl?.getBoundingClientRect();
+                  const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
+                  setCollabDropPos({
+                    top: topbarBottom + 16,
+                    right: Math.max(64, libRightOffset + 12),
+                  });
+                }
+                setIsCollabMenuOpen(!isCollabMenuOpen);
+              }}
+              title="Live Collaboration"
+            >
+              <Radio size={13} style={{ color: discoveredRoom ? '#10b981' : undefined }} />
+              <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                {discoveredRoom ? 'Join Live' : 'Live Collab'}
+              </span>
+              {discoveredRoom && (
+                <span className="studio-collab-count-badge" style={{ fontSize: '9px' }}>
+                  1 Active
+                </span>
+              )}
+            </button>
+          ) : (
+            /* Active / Connecting Session — Seamless Capsule Pill */
+            <div className="studio-collab-capsule">
+              {/* Left segment: Live status & active member dropdown */}
+              <button
+                ref={collabPillRef}
+                type="button"
+                className="studio-collab-capsule-seg"
+                onClick={() => {
+                  if (!isCollabMenuOpen && collabPillRef.current) {
+                    const rect = collabPillRef.current.getBoundingClientRect();
+                    const topbar = document.querySelector('.studio-topbar');
+                    const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom;
+                    const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
+                    const libRect = libraryEl?.getBoundingClientRect();
+                    const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
+                    setCollabDropPos({
+                      top: topbarBottom + 16,
+                      right: Math.max(64, libRightOffset + 12),
+                    });
+                  }
+                  setIsCollabMenuOpen(!isCollabMenuOpen);
+                }}
+                title="Live Collaboration (Click to view members & invite options)"
+              >
+                {collabStatus === 'connecting' ? (
+                  <span className="studio-collab-live-dot" style={{ backgroundColor: '#f59e0b', boxShadow: '0 0 6px rgba(245, 158, 11, 0.8)' }} />
+                ) : (
+                  <span className="studio-collab-live-dot" />
+                )}
+                <span style={{ color: isDark ? '#34d399' : '#059669', fontSize: '12px', fontWeight: 600 }}>
+                  {collabStatus === 'connecting' ? 'Connecting...' : 'Live'}
+                </span>
+                <span className="studio-collab-count-badge">
+                  {collabPeersCount + 1}
+                </span>
+                <ChevronDown size={11} style={{ opacity: 0.7, color: isDark ? '#34d399' : '#059669' }} />
+              </button>
+
+              {/* Segment Divider & Right segment: Mic toggle */}
+              {isVoiceSupported && (
+                <>
+                  <div className="studio-collab-capsule-divider" />
+                  <button
+                    type="button"
+                    className={`studio-collab-capsule-seg studio-collab-mic-seg ${
+                      voiceState?.isMuted ? 'muted' : voiceState?.isSpeaking ? 'speaking' : ''
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!voiceState?.inVoice) {
+                        startVoiceCall?.();
+                      } else {
+                        toggleVoiceMute?.();
+                      }
+                    }}
+                    title={voiceState?.isMuted ? "Microphone is Off (Click to turn on, Alt+M)" : "Microphone is On (Click to turn off, Alt+M)"}
+                    aria-label={voiceState?.isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  >
+                    {voiceState?.isMuted ? (
+                      <MicOff size={13} style={{ color: '#ef4444' }} />
+                    ) : (
+                      <Mic size={13} style={{ color: '#10b981' }} className={voiceState?.isSpeaking ? 'animate-pulse' : ''} />
+                    )}
+                    <span style={{ fontSize: '11.5px', fontWeight: 600 }}>
+                      {voiceState?.isMuted ? 'Muted' : 'Mic On'}
+                    </span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {isCollabMenuOpen && (
             <>
@@ -820,6 +925,7 @@ function StudioTopBarComponent({
                   status={collabStatus}
                   connectionError={collabConnectionError}
                   roomId={collabRoomId}
+                  discoveredRoom={discoveredRoom}
                   myProfile={myProfile}
                   setMyProfile={setMyProfile}
                   collaborators={collaborators || new Map()}
@@ -837,6 +943,20 @@ function StudioTopBarComponent({
                   }}
                   leaveSession={onLeaveCollab}
                   onFollowCollaborator={onFollowCollaborator}
+                  voiceState={voiceState}
+                  voiceError={voiceError}
+                  startVoiceCall={startVoiceCall}
+                  leaveVoiceCall={leaveVoiceCall}
+                  toggleVoiceMute={toggleVoiceMute}
+                  toggleVoiceDeafen={toggleVoiceDeafen}
+                  isVoiceSupported={isVoiceSupported}
+                  syncSceneNow={syncSceneNow}
+                  onFitToContent={onFitToContent}
+                  onToast={onToast}
+                  screenShareState={screenShareState}
+                  startScreenShare={startScreenShare}
+                  stopScreenShare={stopScreenShare}
+                  isScreenShareSupported={isScreenShareSupported}
                   onClose={() => setIsCollabMenuOpen(false)}
                 />
               </div>

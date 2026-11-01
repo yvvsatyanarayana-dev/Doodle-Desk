@@ -28,6 +28,7 @@ import {
   Package,
   FolderSync,
   Cpu,
+  Languages,
 } from 'lucide-react';
 
 /**
@@ -94,6 +95,7 @@ function CanvasExtraToolsDropdownComponent({
   onOpenFocusModeSwitcher,
   onOpenPluginsManager,
   onOpenLocalSyncConfig,
+  onOpenLanguageStudio,
 }) {
   const activeAPI = (typeof window !== 'undefined' && window.__doodleAPI) || doodleAPI || canvasAPI || null;
   const [isOpen, setIsOpen] = useState(false);
@@ -595,6 +597,23 @@ function CanvasExtraToolsDropdownComponent({
         <BookOpen size={15} className="canvas-tool-menu-icon" style={{ color: '#fbbf24' }} />
         <span className="canvas-tool-menu-label">Interactive Table Flashcards</span>
         <span className="canvas-tool-menu-shortcut">Study</span>
+      </div>
+
+      {/* Human Language Learning Studio */}
+      <div
+        className="canvas-tool-menu-item"
+        onClick={() => {
+          setIsOpen(false);
+          if (onOpenLanguageStudio) {
+            onOpenLanguageStudio();
+          } else if (typeof window !== 'undefined' && typeof window.__openLanguageStudio === 'function') {
+            window.__openLanguageStudio();
+          }
+        }}
+      >
+        <Languages size={15} className="canvas-tool-menu-icon" style={{ color: '#10b981' }} />
+        <span className="canvas-tool-menu-label">Language Learning Studio (German, English)</span>
+        <span className="canvas-tool-menu-shortcut">Ctrl+Shift+L</span>
       </div>
 
       {/* Executable Code Scratchpad */}

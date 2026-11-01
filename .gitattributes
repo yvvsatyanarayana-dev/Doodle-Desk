@@ -1,0 +1,20 @@
+# Doodle Desk file attributes
+# This file tells Git how to handle .doodle files
+
+# Recognize .doodle as Doodle language for GitHub Linguist
+*.doodle linguist-language=Doodle
+
+# Custom diff driver for .doodle files (uses schema validator for semantic diff)
+*.doodle diff=doodle
+
+# Use union merge for .doodle files (since they're JSON, union merge works well for concurrent edits)
+*.doodle merge=union
+
+# Treat as text (not binary) for better diffs
+*.doodle text
+
+# Export language for git archive
+*.doodle export-ignore
+
+# Also handle schema files
+packages/schema/doodle-schema.json linguist-language=JSON

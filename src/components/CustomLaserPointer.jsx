@@ -20,7 +20,7 @@ const UI_SELECTOR = 'button, a, input, select, textarea, [role="button"], header
  * - Ribbon (calligraphic flowing ink stream)
  * - Spotlight (magnetic halo snapping to nearby diagram elements)
  */
-function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
+function CustomLaserPointerComponent({ isActive, onClose, doodleAPI, onPointerUpdate }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(new ParticleTrailEngine());
   const animFrameRef = useRef(null);
@@ -32,7 +32,12 @@ function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
   const handleSelectMode = (mode) => {
     setTrailMode(mode);
     engineRef.current.setMode(mode);
+    window.__doodleLaserMode = mode;
   };
+
+  useEffect(() => {
+    window.__doodleLaserMode = trailMode;
+  }, [trailMode]);
 
   useEffect(() => {
     if (!isActive) {
@@ -57,6 +62,20 @@ function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
       return !!target.closest?.(UI_SELECTOR);
     };
 
+    const getSceneCoords = (clientX, clientY) => {
+      const mainCanvas = document.querySelector('.canvas-container canvas');
+      if (!mainCanvas) return null;
+      const rect = mainCanvas.getBoundingClientRect();
+      const cx = clientX - rect.left;
+      const cy = clientY - rect.top;
+      if (doodleAPI?.canvasToScene) {
+        return doodleAPI.canvasToScene(cx, cy);
+      }
+      const appState = doodleAPI?.getAppState?.() || {};
+      const z = appState.zoom?.value || (typeof appState.zoom === 'number' ? appState.zoom : 1);
+      return [(cx - (appState.scrollX || 0)) / z, (cy - (appState.scrollY || 0)) / z];
+    };
+
     const handlePointerDown = (e) => {
       if (isOverUI(e.target)) {
         return;
@@ -64,11 +83,29 @@ function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
       if (e.button === 0) {
         isPointerDownRef.current = true;
         engine.addPoint(e.clientX, e.clientY, true);
+        if (onPointerUpdate) {
+          const coords = getSceneCoords(e.clientX, e.clientY);
+          if (coords) {
+            onPointerUpdate({
+              pointer: { x: coords[0], y: coords[1], tool: 'laser', laserMode: engine.mode },
+              button: 'down',
+            });
+          }
+        }
       }
     };
 
     const handlePointerUp = () => {
       isPointerDownRef.current = false;
+      if (onPointerUpdate && currentPosRef.current.x > 0) {
+        const coords = getSceneCoords(currentPosRef.current.x, currentPosRef.current.y);
+        if (coords) {
+          onPointerUpdate({
+            pointer: { x: coords[0], y: coords[1], tool: 'laser', laserMode: engine.mode },
+            button: 'up',
+          });
+        }
+      }
     };
 
     const handlePointerMove = (e) => {
@@ -80,6 +117,16 @@ function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
 
       if (isPointerDownRef.current || engine.mode === TRAIL_MODES.SPOTLIGHT) {
         engine.addPoint(e.clientX, e.clientY, isPointerDownRef.current);
+      }
+
+      if (onPointerUpdate && !isOverUI(e.target)) {
+        const coords = getSceneCoords(e.clientX, e.clientY);
+        if (coords) {
+          onPointerUpdate({
+            pointer: { x: coords[0], y: coords[1], tool: 'laser', laserMode: engine.mode },
+            button: isPointerDownRef.current ? 'down' : 'up',
+          });
+        }
       }
 
       // Magnetic spotlight update
@@ -109,6 +156,7 @@ function CustomLaserPointerComponent({ isActive, onClose, doodleAPI }) {
         e.preventDefault();
         const next = engine.cycleMode();
         setTrailMode(next);
+        window.__doodleLaserMode = next;
       }
     };
 

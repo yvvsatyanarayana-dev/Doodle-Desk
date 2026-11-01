@@ -1,0 +1,17 @@
+# GitHub Linguist configuration for .doodle files
+# Place this in .github/linguist/doodle.yml
+
+doodle:
+  type: data
+  color: "#FF6B35"
+  extensions:
+    - ".doodle"
+  tm_scope: source.json.doodle
+  ace_mode: json
+  language_id: 123456789
+  aliases:
+    - "Doodle Desk"
+    - "Doodle Board"
+  interpreters: []
+  filenames: []
+  group: "Data"

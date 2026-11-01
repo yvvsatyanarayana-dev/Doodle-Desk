@@ -68,9 +68,36 @@ function registerProtocol() {
   }
 }
 
+function parseCollabRoomFromArgv(argv) {
+  if (!argv || !Array.isArray(argv)) return null;
+  for (const arg of argv) {
+    if (!arg || typeof arg !== 'string') continue;
+    if (arg.startsWith('doodle-desk://')) {
+      try {
+        const url = new URL(arg.replace(/^doodle-desk:\/\//i, 'https://app/'));
+        const fromParam = url.searchParams.get('room');
+        if (fromParam) return fromParam.trim().toUpperCase();
+        const segments = url.pathname.split('/').filter(Boolean);
+        const joinIdx = segments.findIndex((s) => /^(join|room)$/i.test(s));
+        if (joinIdx !== -1 && segments[joinIdx + 1]) {
+          return decodeURIComponent(segments[joinIdx + 1]).trim().toUpperCase();
+        }
+        const last = segments[segments.length - 1];
+        if (last && /^DOODLE-[A-Z0-9]+$/i.test(last)) {
+          return decodeURIComponent(last).trim().toUpperCase();
+        }
+      } catch (err) {
+        console.error('Failed to parse collab protocol url:', arg, err);
+      }
+    }
+  }
+  return null;
+}
+
 module.exports = {
   isSupportedFile,
   parseFilePathFromArgv,
+  parseCollabRoomFromArgv,
   queueFileToOpen,
   getQueuedFiles,
   registerProtocol,

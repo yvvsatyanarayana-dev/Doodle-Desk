@@ -3,6 +3,7 @@ export function getDragMoveElementIds(elements, selectedIds) {
   const elementsById = new Map(elements.map((element) => [element.id, element]));
   const groupMembers = new Map();
   const componentMembers = new Map();
+  const containerChildren = new Map();
 
   for (const element of elements) {
     for (const groupId of element.groupIds || []) {
@@ -21,6 +22,14 @@ export function getDragMoveElementIds(elements, selectedIds) {
       }
       members.push(element.id);
     }
+    if (element.containerId) {
+      let children = containerChildren.get(element.containerId);
+      if (!children) {
+        children = [];
+        containerChildren.set(element.containerId, children);
+      }
+      children.push(element.id);
+    }
   }
 
   const pending = [...idsToMove];
@@ -29,7 +38,7 @@ export function getDragMoveElementIds(elements, selectedIds) {
     if (!element) continue;
     const relatedIds = [
       ...(element.boundElements || []).map((binding) => binding.id),
-      element.containerId,
+      ...(containerChildren.get(element.id) || []),
       ...(element.groupIds || []).flatMap((groupId) => groupMembers.get(groupId) || []),
       ...(element.componentInstanceId ? componentMembers.get(element.componentInstanceId) || [] : []),
     ];

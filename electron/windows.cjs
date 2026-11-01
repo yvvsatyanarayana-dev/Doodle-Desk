@@ -130,7 +130,7 @@ function createWindow(initialFilePath = null) {
 
     // A clean document can close immediately. Only dirty documents need the
     // renderer's save/discard confirmation round-trip.
-    if (!win._isDirty) return;
+    if (!win._isDirty || win.webContents.isDestroyed() || win.webContents.isCrashed?.()) return;
 
     // Ask renderer if dirty
     e.preventDefault();
