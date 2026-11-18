@@ -78,14 +78,12 @@ mac:
   darkModeSupport: true
 
 linux:
+  executableName: doodle-desk
   target:
     - target: AppImage
       arch:
         - x64
     - target: deb
-      arch:
-        - x64
-    - target: rpm
       arch:
         - x64
   maintainer: "Satyanarayana <yvvsatyanarayana999@gmail.com>"
