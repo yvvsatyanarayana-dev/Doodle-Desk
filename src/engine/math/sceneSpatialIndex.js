@@ -46,7 +46,7 @@ export function buildSceneSpatialIndex(elements, cellSize = DEFAULT_CELL_SIZE) {
       orderById.set(element.id, order);
     }
     if (element.isDeleted || element.isHidden) return;
-    const entry = { element, order, bounds: getCachedElementBounds(element) };
+    const entry = { element, entryIndex: entries.length, order, bounds: getCachedElementBounds(element) };
     entries.push(entry);
     orderByElement.set(element, order);
     const left = Math.min(entry.bounds.x, entry.bounds.x + entry.bounds.width);
@@ -127,7 +127,7 @@ export function getVisibleSceneElements(index, viewport, padding = 0) {
     for (let i = 0; i < overflow.length; i++) {
       const entry = overflow[i];
       if (boundsIntersectViewport(entry.bounds, viewport, padding)) {
-        visibleFlags[entry.order] = 1;
+        visibleFlags[entry.entryIndex] = 1;
       }
     }
     // Check grid cell buckets
@@ -137,8 +137,8 @@ export function getVisibleSceneElements(index, viewport, padding = 0) {
         if (bucket) {
           for (let i = 0; i < bucket.length; i++) {
             const entry = bucket[i];
-            if (!visibleFlags[entry.order] && boundsIntersectViewport(entry.bounds, viewport, padding)) {
-              visibleFlags[entry.order] = 1;
+            if (!visibleFlags[entry.entryIndex] && boundsIntersectViewport(entry.bounds, viewport, padding)) {
+              visibleFlags[entry.entryIndex] = 1;
             }
           }
         }

@@ -37,6 +37,17 @@ describe('scene spatial index', () => {
       .toEqual([large]);
   });
 
+  it('correctly maps visible flags when deleted elements precede active shapes', () => {
+    const deleted1 = { id: 'del1', x: 0, y: 0, width: 40, height: 40, isDeleted: true };
+    const deleted2 = { id: 'del2', x: 50, y: 50, width: 40, height: 40, isDeleted: true };
+    const active1 = { id: 'act1', x: 10, y: 10, width: 50, height: 50 };
+    const active2 = { id: 'act2', x: 3000, y: 3000, width: 50, height: 50 };
+    const index = buildSceneSpatialIndex([deleted1, deleted2, active1, active2]);
+
+    const visible = getVisibleSceneElements(index, { x: 0, y: 0, width: 100, height: 100 });
+    expect(visible).toEqual([active1]);
+  });
+
   it('limits candidates to nearby cells on large scenes', () => {
     const elements = Array.from({ length: 10000 }, (_, index) => ({
       id: `element-${index}`,

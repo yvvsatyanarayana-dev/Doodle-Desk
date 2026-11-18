@@ -6,6 +6,7 @@ export function FooterLeft({
   onZoomIn,
   onZoomOut,
   onZoomReset,
+  onZoomToFit,
   onUndo,
   onRedo,
   hasSelection = false,
@@ -28,7 +29,8 @@ export function FooterLeft({
             type="button"
             className="zoom-button"
             onClick={onZoomReset}
-            title="Reset Zoom to 100% (Ctrl+0)"
+            onDoubleClick={onZoomToFit || onZoomReset}
+            title="Reset Zoom to 100% (Ctrl+0) • Double-click to Fit to Content (Shift+1)"
             aria-label="Reset Zoom"
           >
             {Math.round(zoomLevel * 100)}%

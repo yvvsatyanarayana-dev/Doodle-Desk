@@ -3445,6 +3445,61 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
     scheduleRender();
   }, [commitHistory, notifyChange, scheduleRender, setElements]);
 
+  const scrollToContent = useCallback((elementsOrPoints, opts = {}) => {
+    const els = elementsOrPoints || elementsRef.current.filter(el => !el.isDeleted);
+    if (!els || els.length === 0) return;
+    const bounds = getCommonBounds(Array.isArray(els) ? els : [els]);
+    if (!bounds) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = canvas.width / dpr;
+    const ch = canvas.height / dpr;
+    const padding = opts.padding || 80;
+    const zx = (cw - padding * 2) / (bounds.width || 1);
+    const zy = (ch - padding * 2) / (bounds.height || 1);
+    const targetZ = Math.min(1.5, Math.max(0.1, Math.min(zx, zy)));
+    const targetScrollX = cw / 2 - (bounds.x + bounds.width / 2) * targetZ;
+    const targetScrollY = ch / 2 - (bounds.y + bounds.height / 2) * targetZ;
+
+    if (opts.animate) {
+      const startScrollX = appStateRef.current.scrollX || 0;
+      const startScrollY = appStateRef.current.scrollY || 0;
+      const startZ = appStateRef.current.zoom?.value || 1;
+      const startTime = performance.now();
+      const duration = opts.duration || 420;
+
+      const step = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const ease = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        setAppState({
+          zoom: { value: startZ + (targetZ - startZ) * ease },
+          scrollX: startScrollX + (targetScrollX - startScrollX) * ease,
+          scrollY: startScrollY + (targetScrollY - startScrollY) * ease,
+        });
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    } else {
+      setAppState({
+        zoom: { value: targetZ },
+        scrollX: targetScrollX,
+        scrollY: targetScrollY,
+      });
+    }
+  }, [setAppState]);
+
+  const handleZoomToFit = useCallback(() => {
+    scrollToContent(undefined, { animate: true });
+  }, [scrollToContent]);
+
   const handleZoomIn = useCallback(() => {
     setAppState(prev => ({ zoom: { value: Math.min(30, Number((prev.zoom.value * 1.15).toFixed(2))) } }));
   }, [setAppState]);
@@ -3487,6 +3542,13 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       }
     }
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+    // Shift+1: Zoom to fit all elements onto screen
+    if (e.shiftKey && (e.key === '!' || e.key === '1') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      handleZoomToFit();
+      return;
+    }
 
     const shortcutAction = findShortcutAction(e, getShortcutBindings());
     if (shortcutAction) {
@@ -3720,7 +3782,7 @@ const DoodleCanvas = forwardRef(function DoodleCanvas(props, ref) {
       commitHistory();
       notifyChange();
     }
-  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange, scheduleRender, handleAction, handleZoomIn, handleZoomOut, handleZoomReset, isLayersPanelOpen, isComponentsPanelOpen, isPortalPanelOpen, isChangeTrackingOpen, isSimulationActive]);
+  }, [getSelectedElements, setElements, setAppState, commitHistory, notifyChange, scheduleRender, handleAction, handleZoomIn, handleZoomOut, handleZoomReset, handleZoomToFit, isLayersPanelOpen, isComponentsPanelOpen, isPortalPanelOpen, isChangeTrackingOpen, isSimulationActive]);
 
   const onKeyUp = useCallback((e) => {
     if (e.code === 'Space') interaction.current.spaceDown = false;
@@ -4750,57 +4812,7 @@ return { total, count: values.length };`,
       },
 
       // Viewport with Cinematic Smooth Animated Camera Easing
-      scrollToContent: (elementsOrPoints, opts = {}) => {
-        const els = elementsOrPoints || elementsRef.current.filter(el => !el.isDeleted);
-        if (!els || els.length === 0) return;
-        const bounds = getCommonBounds(Array.isArray(els) ? els : [els]);
-        if (!bounds) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const dpr = window.devicePixelRatio || 1;
-        const cw = canvas.width / dpr;
-        const ch = canvas.height / dpr;
-        const padding = opts.padding || 80;
-        const zx = (cw - padding * 2) / (bounds.width || 1);
-        const zy = (ch - padding * 2) / (bounds.height || 1);
-        const targetZ = Math.min(1.5, Math.max(0.1, Math.min(zx, zy)));
-        const targetScrollX = cw / 2 - (bounds.x + bounds.width / 2) * targetZ;
-        const targetScrollY = ch / 2 - (bounds.y + bounds.height / 2) * targetZ;
-
-        if (opts.animate) {
-          const startScrollX = appStateRef.current.scrollX || 0;
-          const startScrollY = appStateRef.current.scrollY || 0;
-          const startZ = appStateRef.current.zoom?.value || 1;
-          const startTime = performance.now();
-          const duration = opts.duration || 420;
-
-          const step = (now) => {
-            const elapsed = now - startTime;
-            const progress = Math.min(1, elapsed / duration);
-            // Smooth easeInOutCubic
-            const ease = progress < 0.5
-              ? 4 * progress * progress * progress
-              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-            setAppState({
-              zoom: { value: startZ + (targetZ - startZ) * ease },
-              scrollX: startScrollX + (targetScrollX - startScrollX) * ease,
-              scrollY: startScrollY + (targetScrollY - startScrollY) * ease,
-            });
-
-            if (progress < 1) {
-              requestAnimationFrame(step);
-            }
-          };
-          requestAnimationFrame(step);
-        } else {
-          setAppState({
-            zoom: { value: targetZ },
-            scrollX: targetScrollX,
-            scrollY: targetScrollY,
-          });
-        }
-      },
+      scrollToContent,
 
       // Mind Mapping: Branch child node with connecting arrow
       branchChildNode: (direction = 'right') => branchChildNode(direction),
@@ -5607,6 +5619,7 @@ return { total, count: values.length };`,
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onZoomReset={handleZoomReset}
+        onZoomToFit={handleZoomToFit}
         onUndo={() => {
           const prev = historyRef.current.undo(elementsRef.current);
           if (prev) { setElements(prev); notifyChange(); scheduleRender(); }
