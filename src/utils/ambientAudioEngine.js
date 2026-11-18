@@ -10,6 +10,15 @@ let currentTrack = null;
 let masterGain = null;
 let activeNodes = [];
 let volumeLevel = 0.5;
+const listeners = new Set();
+
+function notifyListeners() {
+  for (const fn of listeners) {
+    try {
+      fn({ isPlaying: Boolean(currentTrack), track: currentTrack, volume: volumeLevel });
+    } catch {}
+  }
+}
 
 function getAudioContext() {
   if (!audioCtx) {
@@ -267,6 +276,14 @@ export const ambientAudio = {
     return currentTrack;
   },
 
+  subscribe(fn) {
+    if (typeof fn !== 'function') return () => {};
+    listeners.add(fn);
+    return () => {
+      listeners.delete(fn);
+    };
+  },
+
   isPlaying() {
     return Boolean(currentTrack);
   },
@@ -314,11 +331,13 @@ export const ambientAudio = {
         currentTrack = null;
         break;
     }
+    notifyListeners();
   },
 
   stop() {
     stopAllNodes();
     currentTrack = null;
+    notifyListeners();
   },
 
   toggle(trackId) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { proceduralAudio } from '../src/utils/proceduralAudio.js';
+import { ambientAudio } from '../src/utils/ambientAudioEngine.js';
 
 describe('proceduralAudio ASMR synthesizer', () => {
   beforeEach(() => {
@@ -34,5 +35,22 @@ describe('proceduralAudio ASMR synthesizer', () => {
       proceduralAudio.stopDrawingSound();
       proceduralAudio.playSnapClick();
     }).not.toThrow();
+  });
+
+  it('ambientAudio supports subscription events without polling', () => {
+    const events = [];
+    const unsubscribe = ambientAudio.subscribe((state) => {
+      events.push(state);
+    });
+
+    expect(typeof unsubscribe).toBe('function');
+    ambientAudio.stop();
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[events.length - 1].isPlaying).toBe(false);
+
+    unsubscribe();
+    const countBefore = events.length;
+    ambientAudio.stop();
+    expect(events.length).toBe(countBefore);
   });
 });

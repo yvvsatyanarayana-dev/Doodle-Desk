@@ -167,13 +167,15 @@ export default function App() {
     formattedTime: '25:00',
   });
 
-  // Keep audio playing status synchronized without redundant re-renders
+  // Keep audio playing status synchronized reactively without background polling
   useEffect(() => {
-    const timer = setInterval(() => {
-      const isPlaying = typeof ambientAudio?.isPlaying === 'function' ? ambientAudio.isPlaying() : false;
-      setIsAudioPlaying((prev) => (prev !== isPlaying ? isPlaying : prev));
-    }, 500);
-    return () => clearInterval(timer);
+    setIsAudioPlaying(Boolean(ambientAudio?.isPlaying?.()));
+    if (typeof ambientAudio?.subscribe === 'function') {
+      return ambientAudio.subscribe(({ isPlaying }) => {
+        setIsAudioPlaying(Boolean(isPlaying));
+      });
+    }
+    return undefined;
   }, []);
 
   // Pomodoro countdown timer tick
