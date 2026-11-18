@@ -298,26 +298,26 @@ export const SmartAutoLayoutModal = memo(function SmartAutoLayoutModal({
         }}
       />
 
-      {/* ── LEFT SIDEBAR — Authentic Studio Placement ── */}
+      {/* ── RIGHT SIDEBAR — Aligned with Top-Right Tool Rail Trigger ── */}
       <aside
         className="library-sidebar auto-layout-sidebar"
         style={{
           position: 'fixed',
           top: '38px',
-          left: 0,
+          right: 0,
           bottom: 0,
           width: '360px',
           zIndex: 1000,
           background: sidebarBg,
-          borderRight: `1px solid ${headerBorder}`,
+          borderLeft: `1px solid ${headerBorder}`,
           display: 'flex',
           flexDirection: 'column',
           boxShadow: isDark
-            ? '8px 0 32px rgba(0, 0, 0, 0.6)'
-            : '12px 0 32px rgba(15, 23, 42, 0.12)',
+            ? '-8px 0 32px rgba(0, 0, 0, 0.6)'
+            : '-12px 0 32px rgba(15, 23, 42, 0.12)',
           fontFamily,
           userSelect: 'none',
-          animation: 'slideInLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: 'slideInFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         {/* ── HEADER ── */}

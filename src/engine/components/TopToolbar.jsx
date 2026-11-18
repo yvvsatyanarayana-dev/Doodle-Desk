@@ -100,6 +100,11 @@ export function TopToolbar({
           padding: '3px 4px',
           display: 'flex',
           alignItems: 'center',
+          maxWidth: 'calc(100vw - 16px)',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}
       >
         <div
@@ -108,6 +113,7 @@ export function TopToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: '2px',
+            flexShrink: 0,
           }}
         >
           {tools.map((t) => {

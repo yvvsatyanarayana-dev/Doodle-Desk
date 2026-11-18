@@ -11,6 +11,28 @@ import { STROKE_WIDTHS, ELEMENT_TYPES } from '../elements.js';
 import { getArrowheadPoints, rotatePoint, getElementCenter, getBoundsFromPoints, getCachedElementBounds } from '../math/geometry.js';
 import { computeOrthogonalPoints, renderOrthogonalPath } from '../layout/orthogonalRouting.js';
 
+// High-performance GPU hardware vector path cache for shape outlines
+const shapeOutlineCache = new WeakMap();
+
+function renderCachedShape(ctx, el, sig, drawFn) {
+  if (ctx.canvas && typeof Path2D !== 'undefined') {
+    let map = shapeOutlineCache.get(el);
+    let path = map?.get(sig);
+    if (!path) {
+      path = new Path2D();
+      if (!map || map.size >= 3) {
+        map = new Map();
+        shapeOutlineCache.set(el, map);
+      }
+      map.set(sig, path);
+      drawFn(path, true);
+    }
+    ctx.stroke(path);
+    return true;
+  }
+  return false;
+}
+
 // Font stack for each family
 const FONT_STACKS = {
   5: '"Doodlefont", "Virgil", cursive',
@@ -486,7 +508,42 @@ export function renderElement(ctx, el, imageCache = {}) {
       } else {
         applyFill(ctx, el, poly);
       }
-      if (roughness > 0 && roundRadius > 0) {
+      if (ctx.canvas && typeof Path2D !== 'undefined') {
+        const sig = `${rx}:${ry}:${rw}:${rh}:${roundRadius}:${seed}:${roughness}`;
+        let map = shapeOutlineCache.get(el);
+        let path = map?.get(sig);
+        if (!path) {
+          path = new Path2D();
+          if (!map || map.size >= 3) {
+            map = new Map();
+            shapeOutlineCache.set(el, map);
+          }
+          map.set(sig, path);
+          if (roughness > 0 && roundRadius > 0) {
+            sketchyRoundedRect(path, rx, ry, rw, rh, roundRadius, seed, roughness, true);
+          } else if (roughness > 0) {
+            sketchyRect(path, rx, ry, rw, rh, seed, roughness, true);
+          } else if (roundRadius > 0) {
+            if (typeof path.roundRect === 'function') {
+              path.roundRect(rx, ry, rw, rh, roundRadius);
+            } else {
+              path.moveTo(rx + roundRadius, ry);
+              path.lineTo(rx + rw - roundRadius, ry);
+              path.quadraticCurveTo(rx + rw, ry, rx + rw, ry + roundRadius);
+              path.lineTo(rx + rw, ry + rh - roundRadius);
+              path.quadraticCurveTo(rx + rw, ry + rh, rx + rw - roundRadius, ry + rh);
+              path.lineTo(rx + roundRadius, ry + rh);
+              path.quadraticCurveTo(rx, ry + rh, rx, ry + rh - roundRadius);
+              path.lineTo(rx, ry + roundRadius);
+              path.quadraticCurveTo(rx, ry, rx + roundRadius, ry);
+              path.closePath();
+            }
+          } else {
+            path.rect(rx, ry, rw, rh);
+          }
+        }
+        ctx.stroke(path);
+      } else if (roughness > 0 && roundRadius > 0) {
         sketchyRoundedRect(ctx, rx, ry, rw, rh, roundRadius, seed, roughness);
       } else if (roughness > 0) {
         sketchyRect(ctx, rx, ry, rw, rh, seed, roughness);
@@ -524,7 +581,23 @@ export function renderElement(ctx, el, imageCache = {}) {
         return [cx + rx * Math.cos(t), cy + ry * Math.sin(t)];
       });
       applyFill(ctx, el, poly);
-      sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness);
+      if (ctx.canvas && typeof Path2D !== 'undefined') {
+        const sig = `${cx}:${cy}:${rx}:${ry}:${seed}:${roughness}`;
+        let map = shapeOutlineCache.get(el);
+        let path = map?.get(sig);
+        if (!path) {
+          path = new Path2D();
+          if (!map || map.size >= 3) {
+            map = new Map();
+            shapeOutlineCache.set(el, map);
+          }
+          map.set(sig, path);
+          sketchyEllipse(path, cx, cy, rx, ry, seed, roughness, true);
+        }
+        ctx.stroke(path);
+      } else {
+        sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness);
+      }
       break;
     }
 
@@ -629,7 +702,9 @@ export function renderElement(ctx, el, imageCache = {}) {
         }
         ctx.stroke();
       } else {
-        sketchyDiamond(ctx, dx, dy, rw, rh, seed, roughness, !isSharp && cr > 0);
+        if (!renderCachedShape(ctx, el, `${dx}:${dy}:${rw}:${rh}:${seed}:${roughness}:${!isSharp && cr > 0}`, (p, b) => sketchyDiamond(p, dx, dy, rw, rh, seed, roughness, !isSharp && cr > 0, b))) {
+          sketchyDiamond(ctx, dx, dy, rw, rh, seed, roughness, !isSharp && cr > 0);
+        }
       }
       break;
     }
@@ -641,7 +716,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getTriangleVertices(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyTriangle(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyTriangle(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyTriangle(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -652,7 +729,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getStarVertices(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyStar(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyStar(p, rx, ry, rw, rh, seed, roughness, 5, b))) {
+        sketchyStar(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -663,7 +742,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getHexagonVertices(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyHexagon(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyHexagon(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyHexagon(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -674,7 +755,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getOctagonVertices(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyOctagon(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyOctagon(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyOctagon(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -685,7 +768,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getParallelogramVertices(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyParallelogram(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyParallelogram(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyParallelogram(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -704,7 +789,9 @@ export function renderElement(ctx, el, imageCache = {}) {
         applyFill(ctx, el, poly);
         ctx.restore();
       }
-      sketchyCapsule(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyCapsule(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyCapsule(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -715,7 +802,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getCylinderPolygon(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyCylinder(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyCylinder(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyCylinder(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -726,7 +815,9 @@ export function renderElement(ctx, el, imageCache = {}) {
       const ry = h < 0 ? y + h : y;
       const poly = getCloudPolygon(rx, ry, rw, rh);
       applyFill(ctx, el, poly);
-      sketchyCloud(ctx, rx, ry, rw, rh, seed, roughness);
+      if (!renderCachedShape(ctx, el, `${rx}:${ry}:${rw}:${rh}:${seed}:${roughness}`, (p, b) => sketchyCloud(p, rx, ry, rw, rh, seed, roughness, b))) {
+        sketchyCloud(ctx, rx, ry, rw, rh, seed, roughness);
+      }
       break;
     }
 
@@ -861,9 +952,17 @@ export function renderElement(ctx, el, imageCache = {}) {
       ctx.textBaseline = 'top';
       ctx.textAlign = textAlign;
 
-      // Automatically wrap text to container width if defined and positive
+      // Automatically wrap text to container width if defined and positive (cached for high performance)
       const maxW = el.containerId && w && w > 0 ? w : 0;
-      const lines = maxW > 0 ? wrapText(ctx, text, maxW) : text.split('\n');
+      const textKey = `${text}:${fontSize}:${fontFamily}:${maxW}`;
+      let lines;
+      if (el._cachedTextKey === textKey && el._cachedTextLines) {
+        lines = el._cachedTextLines;
+      } else {
+        lines = maxW > 0 ? wrapText(ctx, text, maxW) : text.split('\n');
+        el._cachedTextLines = lines;
+        el._cachedTextKey = textKey;
+      }
       const lineH = fontSize * lineHeight;
       let baseX = x;
       if (textAlign === 'center') baseX = x + (w || 0) / 2;

@@ -61,6 +61,7 @@ export class HistoryManager {
     this._undo = [];
     this._redo = [];
     this._lastCommit = null;
+    this._lastElementsRef = null;
   }
 
   // ── Time Machine Support ──

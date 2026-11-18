@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, startTransition, useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, startTransition, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link2, Sparkles, X } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useFileActions } from './hooks/useFileActions';
@@ -7,15 +7,15 @@ import { DoodleDeskLogo } from './components/DoodleDeskLogo';
 import { StudioTopBar } from './components/StudioTopBar';
 import { MiniMapNavigator } from './components/MiniMapNavigator';
 import { LiveCollabChatPanel } from './components/LiveCollabChatPanel';
-import LiveCollabVoiceWidget from './components/LiveCollabVoiceWidget';
-import LiveCollabScreenShareViewer from './components/LiveCollabScreenShareViewer';
+const LiveCollabVoiceWidget = lazy(() => import('./components/LiveCollabVoiceWidget'));
+const LiveCollabScreenShareViewer = lazy(() => import('./components/LiveCollabScreenShareViewer'));
 import { WebFrameCard, extractElementIdFromLink } from './components/WebFrameCard';
 import { recognizeShape } from './utils/shapeRecognizer';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useLiveCollaboration } from './hooks/useLiveCollaboration';
 
 const PreferencesModal = lazy(() => import('./preferences/PreferencesModal').then((module) => ({ default: module.PreferencesModal })));
-import { UnsavedChangesModal } from './components/UnsavedChangesModal';
+const UnsavedChangesModal = lazy(() => import('./components/UnsavedChangesModal').then((module) => ({ default: module.UnsavedChangesModal })));
 const RecoveryPrompt = lazy(() => import('./components/RecoveryPrompt').then((module) => ({ default: module.RecoveryPrompt })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette })));
 const TemplateLibraryModal = lazy(() => import('./components/TemplateLibraryModal').then((module) => ({ default: module.TemplateLibraryModal })));
@@ -51,7 +51,7 @@ import { exportToCanvas } from './engine/exports.js';
 import { WelcomeScreen } from './engine/WelcomeScreen.jsx';
 import { CanvasExtraToolsDropdown } from './components/CanvasExtraToolsDropdown';
 import { CanvasTopRightSettings } from './components/CanvasTopRightSettings';
-import { CustomLaserPointer } from './components/CustomLaserPointer';
+const CustomLaserPointer = lazy(() => import('./components/CustomLaserPointer').then((module) => ({ default: module.CustomLaserPointer })));
 import { UpdateReceiverToast } from './components/UpdateReceiverToast';
 import { findShortcutAction, getShortcutBindings } from './engine/keyboardShortcuts';
 import { getWalkthroughFrameForElement } from './engine/scenarioWalkthrough.js';
@@ -167,10 +167,11 @@ export default function App() {
     formattedTime: '25:00',
   });
 
-  // Keep audio playing status synchronized
+  // Keep audio playing status synchronized without redundant re-renders
   useEffect(() => {
     const timer = setInterval(() => {
-      setIsAudioPlaying(typeof ambientAudio?.isPlaying === 'function' ? ambientAudio.isPlaying() : false);
+      const isPlaying = typeof ambientAudio?.isPlaying === 'function' ? ambientAudio.isPlaying() : false;
+      setIsAudioPlaying((prev) => (prev !== isPlaying ? isPlaying : prev));
     }, 500);
     return () => clearInterval(timer);
   }, []);
@@ -1736,6 +1737,47 @@ export default function App() {
     });
   }, [doodleAPI, isDrawToShapeActive]);
 
+  // Memoized action handlers to keep StudioTopBar and Canvas renders rock-solid
+  const handleOpenCommandPalette = useCallback(() => setIsCommandPaletteOpen(true), []);
+  const handleToggleTimeMachine = useCallback(() => setIsTimeMachineOpen((prev) => !prev), []);
+  const handleToggleFocusMode = useCallback(() => setIsFocusModeActive((prev) => !prev), []);
+  const handleTogglePresentation = useCallback(() => setIsPresentationActive((prev) => !prev), []);
+  const handleOpenLocalAiCopilot = useCallback(() => setIsLocalAiCopilotOpen(true), []);
+  const handleOpenCanvasQueryBar = useCallback(() => setIsCanvasQueryBarOpen(true), []);
+  const handleToggleMiniMap = useCallback(() => setIsMiniMapOpen((prev) => !prev), []);
+  const handleToggleLibrary = useCallback(() => setIsLibraryOpen((prev) => !prev), []);
+  const handleOpenLibrary = useCallback(() => setIsLibraryOpen(true), []);
+  const handleOpenHelp = useCallback(() => setIsHelpModalOpen(true), []);
+  const handleOpenColorPalette = useCallback(() => setIsColorPaletteOpen(true), []);
+  const handleToggleSoundStudio = useCallback(() => setIsSoundStudioOpen((prev) => !prev), []);
+  const handleOpenAutoLayout = useCallback(() => setIsAutoLayoutOpen(true), []);
+  const handleOpenWireframeToCode = useCallback(() => setIsWireframeToCodeOpen(true), []);
+  const handleOpenLiveChat = useCallback(() => setIsLiveChatOpen(true), []);
+  const handleOpenLiveCollab = useCallback(() => setIsLiveCollabModalOpen(true), []);
+
+  const handleNavigateBoardPortal = useCallback((targetWorkspaceId, targetFileId) => {
+    const targetWorkspace = workspaces.find((workspace) => workspace.id === targetWorkspaceId);
+    const targetFileExists = targetWorkspace?.files?.some((file) => file.id === targetFileId);
+    if (!targetFileExists) {
+      window.alert('This board portal points to a board that no longer exists.');
+      return;
+    }
+    saveActiveWorkspaceSnapshot(true);
+    switchFile(targetFileId, targetWorkspaceId);
+  }, [workspaces, saveActiveWorkspaceSnapshot, switchFile]);
+
+  const initialCanvasData = useMemo(() => ({
+    elements: activeFile?.elements || [],
+    files: activeFile?.binaryFiles || {},
+    appState: {
+      ...(activeFile?.appState || {}),
+      name: 'Untitled Doodle',
+      currentItemFontFamily: activeFile?.appState?.currentItemFontFamily ?? FONT_FAMILY?.Doodlefont ?? 5,
+      showWelcomeScreen: !(activeFile?.elements || []).some((element) => !element.isDeleted),
+      activeTool: { type: 'selection' },
+    },
+  }), [activeFile?.id]);
+
   return (
     <div
       className={`app-shell ${collabStatus !== 'disconnected' ? 'collaboration-active' : ''}`}
@@ -1761,16 +1803,16 @@ export default function App() {
         onExportPdf={handleExportPDF}
         onCopyToClipboard={handleCopyToClipboard}
         onPrint={handlePrintCanvas}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenTimeMachine={() => setIsTimeMachineOpen((prev) => !prev)}
-        onToggleFocusMode={() => setIsFocusModeActive((prev) => !prev)}
+        onOpenCommandPalette={handleOpenCommandPalette}
+        onOpenTimeMachine={handleToggleTimeMachine}
+        onToggleFocusMode={handleToggleFocusMode}
         isFocusModeActive={isFocusModeActive}
         onOpenTemplates={handleOpenTemplates}
-        onTogglePresentation={() => setIsPresentationActive((prev) => !prev)}
+        onTogglePresentation={handleTogglePresentation}
         onOpenPrototypePlayer={handleOpenPrototypePlayer}
-        onOpenLocalAiCopilot={() => setIsLocalAiCopilotOpen(true)}
-        onOpenCanvasQueryBar={() => setIsCanvasQueryBarOpen(true)}
-        onToggleMiniMap={() => setIsMiniMapOpen((prev) => !prev)}
+        onOpenLocalAiCopilot={handleOpenLocalAiCopilot}
+        onOpenCanvasQueryBar={handleOpenCanvasQueryBar}
+        onToggleMiniMap={handleToggleMiniMap}
         isMiniMapOpen={isMiniMapOpen}
         onRenameTitle={handleRenameTitle}
         activeWorkspace={activeWorkspace}
@@ -1802,7 +1844,7 @@ export default function App() {
         collabPeersCount={collaborators.size}
         collabRoomId={collabRoomId}
         discoveredRoom={collabDiscoveredRoom}
-        onOpenLiveCollab={() => setIsLiveCollabModalOpen(true)}
+        onOpenLiveCollab={handleOpenLiveCollab}
         onStartCollab={startCollabHosting}
         onJoinCollab={(roomId) => joinCollabSession(roomId)}
         onLeaveCollab={leaveCollabSession}
@@ -1810,7 +1852,7 @@ export default function App() {
         setMyProfile={setCollabProfile}
         collaborators={collaborators}
         chatMessages={collabChatMessages}
-        onOpenLiveChat={() => setIsLiveChatOpen(true)}
+        onOpenLiveChat={handleOpenLiveChat}
         sendChatMessage={sendCollabChatMessage}
         onFollowCollaborator={handleFollowCollaborator}
         voiceState={voiceState}
@@ -1825,8 +1867,8 @@ export default function App() {
         stopScreenShare={stopScreenShare}
         isScreenShareSupported={isScreenShareSupported}
         onToast={showToast}
-        onExportCode={() => setIsWireframeToCodeOpen(true)}
-        onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+        onExportCode={handleOpenWireframeToCode}
+        onToggleSoundStudio={handleToggleSoundStudio}
         isSoundStudioOpen={isSoundStudioOpen}
         isAudioPlaying={isAudioPlaying}
         pomodoroState={pomodoroState}
@@ -1844,7 +1886,7 @@ export default function App() {
       {/* Doodle Canvas Container with Canvas Style Class */}
       <div
         className={`canvas-container canvas-style-${canvasStyle} ${isDrawToShapeActive ? 'draw-to-shape-mode-active' : ''} ${isLaserActive ? 'laser-mode-active' : ''}`}
-        style={{ position: 'absolute', top: '38px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
+        style={{ position: 'absolute', top: 'var(--studio-topbar-height, 38px)', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
         <DoodleCanvas
           ref={doodleAPICallback}
@@ -1860,41 +1902,24 @@ export default function App() {
           renderEmbeddable={renderEmbeddable}
           isDrawToShapeActive={isDrawToShapeActive}
           onFreeDrawCommit={handleFreeDrawCommit}
-          onToggleLibrary={() => setIsLibraryOpen((prev) => !prev)}
-          onOpenLibrary={() => setIsLibraryOpen(true)}
+          onToggleLibrary={handleToggleLibrary}
+          onOpenLibrary={handleOpenLibrary}
           onOpenTemplates={handleOpenTemplates}
-          onOpenHelp={() => setIsHelpModalOpen(true)}
-          onOpenColorPalette={() => setIsColorPaletteOpen(true)}
+          onOpenHelp={handleOpenHelp}
+          onOpenColorPalette={handleOpenColorPalette}
           onUpdateComponentInstances={updateComponentInstancesOnBoards}
           workspaces={workspaces}
           workspaceId={activeWorkspaceId}
           fileId={activeFileId}
-          onNavigateBoardPortal={(targetWorkspaceId, targetFileId) => {
-            const targetWorkspace = workspaces.find(workspace => workspace.id === targetWorkspaceId);
-            const targetFileExists = targetWorkspace?.files?.some(file => file.id === targetFileId);
-            if (!targetFileExists) {
-              window.alert('This board portal points to a board that no longer exists.');
-              return;
-            }
-            saveActiveWorkspaceSnapshot(true);
-            switchFile(targetFileId, targetWorkspaceId);
-          }}
+          onNavigateBoardPortal={handleNavigateBoardPortal}
           canvasStyle={canvasStyle}
-          onToggleSoundStudio={() => setIsSoundStudioOpen((prev) => !prev)}
+          onToggleSoundStudio={handleToggleSoundStudio}
           isSoundStudioOpen={isSoundStudioOpen}
           isAudioPlaying={isAudioPlaying}
           pomodoroState={pomodoroState}
-          initialData={{
-            elements: activeFile?.elements || [],
-            files: activeFile?.binaryFiles || {},
-            appState: {
-              ...(activeFile?.appState || {}),
-              name: 'Untitled Doodle',
-              currentItemFontFamily: activeFile?.appState?.currentItemFontFamily ?? FONT_FAMILY?.Doodlefont ?? 5,
-              showWelcomeScreen: !(activeFile?.elements || []).some((element) => !element.isDeleted),
-              activeTool: { type: 'selection' },
-            },
-          }}
+          onOpenAutoLayout={handleOpenAutoLayout}
+          isAutoLayoutOpen={isAutoLayoutOpen}
+          initialData={initialCanvasData}
         >
           <WelcomeScreen>
             <WelcomeScreen.Center>
@@ -1906,23 +1931,12 @@ export default function App() {
               </WelcomeScreen.Center.Heading>
               <WelcomeScreen.Center.Menu>
                 <WelcomeScreen.Center.MenuItemLoadScene onSelect={handleOpen} />
-                <WelcomeScreen.Center.MenuItemHelp onSelect={() => setIsHelpModalOpen(true)} />
+                <WelcomeScreen.Center.MenuItemHelp onSelect={handleOpenHelp} />
               </WelcomeScreen.Center.Menu>
             </WelcomeScreen.Center>
           </WelcomeScreen>
         </DoodleCanvas>
       </div>
-
-      <button
-        type="button"
-        className="auto-layout-sidebar-trigger"
-        onClick={() => setIsAutoLayoutOpen(true)}
-        title="AI Smart Auto-Layout (Shift+A)"
-        aria-label="Open AI Smart Auto-Layout"
-        aria-expanded={isAutoLayoutOpen}
-      >
-        <Sparkles size={18} strokeWidth={1.8} />
-      </button>
 
       <CanvasExtraToolsDropdown
         doodleAPI={doodleAPI}
@@ -1993,7 +2007,9 @@ export default function App() {
       />
 
       {isLaserActive && (
-        <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} doodleAPI={doodleAPI} onPointerUpdate={handlePointerUpdate} />
+        <Suspense fallback={null}>
+          <CustomLaserPointer isActive={isLaserActive} onClose={handleToggleLaser} doodleAPI={doodleAPI} onPointerUpdate={handlePointerUpdate} />
+        </Suspense>
       )}
 
       <CanvasTopRightSettings
@@ -2043,27 +2059,31 @@ export default function App() {
       />
 
       {voiceState?.inVoice && (
-        <LiveCollabVoiceWidget
-          voiceState={voiceState}
-          voiceError={voiceError}
-          onToggleMute={toggleVoiceMute}
-          onToggleDeafen={toggleVoiceDeafen}
-          onLeaveVoice={leaveVoiceCall}
-          collaborators={collaborators}
-          isSharingScreen={screenShareState?.isSharing}
-          onToggleScreenShare={screenShareState?.isSharing ? stopScreenShare : startScreenShare}
-        />
+        <Suspense fallback={null}>
+          <LiveCollabVoiceWidget
+            voiceState={voiceState}
+            voiceError={voiceError}
+            onToggleMute={toggleVoiceMute}
+            onToggleDeafen={toggleVoiceDeafen}
+            onLeaveVoice={leaveVoiceCall}
+            collaborators={collaborators}
+            isSharingScreen={screenShareState?.isSharing}
+            onToggleScreenShare={screenShareState?.isSharing ? stopScreenShare : startScreenShare}
+          />
+        </Suspense>
       )}
 
       {/* Live Screen Share Studio Viewer & Canvas Annotation HUD */}
       {(screenShareState?.remoteStreams.size > 0 || screenShareState?.isSharing) && (
-        <LiveCollabScreenShareViewer
-          remoteStreams={screenShareState.remoteStreams}
-          localStream={screenShareState.localStream}
-          isSharingLocal={screenShareState.isSharing}
-          onStopSharingLocal={stopScreenShare}
-          onCaptureSnapshotToCanvas={handleCaptureScreenSnapshot}
-        />
+        <Suspense fallback={null}>
+          <LiveCollabScreenShareViewer
+            remoteStreams={screenShareState.remoteStreams}
+            localStream={screenShareState.localStream}
+            isSharingLocal={screenShareState.isSharing}
+            onStopSharingLocal={stopScreenShare}
+            onCaptureSnapshotToCanvas={handleCaptureScreenSnapshot}
+          />
+        </Suspense>
       )}
 
       {/* Command Palette (Ctrl+K) */}
@@ -2228,13 +2248,13 @@ export default function App() {
       /></Suspense>}
 
       {/* Unsaved Changes Confirmation Dialog */}
-      {showUnsavedModal && <UnsavedChangesModal
+      {showUnsavedModal && <Suspense fallback={null}><UnsavedChangesModal
         isOpen={showUnsavedModal}
         fileName={currentFileName}
         onSave={() => resolveUnsavedModal('save')}
         onDiscard={() => resolveUnsavedModal('discard')}
         onCancel={() => resolveUnsavedModal('cancel')}
-      />}
+      /></Suspense>}
 
       {/* Recovery Session Prompt Dialog */}
       {hasRecoverySession && <Suspense fallback={null}><RecoveryPrompt

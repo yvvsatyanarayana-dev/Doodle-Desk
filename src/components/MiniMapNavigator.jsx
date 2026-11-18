@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, X } from 'lucide-react';
 
 function MiniMapNavigatorComponent({ isOpen, onToggle, doodleAPI, canvasAPI }) {
@@ -6,6 +7,28 @@ function MiniMapNavigatorComponent({ isOpen, onToggle, doodleAPI, canvasAPI }) {
   const [elements, setElements] = useState([]);
   const [appState, setAppState] = useState(null);
   const [viewportSize, setViewportSize] = useState({ width: 800, height: 560 });
+  const [targetNode, setTargetNode] = useState(null);
+
+  useEffect(() => {
+    const locateTarget = () => {
+      const el = document.querySelector('.layer-ui__wrapper__footer-right');
+      if (el) {
+        setTargetNode(el);
+        return true;
+      }
+      return false;
+    };
+
+    if (!locateTarget()) {
+      const observer = new MutationObserver(() => {
+        if (locateTarget()) {
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      return () => observer.disconnect();
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen || !doodleAPI) return undefined;
@@ -132,93 +155,103 @@ function MiniMapNavigatorComponent({ isOpen, onToggle, doodleAPI, canvasAPI }) {
     requestAnimationFrame(animateTeleport);
   };
 
-  if (!isOpen) {
-    return (
-      <button className="minimap-toggle-btn" onClick={onToggle} title="Open Mini-Map Radar (M)">
-        <MapPin size={14} />
-      </button>
-    );
-  }
+  const toggleBtn = (
+    <button
+      type="button"
+      className={`doodle-feature-tool-button minimap-toggle-btn${isOpen ? ' is-active' : ''}`}
+      onClick={onToggle}
+      title={isOpen ? 'Close Mini-Map Radar (M)' : 'Open Mini-Map Radar (M)'}
+      aria-label="Toggle Mini-Map Radar"
+      aria-pressed={isOpen}
+    >
+      <MapPin size={18} strokeWidth={1.8} />
+    </button>
+  );
 
   return (
-    <div className="minimap-card">
-      <div className="minimap-header">
-        <div className="minimap-title-group">
-          <MapPin size={12} />
-          <span>Radar</span>
-        </div>
-        <button className="minimap-close-btn" onClick={onToggle} title="Close Mini-Map (M)">
-          <X size={12} />
-        </button>
-      </div>
+    <>
+      {targetNode ? createPortal(toggleBtn, targetNode) : toggleBtn}
+      {isOpen && (
+        <div className="minimap-card" role="dialog" aria-label="Mini-Map Radar">
+          <div className="minimap-header">
+            <div className="minimap-title-group">
+              <MapPin size={12} />
+              <span>Radar</span>
+            </div>
+            <button type="button" className="minimap-close-btn" onClick={onToggle} title="Close Mini-Map (M)" aria-label="Close Mini-Map">
+              <X size={12} />
+            </button>
+          </div>
 
-      <div
-        className="minimap-canvas"
-        style={{ width: `${MAP_WIDTH}px`, height: `${MAP_HEIGHT}px` }}
-        onClick={handleMapClick}
-      >
-        <svg width={MAP_WIDTH} height={MAP_HEIGHT} className="minimap-svg">
-          {elements.map((element) => {
-            const elementX = (element.x - sceneBounds.minX) * scale + mapOffsetX;
-            const elementY = (element.y - sceneBounds.minY) * scale + mapOffsetY;
-            const elementWidth = Math.max(Math.abs(element.width || 0) * scale, 3);
-            const elementHeight = Math.max(Math.abs(element.height || 0) * scale, 3);
-            let stroke = element.strokeColor && element.strokeColor !== 'transparent' ? element.strokeColor : '#94a3b8';
-            if (['#000000', '#1e1e1e', '#121212'].includes(stroke.toLowerCase())) stroke = '#cbd5e1';
-            const fill = element.backgroundColor && element.backgroundColor !== 'transparent'
-              ? element.backgroundColor
-              : 'rgba(255, 255, 255, 0.18)';
-            const rotation = element.angle
-              ? `rotate(${(element.angle * 180) / Math.PI} ${elementX + elementWidth / 2} ${elementY + elementHeight / 2})`
-              : undefined;
+          <div
+            className="minimap-canvas"
+            style={{ width: `${MAP_WIDTH}px`, height: `${MAP_HEIGHT}px` }}
+            onClick={handleMapClick}
+          >
+            <svg width={MAP_WIDTH} height={MAP_HEIGHT} className="minimap-svg">
+              {elements.map((element) => {
+                const elementX = (element.x - sceneBounds.minX) * scale + mapOffsetX;
+                const elementY = (element.y - sceneBounds.minY) * scale + mapOffsetY;
+                const elementWidth = Math.max(Math.abs(element.width || 0) * scale, 3);
+                const elementHeight = Math.max(Math.abs(element.height || 0) * scale, 3);
+                let stroke = element.strokeColor && element.strokeColor !== 'transparent' ? element.strokeColor : '#94a3b8';
+                if (['#000000', '#1e1e1e', '#121212'].includes(stroke.toLowerCase())) stroke = '#cbd5e1';
+                const fill = element.backgroundColor && element.backgroundColor !== 'transparent'
+                  ? element.backgroundColor
+                  : 'rgba(255, 255, 255, 0.18)';
+                const rotation = element.angle
+                  ? `rotate(${(element.angle * 180) / Math.PI} ${elementX + elementWidth / 2} ${elementY + elementHeight / 2})`
+                  : undefined;
 
-            if (element.type === 'ellipse') {
-              return <ellipse key={element.id} cx={elementX + elementWidth / 2} cy={elementY + elementHeight / 2} rx={Math.max(elementWidth / 2, 2)} ry={Math.max(elementHeight / 2, 2)} fill={fill} stroke={stroke} strokeWidth={1} transform={rotation} />;
-            }
-            if (element.type === 'diamond') {
-              const points = `${elementX + elementWidth / 2},${elementY} ${elementX + elementWidth},${elementY + elementHeight / 2} ${elementX + elementWidth / 2},${elementY + elementHeight} ${elementX},${elementY + elementHeight / 2}`;
-              return <polygon key={element.id} points={points} fill={fill} stroke={stroke} strokeWidth={1} transform={rotation} />;
-            }
-            if ((element.type === 'line' || element.type === 'arrow' || element.type === 'freedraw') && element.points?.length > 1) {
-              const points = element.points.map(([px, py]) => `${elementX + px * scale},${elementY + py * scale}`).join(' ');
-              return <polyline key={element.id} points={points} fill="none" stroke={stroke} strokeWidth={1} transform={rotation} />;
-            }
-            if (element.type === 'text') {
-              return <rect key={element.id} x={elementX} y={elementY} width={elementWidth} height={Math.max(2, Math.min(elementHeight, 4))} fill={stroke} opacity={0.65} rx={1} transform={rotation} />;
-            }
+                if (element.type === 'ellipse') {
+                  return <ellipse key={element.id} cx={elementX + elementWidth / 2} cy={elementY + elementHeight / 2} rx={Math.max(elementWidth / 2, 2)} ry={Math.max(elementHeight / 2, 2)} fill={fill} stroke={stroke} strokeWidth={1} transform={rotation} />;
+                }
+                if (element.type === 'diamond') {
+                  const points = `${elementX + elementWidth / 2},${elementY} ${elementX + elementWidth},${elementY + elementHeight / 2} ${elementX + elementWidth / 2},${elementY + elementHeight} ${elementX},${elementY + elementHeight / 2}`;
+                  return <polygon key={element.id} points={points} fill={fill} stroke={stroke} strokeWidth={1} transform={rotation} />;
+                }
+                if ((element.type === 'line' || element.type === 'arrow' || element.type === 'freedraw') && element.points?.length > 1) {
+                  const points = element.points.map(([px, py]) => `${elementX + px * scale},${elementY + py * scale}`).join(' ');
+                  return <polyline key={element.id} points={points} fill="none" stroke={stroke} strokeWidth={1} transform={rotation} />;
+                }
+                if (element.type === 'text') {
+                  return <rect key={element.id} x={elementX} y={elementY} width={elementWidth} height={Math.max(2, Math.min(elementHeight, 4))} fill={stroke} opacity={0.65} rx={1} transform={rotation} />;
+                }
 
-            const isFrame = element.type === 'frame';
-            const radius = element.roundness ? Math.min(elementWidth, elementHeight) * 0.18 : 1;
-            return (
+                const isFrame = element.type === 'frame';
+                const radius = element.roundness ? Math.min(elementWidth, elementHeight) * 0.18 : 1;
+                return (
+                  <rect
+                    key={element.id}
+                    x={elementX}
+                    y={elementY}
+                    width={elementWidth}
+                    height={elementHeight}
+                    fill={isFrame ? 'rgba(255,255,255,0.06)' : fill}
+                    stroke={isFrame ? 'rgba(255,255,255,0.35)' : stroke}
+                    strokeWidth={1}
+                    strokeDasharray={isFrame ? '2,2' : undefined}
+                    rx={isFrame ? 2 : radius}
+                    transform={rotation}
+                  />
+                );
+              })}
+
               <rect
-                key={element.id}
-                x={elementX}
-                y={elementY}
-                width={elementWidth}
-                height={elementHeight}
-                fill={isFrame ? 'rgba(255,255,255,0.06)' : fill}
-                stroke={isFrame ? 'rgba(255,255,255,0.35)' : stroke}
-                strokeWidth={1}
-                strokeDasharray={isFrame ? '2,2' : undefined}
-                rx={isFrame ? 2 : radius}
-                transform={rotation}
+                x={viewportRect.x}
+                y={viewportRect.y}
+                width={viewportRect.width}
+                height={viewportRect.height}
+                fill="rgba(56, 189, 248, 0.18)"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                rx={2}
               />
-            );
-          })}
-
-          <rect
-            x={viewportRect.x}
-            y={viewportRect.y}
-            width={viewportRect.width}
-            height={viewportRect.height}
-            fill="rgba(56, 189, 248, 0.18)"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            rx={2}
-          />
-        </svg>
-      </div>
-    </div>
+            </svg>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

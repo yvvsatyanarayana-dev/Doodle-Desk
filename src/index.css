@@ -1837,14 +1837,14 @@ textarea.font-mono {
 
 .doodle-feature-panel {
   z-index: 125;
-  right: auto;
-  left: 58px;
+  right: 58px;
+  left: auto;
 }
 
 @media (max-width: 600px) {
   .doodle-feature-panel {
-    right: auto;
-    left: 8px;
+    right: 8px;
+    left: auto;
     width: calc(100vw - 16px);
     max-width: calc(100vw - 16px);
   }
@@ -2078,87 +2078,6 @@ textarea.font-mono {
   margin-right: 5px;
 }
 
-.doodle-feature-tools-left {
-  position: fixed;
-  top: 92px;
-  left: 14px;
-  z-index: 101;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  pointer-events: auto;
-}
-
-.doodle-feature-tools-left .doodle-feature-tool-button,
-.data-diagram-trigger {
-  appearance: none !important;
-  box-sizing: border-box !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex: 0 0 36px !important;
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-  max-width: 36px !important;
-  max-height: 36px !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  background: #141417 !important;
-  border: 1px solid #27272a !important;
-  border-radius: 10px !important;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22) !important;
-  color: #f1f5f9 !important;
-  line-height: 1 !important;
-  cursor: pointer !important;
-  pointer-events: auto !important;
-}
-
-.doodle-feature-tools-left .doodle-feature-tool-button svg,
-.data-diagram-trigger svg {
-  display: block !important;
-  flex: 0 0 18px !important;
-  width: 18px !important;
-  height: 18px !important;
-  color: #f1f5f9 !important;
-  stroke: #f1f5f9 !important;
-}
-
-.doodle-feature-tools-left .doodle-feature-tool-button:hover,
-.data-diagram-trigger:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.data-diagram-trigger {
-  position: fixed;
-  right: 10px;
-  bottom: 96px;
-  z-index: 501;
-}
-
-[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button,
-[data-theme='light'] .data-diagram-trigger {
-  background: #ffffff !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08) !important;
-  color: #1e1e24 !important;
-}
-
-[data-theme='light'] .doodle-feature-tools-left .doodle-feature-tool-button svg,
-[data-theme='light'] .data-diagram-trigger svg {
-  color: #1e1e24 !important;
-  stroke: #1e1e24 !important;
-}
-
-@media (max-height: 520px) {
-  .doodle-feature-tools-left {
-    top: 86px;
-    gap: 4px;
-  }
-}
 
 .doodle-simulation-panel {
   position: absolute;
@@ -2446,6 +2365,7 @@ textarea.font-mono {
 
 .doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger,
 .doodle-canvas-root .layer-ui__wrapper__top-right .ToolIcon,
+.right-rail-hamburger-trigger,
 .auto-layout-sidebar-trigger,
 .canvas-settings-trigger,
 .canvas-settings-fallback button {
@@ -2458,13 +2378,14 @@ textarea.font-mono {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: all 0.15s ease !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   color: #f1f5f9 !important;
   cursor: pointer !important;
 }
 
 .doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger svg,
 .doodle-canvas-root .layer-ui__wrapper__top-right .ToolIcon svg,
+.right-rail-hamburger-trigger svg,
 .auto-layout-sidebar-trigger svg,
 .canvas-settings-trigger svg,
 .canvas-settings-fallback button svg {
@@ -2473,23 +2394,183 @@ textarea.font-mono {
   fill: none !important;
   width: 18px !important;
   height: 18px !important;
+  transition: transform 0.2s ease !important;
 }
 
 .doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger:hover,
 .doodle-canvas-root .layer-ui__wrapper__top-right .ToolIcon:hover,
+.right-rail-hamburger-trigger:hover,
 .auto-layout-sidebar-trigger:hover,
 .canvas-settings-trigger:hover,
 .canvas-settings-fallback button:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px) scale(1.03) !important;
 }
 
-.auto-layout-sidebar-trigger {
-  position: fixed;
-  top: 48px;
-  left: 14px;
-  z-index: 100;
-  padding: 0;
+/* Explicit vertical ordering for top-right tool rail:
+   0: Hamburger Menu Toggle Button
+   1: Smart components (Box)
+   2: Layers (Layers)
+   3: Library (BookOpen)
+   4: Settings button (Settings)
+   5: AI Smart Auto-Layout (Sparkles)
+   6: Simulate Connected Flow (CirclePlay)
+   7: Visual Change Tracking (GitCompareArrows)
+   8: Board Portal (PanelTop)
+*/
+.doodle-canvas-root .layer-ui__wrapper__top-right .right-rail-hamburger-trigger {
+  order: 0 !important;
+  z-index: 2 !important;
+}
+
+.doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger:nth-of-type(1) {
+  order: 1 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger:nth-of-type(2) {
+  order: 2 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger:nth-of-type(3) {
+  order: 3 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .canvas-settings-trigger {
+  order: 4 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .auto-layout-sidebar-trigger {
+  order: 5 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .simulation-trigger {
+  order: 6 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .change-tracking-trigger {
+  order: 7 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right .portal-trigger {
+  order: 8 !important;
+}
+
+/* Hamburger Drop Animation Keyframes */
+@keyframes doodleRightRailDropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Clean collapsed state: hide all icons below hamburger */
+.doodle-canvas-root .layer-ui__wrapper__top-right.is-collapsed > *:not(.right-rail-hamburger-trigger) {
+  display: none !important;
+}
+
+/* Expanded state: cascading drop-down animation */
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) > *:not(.right-rail-hamburger-trigger) {
+  animation: doodleRightRailDropIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+/* Stagger delays for cascading drop animation */
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .sidebar-trigger:nth-of-type(1) {
+  animation-delay: 0.02s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .sidebar-trigger:nth-of-type(2) {
+  animation-delay: 0.05s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .sidebar-trigger:nth-of-type(3) {
+  animation-delay: 0.08s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .canvas-settings-trigger {
+  animation-delay: 0.11s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .auto-layout-sidebar-trigger {
+  animation-delay: 0.14s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .simulation-trigger {
+  animation-delay: 0.17s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .change-tracking-trigger {
+  animation-delay: 0.20s !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__top-right:not(.is-collapsed) .portal-trigger {
+  animation-delay: 0.23s !important;
+}
+
+/* High-end floating tooltip badges for right-rail icons */
+.doodle-canvas-root .layer-ui__wrapper__top-right [data-tooltip] {
+  position: relative !important;
+}
+
+.doodle-canvas-root .layer-ui__wrapper__top-right [data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 9px);
+  top: 50%;
+  transform: translateY(-50%) translateX(6px) scale(0.96);
+  background: rgba(24, 24, 27, 0.94);
+  color: #f4f4f5;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1000;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.doodle-canvas-root .layer-ui__wrapper__top-right [data-tooltip]:hover::before {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0) scale(1);
+}
+
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__top-right [data-tooltip]::before {
+  background: rgba(255, 255, 255, 0.96);
+  color: #18181b;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Active / open panel state for top-right tools */
+.doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .right-rail-hamburger-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .auto-layout-sidebar-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .simulation-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .simulation-trigger[aria-pressed="true"],
+.doodle-canvas-root .layer-ui__wrapper__top-right .change-tracking-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .change-tracking-trigger[aria-expanded="true"],
+.doodle-canvas-root .layer-ui__wrapper__top-right .portal-trigger.is-active,
+.doodle-canvas-root .layer-ui__wrapper__top-right .portal-trigger[aria-expanded="true"],
+.doodle-canvas-root .layer-ui__wrapper__top-right .canvas-settings-trigger.active {
+  border-color: rgba(165, 180, 252, 0.55) !important;
+  background: #27272a !important;
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25), 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  color: #a5b4fc !important;
+}
+
+.doodle-canvas-root .layer-ui__wrapper__top-right .sidebar-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .right-rail-hamburger-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .auto-layout-sidebar-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .simulation-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .simulation-trigger[aria-pressed="true"] svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .change-tracking-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .change-tracking-trigger[aria-expanded="true"] svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .portal-trigger.is-active svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .portal-trigger[aria-expanded="true"] svg,
+.doodle-canvas-root .layer-ui__wrapper__top-right .canvas-settings-trigger.active svg {
+  color: #a5b4fc !important;
+  stroke: #a5b4fc !important;
 }
 
 .canvas-settings-fallback {
@@ -2534,81 +2615,111 @@ textarea.font-mono {
 }
 
 /* ==========================================================
-   BOTTOM-RIGHT: HELP BUTTON (?) PILL (MIRRORS LEFT PILLS)
+   BOTTOM-RIGHT FLOATING TOOL RAIL: MINIMAP, DATA DIAGRAM, HELP
+   Aligned with top-right tool rail (right: 14px, gap: 8px)
    ========================================================== */
 .doodle-canvas-root .layer-ui__wrapper__footer-right {
   position: absolute !important;
-  bottom: 50px !important;
-  right: 10px !important;
+  bottom: 16px !important;
+  right: 14px !important;
   top: auto !important;
   left: auto !important;
   z-index: 250 !important;
   pointer-events: none !important;
   display: flex !important;
+  flex-direction: column !important;
   align-items: center !important;
-  justify-content: center !important;
-  height: 34px !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  width: auto !important;
+  height: auto !important;
   margin: 0 !important;
   padding: 0 !important;
 }
 
-.doodle-canvas-root .layer-ui__wrapper__footer-right>* {
+.doodle-canvas-root .layer-ui__wrapper__footer-right > * {
   pointer-events: auto !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  height: 34px !important;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
-/* Help button pill in Dark Theme â€” identical height (34px), baseline (bottom: 50px), & radius (10px) as footer pills */
-.doodle-canvas-root .help-icon,
+/* Tool buttons in the bottom-right rail: MiniMap, DataDiagram, Help */
+.doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn,
+.doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger,
 .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon {
   position: static !important;
   top: auto !important;
   left: auto !important;
   right: auto !important;
   bottom: auto !important;
-  pointer-events: auto !important;
-  background: #141417 !important;
-  border-radius: 10px !important;
-  border: 1px solid #27272a !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
-  width: 34px !important;
-  min-width: 34px !important;
-  max-width: 34px !important;
-  height: 34px !important;
-  min-height: 34px !important;
-  max-height: 34px !important;
+  appearance: none !important;
+  box-sizing: border-box !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: all 0.15s ease !important;
-  color: #f1f5f9 !important;
-  cursor: pointer !important;
-  box-sizing: border-box !important;
-  margin: 0 !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  flex: 0 0 36px !important;
   padding: 0 !important;
+  margin: 0 !important;
+  background: #141417 !important;
+  border: 1px solid #27272a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  color: #f1f5f9 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  transition: all 0.15s ease !important;
 }
 
-.doodle-canvas-root .help-icon svg,
+/* Explicit vertical ordering for bottom-right rail: MiniMap (top), Data Diagram (middle), Help (bottom) */
+.doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn {
+  order: 1 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger {
+  order: 2 !important;
+}
+.doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon {
+  order: 3 !important;
+}
+
+/* SVG icons within bottom-right rail buttons */
+.doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn svg,
+.doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger svg,
 .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon svg {
+  display: block !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 18px !important;
   color: #f1f5f9 !important;
   stroke: #f1f5f9 !important;
   fill: none !important;
-  width: 17px !important;
-  height: 17px !important;
+  transition: stroke 0.15s ease, color 0.15s ease !important;
 }
 
-.doodle-canvas-root .help-icon:hover,
+/* Hover state */
+.doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn:hover,
+.doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger:hover,
 .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px) !important;
 }
 
-/* Help button in Light Theme â€” pure white card with visible dark icon */
-[data-theme='light'] .doodle-canvas-root .help-icon,
+/* Active / open panel state */
+.doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn.is-active,
+.doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger.is-active {
+  border-color: rgba(165, 180, 252, 0.55) !important;
+  background: #27272a !important;
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25), 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Light Theme support */
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger,
 [data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
@@ -2616,19 +2727,33 @@ textarea.font-mono {
   color: #1e1e24 !important;
 }
 
-[data-theme='light'] .doodle-canvas-root .help-icon svg,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn svg,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger svg,
 [data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon svg {
   color: #1e1e24 !important;
   stroke: #1e1e24 !important;
-  fill: none !important;
-  width: 17px !important;
-  height: 17px !important;
 }
 
-[data-theme='light'] .doodle-canvas-root .help-icon:hover,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn:hover,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger:hover,
 [data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .help-icon:hover {
   background: #f1f5f9 !important;
   border-color: rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(-1px) !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn.is-active,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger.is-active {
+  border-color: #6366f1 !important;
+  background: #ede9fe !important;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 4px 16px rgba(99, 102, 241, 0.15) !important;
+  color: #4f46e5 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .minimap-toggle-btn.is-active svg,
+[data-theme='light'] .doodle-canvas-root .layer-ui__wrapper__footer-right .data-diagram-trigger.is-active svg {
+  color: #4f46e5 !important;
+  stroke: #4f46e5 !important;
 }
 
 /* Hide top-right library button only when full modals are open, but KEEP bottom buttons visible */
@@ -3396,21 +3521,28 @@ textarea.font-mono {
   background: rgba(0, 0, 0, 0.2) !important;
 }
 
+/* Mobile Properties Container is hidden on desktop */
+.mobile-properties-container {
+  display: none !important;
+}
+
 /* Properties Panel Container */
 .doodle-canvas-root .selected-shape-actions,
 .doodle-canvas-root .App-menu_top__left .selected-shape-actions,
 .doodle-canvas-root .App-menu__left-wrapper {
   position: absolute !important;
-  top: 10px !important;
-  left: 10px !important;
-  bottom: auto !important;
-  max-height: calc(100% - 75px) !important;
+  top: 48px !important;
+  left: 14px !important;
+  bottom: 60px !important;
+  max-height: none !important;
   height: auto !important;
-  width: 204px !important;
+  width: auto !important;
   z-index: 150 !important;
   pointer-events: none !important;
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
@@ -3421,66 +3553,267 @@ textarea.font-mono {
   pointer-events: auto !important;
 }
 
+/* Floating Vertical Action Rail (Exact Excalidraw Parity from Image 2) */
+.doodle-canvas-root .doodle-action-rail {
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  flex: 0 0 42px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 5px 4px !important;
+  border-radius: 10px !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+  pointer-events: auto !important;
+  box-sizing: border-box !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-action-rail {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+.doodle-canvas-root .doodle-action-rail-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 7px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #a1a1aa !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.doodle-canvas-root .doodle-action-rail-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-action-rail-btn:hover {
+  background: #f1f5f9 !important;
+  color: #09090b !important;
+}
+
+.doodle-canvas-root .doodle-action-rail-btn.active,
+.doodle-canvas-root .doodle-action-rail-btn.is-open {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  color: #818cf8 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-action-rail-btn.active,
+[data-theme='light'] .doodle-canvas-root .doodle-action-rail-btn.is-open {
+  background: rgba(99, 102, 241, 0.1) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #4f46e5 !important;
+}
+
+.doodle-canvas-root .doodle-rail-delete-btn:hover {
+  background: rgba(244, 63, 94, 0.15) !important;
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  color: #fb7185 !important;
+}
+
+.doodle-canvas-root .doodle-action-rail-divider {
+  width: 22px !important;
+  height: 1px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  margin: 2px 0 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-action-rail-divider {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+.doodle-canvas-root .doodle-properties-bar-header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 4px !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 8px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-properties-bar-header {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.doodle-canvas-root .doodle-properties-bar-header .doodle-action-rail-btn {
+  width: 27px !important;
+  height: 27px !important;
+  min-width: 27px !important;
+  min-height: 27px !important;
+  border-radius: 6px !important;
+}
+
+.doodle-canvas-root .doodle-properties-bar-header .doodle-rail-swatch-box,
+.doodle-canvas-root .doodle-properties-bar-header .doodle-rail-bg-box {
+  width: 21px !important;
+  height: 21px !important;
+}
+
+.doodle-canvas-root .doodle-rail-swatch-box {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 5px !important;
+  border: 2px solid #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4) !important;
+}
+
+.doodle-canvas-root .doodle-rail-bg-box {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 5px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.doodle-canvas-root .doodle-rail-bg-box.is-transparent {
+  background-image: linear-gradient(45deg, #555 25%, transparent 25%),
+                    linear-gradient(-45deg, #555 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #555 75%),
+                    linear-gradient(-45deg, transparent 75%, #555 75%) !important;
+  background-size: 6px 6px !important;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0px !important;
+}
+
+/* Quick Popovers Beside Rail */
+.doodle-canvas-root .doodle-rail-flyout-popover {
+  width: 190px !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55) !important;
+  padding: 10px !important;
+  z-index: 160 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  animation: doodlePanelSlideIn 0.15s ease !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .doodle-rail-flyout-popover {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+.doodle-canvas-root .doodle-rail-popover-title {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #71717a !important;
+  letter-spacing: 0.05em !important;
+  margin-bottom: 2px !important;
+}
+
+.doodle-canvas-root .doodle-rail-popover-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 4px !important;
+}
+
+.doodle-canvas-root .doodle-rail-popover-btn {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  padding: 6px 2px !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: #d4d4d8 !important;
+  font-size: 9.5px !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+}
+
+.doodle-canvas-root .doodle-rail-popover-btn:hover {
+  background: rgba(99, 102, 241, 0.15) !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  color: #ffffff !important;
+}
+
+/* Sidebar Toggle Button */
 .doodle-canvas-root .doodle-properties-sidebar-toggle {
   position: relative !important;
-  left: 44px !important;
+  left: 0 !important;
   z-index: 152 !important;
   appearance: none !important;
   box-sizing: border-box !important;
   display: flex !important;
-  width: 36px !important;
-  min-width: 36px !important;
-  height: 36px !important;
-  min-height: 36px !important;
-  max-width: 36px !important;
-  max-height: 36px !important;
-  flex: 0 0 36px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-width: 32px !important;
+  max-height: 32px !important;
+  flex: 0 0 32px !important;
   align-items: center !important;
   justify-content: center !important;
   padding: 0 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 10px !important;
-  color: #e4e4e7 !important;
-  background: #141417 !important;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22) !important;
-  line-height: 1 !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  color: #a1a1aa !important;
+  background: transparent !important;
   cursor: pointer !important;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
+  transition: all 0.15s ease !important;
 }
 
 .doodle-canvas-root .doodle-properties-sidebar-toggle:hover,
 .doodle-canvas-root .doodle-properties-sidebar-toggle:focus-visible {
-  border-color: rgba(165, 180, 252, 0.55) !important;
-  background: #27272a !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }
 
-.doodle-canvas-root .doodle-properties-sidebar-toggle.is-open {
-  border-color: rgba(165, 180, 252, 0.4) !important;
-  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.12), 0 3px 12px rgba(0, 0, 0, 0.22) !important;
+.doodle-canvas-root .doodle-properties-sidebar-toggle.is-open,
+.doodle-canvas-root .doodle-properties-sidebar-toggle.active {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(99, 102, 241, 0.45) !important;
+  color: #818cf8 !important;
 }
 
 .doodle-canvas-root .doodle-properties-sidebar-toggle svg {
   display: block !important;
-  flex: 0 0 17px !important;
   width: 17px !important;
   height: 17px !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .doodle-properties-sidebar-toggle {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  color: #27272a !important;
-  background: rgba(255, 255, 255, 0.97) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1) !important;
+  color: #52525b !important;
 }
 
-[data-theme='light'] .doodle-canvas-root .doodle-properties-sidebar-toggle:hover,
-[data-theme='light'] .doodle-canvas-root .doodle-properties-sidebar-toggle:focus-visible {
-  background: #f4f4f5 !important;
+[data-theme='light'] .doodle-canvas-root .doodle-properties-sidebar-toggle:hover {
+  background: #f1f5f9 !important;
+  color: #09090b !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .doodle-properties-sidebar-toggle.is-open {
-  border-color: rgba(99, 102, 241, 0.38) !important;
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.08), 0 3px 12px rgba(0, 0, 0, 0.08) !important;
+  background: rgba(99, 102, 241, 0.1) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #4f46e5 !important;
 }
 
 /* Authentic Properties Panel Island */
@@ -3491,25 +3824,127 @@ textarea.font-mono {
   left: auto !important;
   bottom: auto !important;
   right: auto !important;
-  width: 204px !important;
+  width: 212px !important;
+  min-width: 212px !important;
+  max-width: 216px !important;
   height: auto !important;
-  max-height: calc(100% - 75px) !important;
-  background: #111113 !important;
-  border-radius: 12px !important;
+  max-height: 100% !important;
+  background: #18181b !important;
+  border-radius: 10px !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
-  padding: 12px 12px 14px 12px !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
+  padding: 8px 10px 10px 10px !important;
   box-sizing: border-box !important;
-  flex: 0 1 auto !important;
-  min-height: 0 !important;
+  flex: 0 0 auto !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  overscroll-behavior: contain !important;
+  color-scheme: dark !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent !important;
   pointer-events: auto !important;
   display: flex !important;
   flex-direction: column !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  animation: doodlePanelSlideIn 0.15s ease !important;
+}
+
+.doodle-canvas-root .App-menu__left *,
+.doodle-engine-container .App-menu__left * {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+@keyframes doodlePanelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.doodle-canvas-root .App-menu__left-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-bottom: 4px !important;
+  margin-bottom: 5px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+.doodle-canvas-root .App-menu__left-title {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #a1a1aa !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left-title {
+  color: #64748b !important;
+}
+
+.doodle-properties-collapse-btn {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  border-radius: 5px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  color: #71717a !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+  padding: 0 !important;
+}
+
+.doodle-properties-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .doodle-properties-collapse-btn:hover {
+  background: #f1f5f9 !important;
+  color: #09090b !important;
+}
+
+.doodle-canvas-root .App-menu__left-close-btn {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  color: #71717a !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+  padding: 0 !important;
+}
+
+.doodle-canvas-root .App-menu__left-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left-close-btn:hover {
+  background: #f1f5f9 !important;
+  color: #09090b !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .selected-shape-actions .Island,
@@ -3517,6 +3952,34 @@ textarea.font-mono {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.09) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  color-scheme: light !important;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent !important;
+}
+
+/* Custom sleek scrollbar for Properties sidebar */
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+  background: transparent !important;
+}
+
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar-track,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar-track {
+  background: transparent !important;
+  border: none !important;
+}
+
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-radius: 4px !important;
+  border: none !important;
+}
+
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb:hover,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35) !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb,
@@ -3528,19 +3991,23 @@ textarea.font-mono {
 
 .doodle-canvas-root .App-menu__left .panelColumn {
   width: 100% !important;
-  gap: 10px !important;
+  gap: 6px !important;
   display: flex !important;
   flex-direction: column !important;
 }
 
 .doodle-canvas-root .App-menu__left .control-label {
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  color: #f4f4f5 !important;
-  margin: 0 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #a1a1aa !important;
+  margin: 0 0 2px !important;
   text-transform: none !important;
   letter-spacing: normal !important;
   line-height: 1.2 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .control-label {
+  color: #4b5563 !important;
 }
 
 /* Authentic Individual Square Buttons */
@@ -3680,10 +4147,15 @@ textarea.font-mono {
 }
 
 .doodle-canvas-root .App-menu__left {
-  width: 204px !important;
-  max-width: 204px !important;
-  padding: 12px 12px 14px !important;
-  background: #111113 !important;
+  width: 212px !important;
+  min-width: 212px !important;
+  max-width: 220px !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  padding: 10px 12px 14px 12px !important;
+  background: #141417 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 12px !important;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
@@ -3691,44 +4163,103 @@ textarea.font-mono {
   -webkit-backdrop-filter: blur(16px) !important;
 }
 
+[data-theme='light'] .doodle-canvas-root .App-menu__left {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+}
+
 .doodle-canvas-root .App-menu__left .panelColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
 }
 
 .doodle-canvas-root .App-menu__left .control-label {
-  margin: 0 0 8px !important;
-  color: #f4f4f5 !important;
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  line-height: 1.3 !important;
+  margin: 0 0 4px !important;
+  color: #a1a1aa !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  line-height: 1.2 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .control-label {
+  color: #4b5563 !important;
 }
 
 .doodle-canvas-root .App-menu__left .color-picker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex-wrap: nowrap !important;
 }
 
 .doodle-canvas-root .App-menu__left .color-picker-swatch {
-  width: 26px !important;
-  height: 26px !important;
-  border-radius: 7px !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  border-radius: 5px !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16) !important;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+  cursor: pointer !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .color-picker-swatch {
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
 }
 
 .doodle-canvas-root .App-menu__left .color-picker-swatch:hover {
-  transform: translateY(-1px);
+  transform: scale(1.08) !important;
 }
 
 .doodle-canvas-root .App-menu__left .color-picker-swatch.active,
 .doodle-canvas-root .App-menu__left .color-picker-swatch[aria-checked='true'],
 .doodle-canvas-root .App-menu__left .color-picker-swatch:has(input:checked) {
-  box-shadow: 0 0 0 2px #16181d, 0 0 0 4px rgba(120, 104, 255, 0.85) !important;
+  box-shadow: 0 0 0 2px #18181b, 0 0 0 3.5px #818cf8 !important;
+  border-color: #818cf8 !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .color-picker-swatch.active,
+[data-theme='light'] .doodle-canvas-root .App-menu__left .color-picker-swatch[aria-checked='true'],
+[data-theme='light'] .doodle-canvas-root .App-menu__left .color-picker-swatch:has(input:checked) {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3.5px #6366f1 !important;
+  border-color: #6366f1 !important;
+}
+
+.doodle-canvas-root .doodle-swatch-transparent {
+  position: relative !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+.doodle-canvas-root .doodle-swatch-transparent-checkers {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background-image: linear-gradient(45deg, #71717a 25%, transparent 25%),
+                    linear-gradient(-45deg, #71717a 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #71717a 75%),
+                    linear-gradient(-45deg, transparent 75%, #71717a 75%) !important;
+  background-size: 6px 6px !important;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0px !important;
+}
+
+.doodle-canvas-root .App-menu__left .color-picker-custom-swatch {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.25) !important;
+  color: #a1a1aa !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .color-picker-custom-swatch {
+  background: #f8fafc !important;
+  border: 1px dashed rgba(0, 0, 0, 0.2) !important;
+  color: #64748b !important;
 }
 
 .doodle-canvas-root .App-menu__left .buttonList {
@@ -4045,13 +4576,18 @@ textarea.font-mono {
 /* Selected-object properties: compact dark Doodle Desk-style panel. */
 .doodle-canvas-root .App-menu__left-wrapper {
   position: absolute !important;
-  top: 10px !important;
-  left: 10px !important;
+  top: 48px !important;
+  left: 14px !important;
+  bottom: 60px !important;
   z-index: 150 !important;
-  width: 204px !important;
-  max-height: calc(100% - 20px) !important;
+  width: auto !important;
+  max-height: none !important;
   overflow: visible !important;
   pointer-events: none !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
 }
 
 .doodle-canvas-root .App-menu__left-wrapper > * {
@@ -4060,17 +4596,33 @@ textarea.font-mono {
 
 .doodle-canvas-root .App-menu__left {
   box-sizing: border-box !important;
-  width: 204px !important;
-  max-height: min(560px, calc(100dvh - 132px)) !important;
-  padding: 12px !important;
-  overflow-x: hidden !important;
+  width: 216px !important;
+  max-width: 224px !important;
+  max-height: 100% !important;
+  height: auto !important;
+  padding: 10px 12px 14px 12px !important;
   overflow-y: auto !important;
-  overscroll-behavior: contain !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
-  background: #17181b !important;
+  border-radius: 10px !important;
+  background: #18181b !important;
   color: #f4f4f5 !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
+@media (max-height: 720px) {
+  .doodle-canvas-root .App-menu__left {
+    padding: 8px 10px !important;
+  }
+  .doodle-canvas-root .App-menu__left .panelColumn {
+    gap: 6px !important;
+  }
+  .doodle-canvas-root .App-menu__left .control-label {
+    margin-bottom: 2px !important;
+    font-size: 11px !important;
+  }
 }
 
 .doodle-canvas-root .App-menu__left .panelColumn {
@@ -4251,6 +4803,10 @@ textarea.font-mono {
   height: 100%;
   align-items: center;
   gap: 8px;
+}
+
+.studio-mobile-undo-redo {
+  display: none !important;
 }
 
 .studio-topbar .app-no-drag,
@@ -4740,16 +5296,18 @@ textarea.font-mono {
 .doodle-canvas-root .App-menu__left-wrapper,
 .doodle-engine-container .App-menu__left-wrapper {
   position: absolute !important;
-  top: 10px !important;
-  left: 10px !important;
-  bottom: auto !important;
-  max-height: calc(100% - 75px) !important;
+  top: 48px !important;
+  left: 14px !important;
+  bottom: 60px !important;
+  max-height: none !important;
   height: auto !important;
-  width: 212px !important;
-  z-index: 150 !important;
+  width: auto !important;
+  z-index: 160 !important;
   pointer-events: none !important;
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
@@ -4768,30 +5326,37 @@ textarea.font-mono {
   left: auto !important;
   bottom: auto !important;
   right: auto !important;
-  width: 204px !important;
+  width: 212px !important;
+  min-width: 212px !important;
+  max-width: 216px !important;
   height: auto !important;
-  max-height: calc(100vh - 90px) !important;
-  background: #111113 !important;
-  border-radius: 12px !important;
+  max-height: 100% !important;
+  background: #18181b !important;
+  border-radius: 10px !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
-  padding: 10px 12px 14px 12px !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45) !important;
+  padding: 8px 10px 10px 10px !important;
   box-sizing: border-box !important;
-  flex: 0 1 auto !important;
+  flex: 0 0 auto !important;
   min-height: 0 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  overscroll-behavior: contain !important;
+  color-scheme: dark !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent !important;
   pointer-events: auto !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .App-menu__left,
 [data-theme='light'] .doodle-engine-container .App-menu__left {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.09) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+  color-scheme: light !important;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent !important;
 }
 
 /* Section layout */
@@ -4800,19 +5365,26 @@ textarea.font-mono {
   width: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 6px !important;
 }
 
 /* Control labels */
 .doodle-canvas-root .App-menu__left .control-label,
 .doodle-engine-container .App-menu__left .control-label {
   font-size: 11px !important;
-  font-weight: 600 !important;
-  color: #71717a !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.06em !important;
-  margin-bottom: 6px !important;
+  font-weight: 500 !important;
+  color: #a1a1aa !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  margin-bottom: 2px !important;
   display: block !important;
+  line-height: 1.2 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left .control-label,
+[data-theme='light'] .doodle-engine-container .App-menu__left .control-label {
+  color: #4b5563 !important;
 }
 
 /* Button row (buttonList) */
@@ -4820,9 +5392,26 @@ textarea.font-mono {
 .doodle-engine-container .App-menu__left .buttonList {
   display: flex !important;
   flex-wrap: wrap !important;
-  gap: 4px !important;
+  gap: 3px !important;
   padding: 0 !important;
   margin: 0 !important;
+}
+
+/* Fill pattern dedicated 6-button grid */
+.doodle-canvas-root .App-menu__left .doodle-fill-buttons-grid,
+.doodle-engine-container .App-menu__left .doodle-fill-buttons-grid {
+  display: grid !important;
+  grid-template-columns: repeat(6, 1fr) !important;
+  gap: 3px !important;
+  width: 100% !important;
+}
+
+.doodle-canvas-root .App-menu__left .doodle-fill-buttons-grid > button,
+.doodle-engine-container .App-menu__left .doodle-fill-buttons-grid > button {
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 25px !important;
+  padding: 0 !important;
 }
 
 /* Individual icon buttons in buttonList */
@@ -4836,10 +5425,11 @@ textarea.font-mono {
 .doodle-engine-container .App-menu__left .buttonList .ToolIcon,
 .doodle-engine-container .App-menu__left .buttonList .ToolIcon_type_radio,
 .doodle-engine-container .App-menu__left .buttonList .ToolIcon_type_button {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  border-radius: 7px !important;
+  flex: 1 1 0 !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  min-width: 20px !important;
+  border-radius: 5px !important;
   background: rgba(255, 255, 255, 0.04) !important;
   border: 1px solid rgba(255, 255, 255, 0.06) !important;
   display: flex !important;
@@ -4899,9 +5489,10 @@ textarea.font-mono {
 .doodle-canvas-root .App-menu__left .buttonList .ToolIcon_type_radio:checked + label,
 .doodle-engine-container .App-menu__left .buttonList .active,
 .doodle-engine-container .App-menu__left .buttonList .ToolIcon.active {
-  background: #3f3f46 !important;
-  color: #ffffff !important;
-  box-shadow: 0 0 0 1.5px #555555 !important;
+  background: rgba(99, 102, 241, 0.22) !important;
+  color: #c7d2fe !important;
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.3) !important;
 }
 
 .doodle-canvas-root .App-menu__left .buttonList .ToolIcon:has(input:checked) svg,
@@ -4909,8 +5500,8 @@ textarea.font-mono {
 .doodle-canvas-root .App-menu__left .buttonList [aria-checked='true'] svg,
 .doodle-canvas-root .App-menu__left .buttonList .active svg,
 .doodle-engine-container .App-menu__left .buttonList .active svg {
-  color: #ffffff !important;
-  stroke: #ffffff !important;
+  color: #c7d2fe !important;
+  stroke: #c7d2fe !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .App-menu__left .buttonList .ToolIcon:has(input:checked),
@@ -4922,9 +5513,10 @@ textarea.font-mono {
 .theme--light .doodle-canvas-root .App-menu__left .buttonList .active,
 .theme--light .doodle-engine-container .App-menu__left .buttonList .active,
 .theme--light .doodle-engine-container .App-menu__left .buttonList .ToolIcon.active {
-  background: #e8e8e8 !important;
-  color: #111111 !important;
-  box-shadow: 0 0 0 1.5px #555555 !important;
+  background: #e0e7ff !important;
+  color: #4338ca !important;
+  border-color: #c7d2fe !important;
+  box-shadow: inset 0 0 0 1px rgba(67, 56, 202, 0.2) !important;
 }
 
 [data-theme='light'] .doodle-canvas-root .App-menu__left .buttonList .ToolIcon:has(input:checked) svg,
@@ -4936,8 +5528,8 @@ textarea.font-mono {
 .theme--light .doodle-canvas-root .App-menu__left .buttonList .active svg,
 .theme--light .doodle-engine-container .App-menu__left .buttonList .active svg,
 .theme--light .doodle-engine-container .App-menu__left .buttonList .ToolIcon.active svg {
-  color: #111111 !important;
-  stroke: #111111 !important;
+  color: #4338ca !important;
+  stroke: #4338ca !important;
 }
 
 /* ToolIcon__icon inner wrapper */
@@ -5108,21 +5700,42 @@ textarea.font-mono {
 .doodle-canvas-root .App-menu__left input[type='range'],
 .doodle-engine-container .App-menu__left input[type='range'] {
   width: 100% !important;
-  accent-color: #555555 !important;
+  accent-color: #6366f1 !important;
   cursor: pointer !important;
   border-radius: 4px !important;
+  height: 4px !important;
+  margin: 2px 0 !important;
 }
 
 /* Scrollbar in properties panel */
 .doodle-canvas-root .App-menu__left::-webkit-scrollbar,
 .doodle-engine-container .App-menu__left::-webkit-scrollbar {
-  width: 4px !important;
+  width: 5px !important;
+  height: 5px !important;
+  background: transparent !important;
+}
+
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar-track,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar-track {
+  background: transparent !important;
+  border: none !important;
 }
 
 .doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb,
 .doodle-engine-container .App-menu__left::-webkit-scrollbar-thumb {
-  background: #3f3f46 !important;
+  background: rgba(255, 255, 255, 0.2) !important;
   border-radius: 4px !important;
+  border: none !important;
+}
+
+.doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb:hover,
+.doodle-engine-container .App-menu__left::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35) !important;
+}
+
+[data-theme='light'] .doodle-canvas-root .App-menu__left::-webkit-scrollbar-thumb,
+[data-theme='light'] .doodle-engine-container .App-menu__left::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2) !important;
 }
 
 /* ================================================================
@@ -5227,7 +5840,7 @@ textarea.font-mono {
   }
 
   .doodle-canvas-root .App-menu__left {
-    max-height: calc(100vh - 122px) !important;
+    max-height: 100% !important;
   }
 
   /* Modals on tablets & mobile */
@@ -5268,20 +5881,9 @@ textarea.font-mono {
 }
 
 @media (max-width: 600px) {
-  .data-diagram-trigger {
-    right: 8px;
-    bottom: 96px;
-  }
-
+  .doodle-canvas-root .layer-ui__wrapper__footer-right,
   .minimap-card {
-    right: 8px !important;
-    bottom: 142px !important;
-    max-width: calc(100vw - 16px) !important;
-  }
-
-  .minimap-toggle-btn {
-    right: 8px !important;
-    bottom: 142px !important;
+    display: none !important;
   }
 
   .cmd-palette-modal {
@@ -5291,10 +5893,6 @@ textarea.font-mono {
 }
 
 @media (max-width: 520px) {
-  .data-diagram-trigger {
-    right: 8px;
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 46px);
-  }
 
   .studio-topbar {
     padding: 0 6px !important;
@@ -6782,9 +7380,6 @@ textarea.font-mono {
    4. FLOATING MINI-MAP NAVIGATOR
    ========================================================================== */
 .minimap-toggle-btn {
-  position: absolute;
-  bottom: 142px;
-  right: 10px;
   width: 36px;
   height: 36px;
   border-radius: 10px;
@@ -6811,30 +7406,30 @@ textarea.font-mono {
   background: #1e1e24;
   color: rgba(255, 255, 255, 0.9);
   border-color: rgba(255, 255, 255, 0.3);
-  transform: scale(1.05);
 }
 
 .minimap-card {
-  position: absolute;
-  bottom: 142px;
-  right: 10px;
-  background: #141417;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 8px;
-  z-index: 500;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  user-select: none;
+  position: absolute !important;
+  bottom: 16px !important;
+  right: 58px !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  z-index: 500 !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  max-width: calc(100vw - 75px) !important;
+  animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
 }
 
 [data-theme='light'] .minimap-card {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1) !important;
 }
 
 .minimap-header {
@@ -7334,6 +7929,7 @@ body,
 .canvas-container {
   min-width: 0;
   min-height: 0;
+  contain: layout size;
 }
 
 .modal-overlay {
@@ -9756,9 +10352,12 @@ body,
     display: none !important;
   }
 
-  .studio-doc-divider,
-  .studio-doc-info {
+  .studio-btn-label {
     display: none !important;
+  }
+
+  .studio-doc-name {
+    max-width: clamp(70px, 16vw, 130px) !important;
   }
 
   .studio-topbar-left {
@@ -9829,12 +10428,13 @@ body,
   .doodle-canvas-root .App-menu_top__left .selected-shape-actions,
   .doodle-canvas-root .App-menu__left-wrapper {
     left: 6px !important;
-    max-height: calc(100dvh - 100px) !important;
+    bottom: max(56px, calc(env(safe-area-inset-bottom) + 52px)) !important;
+    max-height: none !important;
   }
 
   .doodle-canvas-root .App-menu__left,
   .doodle-canvas-root .selected-shape-actions .Island {
-    max-height: calc(100dvh - 100px) !important;
+    max-height: 100% !important;
   }
 
   .doodle-canvas-root .layer-ui__wrapper__top-right {
@@ -9842,21 +10442,10 @@ body,
     gap: 6px !important;
   }
 
-  .doodle-canvas-root .layer-ui__wrapper__footer-left {
-    left: 6px !important;
-    bottom: max(10px, env(safe-area-inset-bottom)) !important;
-    width: min(204px, calc(100vw - 60px)) !important;
-  }
-
-  .doodle-canvas-root .layer-ui__wrapper__footer-right {
-    right: 8px !important;
-    bottom: max(10px, env(safe-area-inset-bottom)) !important;
-  }
-
-  .minimap-card,
-  .minimap-toggle-btn {
-    right: 8px !important;
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 92px) !important;
+  .doodle-canvas-root .layer-ui__wrapper__footer-left,
+  .doodle-canvas-root .layer-ui__wrapper__footer-right,
+  .minimap-card {
+    display: none !important;
   }
 
   .presentation-top-bar {
@@ -9881,11 +10470,26 @@ body,
     display: none !important;
   }
 
+  .studio-topbar-center {
+    display: none !important;
+  }
+
   .studio-topbar-left {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .studio-workspace-pill {
+    max-width: clamp(68px, 22vw, 100px) !important;
+  }
+
+  .studio-doc-name {
+    max-width: clamp(55px, 20vw, 84px) !important;
   }
 
   .studio-topbar-right {
+    flex: 0 0 auto;
     gap: 2px;
   }
 
@@ -10039,9 +10643,13 @@ body,
   }
 
   .doodle-canvas-root .selected-shape-actions,
-  .doodle-canvas-root .App-menu__left-wrapper,
+  .doodle-canvas-root .App-menu__left-wrapper {
+    bottom: 56px !important;
+    max-height: none !important;
+  }
+
   .doodle-canvas-root .App-menu__left {
-    max-height: calc(100dvh - 82px) !important;
+    max-height: 100% !important;
   }
 }
 
@@ -12488,3 +13096,1207 @@ label.force-tool-unselected,
     padding: 2px 3px !important;
   }
 }
+
+/* ==========================================================================
+   ULTRA-PROFESSIONAL RESPONSIVE DESIGN MASTER SYSTEM (MOBILE / TABLET / DESKTOP)
+   ========================================================================== */
+
+:root {
+  --studio-topbar-height: 38px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Global Viewport Resiliency & Inertial Touch Scrolling */
+html,
+body,
+#root,
+.app-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Base Topbar Safe Margins */
+.studio-topbar {
+  padding-left: max(8px, var(--safe-left)) !important;
+  padding-right: max(8px, var(--safe-right)) !important;
+}
+
+/* Canvas Toolbar Fluid & Touch Scrolling */
+.doodle-canvas-root .App-toolbar-container {
+  max-width: 100vw !important;
+  padding: 0 max(8px, var(--safe-left)) 0 max(8px, var(--safe-right)) !important;
+  box-sizing: border-box !important;
+}
+
+.doodle-canvas-root .App-toolbar {
+  max-width: calc(100vw - 16px) !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+}
+
+.doodle-canvas-root .App-toolbar::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Universal Modal & Dialog Viewport Adaptation */
+.modal-overlay,
+.studio-modal-backdrop,
+.interactive-table-flashcards-overlay {
+  padding: max(12px, var(--safe-top)) max(10px, var(--safe-right)) max(12px, var(--safe-bottom)) max(10px, var(--safe-left)) !important;
+  min-height: 100dvh !important;
+  box-sizing: border-box !important;
+}
+
+.modal-container,
+.pref-modal-content,
+.template-modal-container,
+.sticky-notes-modal-content,
+.color-palette-modal-content,
+.wireframe-modal-content,
+.insert-doc-modal-content,
+.ambient-sound-modal-content,
+.cmd-palette-box,
+.mermaid-modal,
+.smart-auto-layout-modal-container,
+.diagram-health-modal,
+.prototype-player-modal,
+.sim-center-modal,
+.plugins-modal,
+.local-sync-modal,
+.language-studio-modal,
+.studio-modal-card,
+.interactive-table-flashcards-modal,
+.doodle-help-window {
+  max-width: min(100%, calc(100vw - 20px)) !important;
+  max-height: min(100%, calc(100dvh - 20px)) !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Breakpoint: Tablets & Laptops (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .studio-search-text {
+    display: none !important;
+  }
+
+  .studio-capsule-search {
+    width: 32px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+
+  .studio-doc-name {
+    max-width: clamp(75px, 14vw, 130px) !important;
+  }
+
+  .studio-workspace-pill {
+    max-width: clamp(80px, 16vw, 140px) !important;
+  }
+}
+
+/* Breakpoint: Small Tablets, iPads & Foldables (max-width: 768px) */
+@media (max-width: 768px) {
+  .studio-btn-label {
+    display: none !important;
+  }
+
+  .studio-action-btn {
+    padding: 5px 7px !important;
+  }
+
+  .studio-collab-capsule {
+    padding: 2px 4px !important;
+    gap: 3px !important;
+  }
+
+  .studio-collab-capsule-seg {
+    padding: 3px 6px !important;
+  }
+
+  /* Mobile Properties UI (Excalidraw-Parity Quick Bar & Bottom Sheet) */
+  .doodle-canvas-root .App-menu__left-wrapper {
+    display: none !important;
+  }
+
+  .mobile-properties-container {
+    display: block !important;
+  }
+
+  /* Dock Main Toolbar at Bottom on Mobile for thumb ergonomics */
+  .doodle-canvas-root .App-toolbar-container {
+    position: fixed !important;
+    top: auto !important;
+    bottom: max(10px, var(--safe-bottom, env(safe-area-inset-bottom, 10px))) !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 auto !important;
+    z-index: 200 !important;
+    pointer-events: none !important;
+  }
+
+  .doodle-canvas-root .App-toolbar-container > .App-toolbar {
+    pointer-events: auto !important;
+    margin: 0 auto !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+    border-radius: 12px !important;
+    background: #141417 !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  }
+
+  [data-theme='light'] .doodle-canvas-root .App-toolbar-container > .App-toolbar {
+    background: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12) !important;
+  }
+
+  .canvas-pan-hint {
+    display: none !important;
+  }
+
+  .ToolIcon__keybinding {
+    display: none !important;
+  }
+
+  /* Mobile Canvas: Hide floating desktop corner widgets for Excalidraw-grade clean canvas */
+  .doodle-canvas-root .layer-ui__wrapper__footer-left,
+  .layer-ui__wrapper__footer-left,
+  .doodle-footer-left,
+  .doodle-canvas-root .layer-ui__wrapper__footer-right,
+  .layer-ui__wrapper__footer-right,
+  .minimap-card,
+  .doodle-feature-tools-left {
+    display: none !important;
+  }
+
+  /* Header Mobile Undo & Redo Controls */
+  .studio-mobile-undo-redo {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+  }
+
+  .studio-mobile-undo-redo .studio-action-btn {
+    padding: 4px 6px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+  }
+
+  /* Floating Deck Adjustments */
+  .bottom-decks-dock {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    right: auto !important;
+    max-width: calc(100vw - 16px) !important;
+    bottom: calc(max(10px, var(--safe-bottom)) + 58px) !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  .canvas-settings-trigger,
+  .canvas-settings-fallback {
+    top: calc(var(--studio-topbar-height, 38px) + 10px) !important;
+    right: max(8px, var(--safe-right)) !important;
+  }
+}
+
+/* Breakpoint: Mobile Phones (max-width: 600px) */
+@media (max-width: 600px) {
+  /* Scale Canvas Toolbar Tools for Mobile Touch */
+  .doodle-canvas-root .App-toolbar {
+    padding: 2px 3px !important;
+    border-radius: 10px !important;
+  }
+
+  .doodle-canvas-root .App-toolbar .ToolIcon,
+  .doodle-canvas-root .App-toolbar button,
+  .doodle-canvas-root .App-toolbar label {
+    width: 31px !important;
+    height: 31px !important;
+    border-radius: 7px !important;
+  }
+
+  .doodle-canvas-root .App-toolbar .ToolIcon__icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .doodle-canvas-root .App-toolbar-content {
+    gap: 1.5px !important;
+  }
+
+  /* Compact Floating Side Triggers */
+  .auto-layout-sidebar-trigger,
+  .canvas-settings-trigger,
+  .canvas-settings-fallback button {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+  }
+
+  .auto-layout-sidebar-trigger svg,
+  .canvas-settings-trigger svg,
+  .canvas-settings-fallback button svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Full Screen Sidebars on Mobile */
+  .settings-sidebar-panel,
+  .library-sidebar-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    top: var(--studio-topbar-height, 38px) !important;
+  }
+
+  /* Single Column Card Layouts */
+  .templates-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .template-create-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .diagram-audit-summary {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Command Palette Mobile Fit */
+  .cmd-palette-box {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    height: min(420px, calc(100dvh - 24px)) !important;
+    max-height: calc(100dvh - 24px) !important;
+  }
+
+  .cmd-item-shortcut {
+    display: none !important;
+  }
+
+  /* Mobile Input Text Size (prevents iOS Safari focus zoom) */
+  input[type="text"],
+  input[type="search"],
+  input[type="password"],
+  input[type="email"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Modal Containers tighter margins on mobile */
+  .modal-container,
+  .pref-modal-content,
+  .template-modal-container,
+  .sticky-notes-modal-content,
+  .color-palette-modal-content,
+  .wireframe-modal-content,
+  .insert-doc-modal-content,
+  .ambient-sound-modal-content,
+  .mermaid-modal,
+  .smart-auto-layout-modal-container,
+  .diagram-health-modal,
+  .prototype-player-modal,
+  .sim-center-modal,
+  .plugins-modal,
+  .local-sync-modal,
+  .language-studio-modal,
+  .studio-modal-card,
+  .interactive-table-flashcards-modal,
+  .doodle-help-window {
+    max-width: calc(100vw - 12px) !important;
+    max-height: calc(100dvh - 12px) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+  }
+
+  .studio-modal-header {
+    padding: 10px 12px !important;
+  }
+
+  .studio-modal-body {
+    padding: 12px !important;
+  }
+
+  .studio-modal-footer {
+    padding: 10px 12px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
+/* Breakpoint: Narrow Smartphones (max-width: 420px) */
+@media (max-width: 420px) {
+  .studio-topbar-left {
+    gap: 3px !important;
+  }
+
+  .studio-workspace-pill {
+    max-width: 74px !important;
+    padding: 2px 4px !important;
+  }
+
+  .studio-doc-name {
+    max-width: 58px !important;
+  }
+
+  .studio-doc-divider {
+    display: none !important;
+  }
+
+  .studio-action-btn {
+    padding: 4px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+  }
+
+  .studio-win-btn {
+    width: 28px !important;
+  }
+
+  .doodle-canvas-root .App-toolbar .ToolIcon,
+  .doodle-canvas-root .App-toolbar button,
+  .doodle-canvas-root .App-toolbar label {
+    width: 29px !important;
+    height: 29px !important;
+  }
+}
+
+/* ==========================================================
+   MOBILE WHITEBOARD: QUICK PROPERTIES BAR & BOTTOM SHEET
+   (Excalidraw Mobile Parity)
+   ========================================================== */
+.mobile-properties-quick-bar {
+  position: fixed !important;
+  bottom: max(62px, calc(var(--safe-bottom, 10px) + 52px)) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 6px !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+  z-index: 250 !important;
+  pointer-events: auto !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+[data-theme='light'] .mobile-properties-quick-bar {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+.mobile-quick-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #cbd5e1 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transition: all 0.12s ease !important;
+  box-sizing: border-box !important;
+}
+
+.mobile-quick-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.mobile-quick-btn.active {
+  background: rgba(120, 104, 255, 0.28) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(164, 148, 255, 0.4) !important;
+}
+
+[data-theme='light'] .mobile-quick-btn {
+  color: #334155 !important;
+}
+
+[data-theme='light'] .mobile-quick-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .mobile-quick-btn.active {
+  background: #e0e7ff !important;
+  color: #4338ca !important;
+  box-shadow: inset 0 0 0 1px #818cf8 !important;
+}
+
+.mobile-swatch-preview {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  display: block !important;
+}
+
+.mobile-swatch-preview.is-transparent {
+  background-image: repeating-linear-gradient(45deg, #27272a 25%, transparent 25%, transparent 75%, #27272a 75%, #27272a),
+                    repeating-linear-gradient(45deg, #27272a 25%, #18181b 25%, #18181b 75%, #27272a 75%, #27272a) !important;
+  background-position: 0 0, 4px 4px !important;
+  background-size: 8px 8px !important;
+}
+
+[data-theme='light'] .mobile-swatch-preview.is-transparent {
+  background-image: repeating-linear-gradient(45deg, #e2e8f0 25%, transparent 25%, transparent 75%, #e2e8f0 75%, #e2e8f0),
+                    repeating-linear-gradient(45deg, #e2e8f0 25%, #ffffff 25%, #ffffff 75%, #e2e8f0 75%, #e2e8f0) !important;
+}
+
+.mobile-quick-divider {
+  width: 1px !important;
+  height: 20px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  margin: 0 2px !important;
+  flex-shrink: 0 !important;
+}
+
+[data-theme='light'] .mobile-quick-divider {
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Mobile Actions Popover (Layers & Quick Colors) */
+.mobile-actions-popover {
+  position: fixed !important;
+  bottom: max(112px, calc(var(--safe-bottom, 10px) + 102px)) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65) !important;
+  padding: 10px 12px !important;
+  width: min(290px, calc(100vw - 24px)) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  z-index: 260 !important;
+  pointer-events: auto !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+/* Downward pointer beak (triangle) pointing to toolbar button */
+.mobile-actions-popover::after {
+  content: '' !important;
+  position: absolute !important;
+  bottom: -6px !important;
+  left: var(--beak-left, 50%) !important;
+  transform: translateX(-50%) rotate(45deg) !important;
+  width: 12px !important;
+  height: 12px !important;
+  background: #141417 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  pointer-events: none !important;
+  z-index: 265 !important;
+}
+
+[data-theme='light'] .mobile-actions-popover {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme='light'] .mobile-actions-popover::after {
+  background: #ffffff !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Excalidraw Mobile Properties Popover (Exact Match to Reference) */
+.mobile-properties-popover {
+  width: 140px !important;
+  min-width: 140px !important;
+  max-width: 140px !important;
+  padding: 10px 10px 12px !important;
+  border-radius: 10px !important;
+  background: #16181d !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65) !important;
+  overflow: visible !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  box-sizing: border-box !important;
+}
+
+.mobile-properties-popover::after {
+  background: #16181d !important;
+}
+
+.mobile-properties-popover::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+[data-theme='light'] .mobile-properties-popover {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme='light'] .mobile-properties-popover::after {
+  background: #ffffff !important;
+}
+
+.mobile-properties-popover .mobile-popover-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-height: min(420px, calc(100vh - 180px)) !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.mobile-properties-popover .mobile-popover-content::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.mobile-properties-popover .mobile-popover-item {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.mobile-properties-popover .mobile-popover-label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  margin: 0 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.2 !important;
+}
+
+[data-theme='light'] .mobile-properties-popover .mobile-popover-label {
+  color: #4b5563 !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 5px !important;
+  width: 100% !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group.mobile-popover-fontsize-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 4px !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group .ToolIcon {
+  width: 100% !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  transition: all 0.12s ease !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group .ToolIcon svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group .ToolIcon:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.mobile-properties-popover .mobile-popover-btn-group .ToolIcon.active {
+  background: rgba(99, 102, 241, 0.22) !important;
+  color: #a5b4fc !important;
+  border: 1.5px solid rgba(129, 140, 248, 0.7) !important;
+}
+
+[data-theme='light'] .mobile-properties-popover .mobile-popover-btn-group .ToolIcon {
+  background: #f4f4f5 !important;
+  border: 1px solid transparent !important;
+  color: #18181b !important;
+}
+
+[data-theme='light'] .mobile-properties-popover .mobile-popover-btn-group .ToolIcon:hover {
+  background: #e4e4e7 !important;
+}
+
+[data-theme='light'] .mobile-properties-popover .mobile-popover-btn-group .ToolIcon.active {
+  background: #ececfd !important;
+  color: #312e81 !important;
+  border: 1.5px solid #818cf8 !important;
+}
+
+/* Opacity slider inside mobile popover */
+.mobile-popover-range {
+  width: 100% !important;
+  height: 3px !important;
+  accent-color: #818cf8 !important;
+  cursor: pointer !important;
+  margin: 3px 0 0 !important;
+  border-radius: 2px !important;
+}
+
+.mobile-popover-range-labels {
+  display: flex !important;
+  justify-content: space-between !important;
+  font-size: 10px !important;
+  color: #94a3b8 !important;
+  margin-top: 2px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+}
+
+[data-theme='light'] .mobile-popover-range-labels {
+  color: #9ca3af !important;
+}
+
+.mobile-popover-title {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #a1a1aa !important;
+  margin: 0 0 2px !important;
+}
+
+[data-theme='light'] .mobile-popover-title {
+  color: #64748b !important;
+}
+
+.mobile-popover-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 6px !important;
+}
+
+.mobile-popover-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+  padding: 0 !important;
+}
+
+.mobile-popover-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.mobile-popover-btn.mobile-popover-delete:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+[data-theme='light'] .mobile-popover-btn {
+  background: #f1f5f9 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #334155 !important;
+}
+
+[data-theme='light'] .mobile-popover-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .mobile-popover-btn.mobile-popover-delete:hover {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+}
+
+/* Color swatches in popover */
+.mobile-color-swatches {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.mobile-color-circle {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+  position: relative !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.mobile-color-circle:hover {
+  transform: scale(1.12) !important;
+}
+
+.mobile-color-circle.active {
+  box-shadow: 0 0 0 2px #6366f1, 0 0 0 4px rgba(99, 102, 241, 0.3) !important;
+  transform: scale(1.08) !important;
+}
+
+.mobile-color-circle.is-transparent {
+  background-image: repeating-linear-gradient(45deg, #27272a 25%, transparent 25%, transparent 75%, #27272a 75%, #27272a),
+                    repeating-linear-gradient(45deg, #27272a 25%, #18181b 25%, #18181b 75%, #27272a 75%, #27272a) !important;
+  background-size: 6px 6px !important;
+}
+
+.mobile-color-circle.custom {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.25) !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme='light'] .mobile-color-circle.custom {
+  background: #f1f5f9 !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  color: #334155 !important;
+}
+
+/* Color picker swatches general fallback - prevents collapsing into zero-height line anywhere */
+.color-picker-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+  position: relative;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Mobile Bottom Sheet Drawer */
+.mobile-bottom-sheet-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  z-index: 300 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  animation: fadeIn 0.15s ease-out !important;
+}
+
+.mobile-bottom-sheet-card {
+  width: min(256px, calc(100vw - 20px)) !important;
+  max-width: 256px !important;
+  margin: 0 auto !important;
+  background: #16181d !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px 16px 0 0 !important;
+  max-height: 72vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  animation: slideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px)) !important;
+  box-sizing: border-box !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card {
+  background: #ffffff !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-left: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.12) !important;
+}
+
+.mobile-sheet-header {
+  padding: 8px 12px 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  flex-shrink: 0 !important;
+}
+
+[data-theme='light'] .mobile-sheet-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+.mobile-sheet-handle {
+  width: 32px !important;
+  height: 3.5px !important;
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+  margin-bottom: 6px !important;
+  cursor: grab !important;
+}
+
+[data-theme='light'] .mobile-sheet-handle {
+  background: rgba(0, 0, 0, 0.18) !important;
+}
+
+.mobile-sheet-title-row {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.mobile-sheet-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #f4f4f5 !important;
+  letter-spacing: -0.1px !important;
+}
+
+[data-theme='light'] .mobile-sheet-title {
+  color: #0f172a !important;
+}
+
+.mobile-sheet-close-btn {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #a1a1aa !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
+}
+
+.mobile-sheet-close-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.mobile-sheet-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .mobile-sheet-close-btn {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #64748b !important;
+}
+
+[data-theme='light'] .mobile-sheet-close-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  color: #0f172a !important;
+}
+
+/* Mobile sheet body with hidden scrollbar for native app feel */
+.mobile-sheet-body {
+  padding: 10px 12px 14px !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  flex: 1 1 auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE / Edge */
+}
+
+.mobile-sheet-body::-webkit-scrollbar {
+  display: none !important; /* Chrome / Safari / Edge / Electron */
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.mobile-sheet-body .panelColumn {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.mobile-bottom-sheet-card .control-label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #94a3b8 !important;
+  margin: 0 0 5px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  line-height: 1.2 !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .control-label {
+  color: #64748b !important;
+}
+
+/* Color Picker Swatches in Mobile Bottom Sheet (Compact 23px swatches) */
+.mobile-bottom-sheet-card .color-picker {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  width: 100% !important;
+}
+
+.mobile-bottom-sheet-card .color-picker .color-picker-swatch,
+.mobile-bottom-sheet-card .color-picker-swatch {
+  width: 23px !important;
+  height: 23px !important;
+  min-width: 23px !important;
+  min-height: 23px !important;
+  max-width: 23px !important;
+  max-height: 23px !important;
+  flex: 0 0 23px !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+}
+
+.mobile-bottom-sheet-card .color-picker-swatch:hover,
+.mobile-bottom-sheet-card .color-picker-swatch:focus-visible {
+  transform: scale(1.12) !important;
+}
+
+.mobile-bottom-sheet-card .color-picker-swatch.active {
+  box-shadow: 0 0 0 1.5px #16181d, 0 0 0 3.5px #6366f1 !important;
+  transform: scale(1.08) !important;
+  z-index: 2 !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .color-picker-swatch {
+  border: 1px solid rgba(0, 0, 0, 0.14) !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .color-picker-swatch.active {
+  box-shadow: 0 0 0 1.5px #ffffff, 0 0 0 3.5px #6366f1 !important;
+}
+
+.mobile-bottom-sheet-card .color-picker-custom-swatch {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 5px !important;
+}
+
+/* Button Lists in Mobile Bottom Sheet: Compact 30px square icon buttons */
+.mobile-bottom-sheet-card .buttonList {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  width: 100% !important;
+}
+
+.mobile-bottom-sheet-card .buttonList > label,
+.mobile-bottom-sheet-card .buttonList > button,
+.mobile-bottom-sheet-card .buttonList .ToolIcon {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  max-width: 30px !important;
+  max-height: 30px !important;
+  flex: 0 0 30px !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  transition: all 0.12s ease !important;
+}
+
+.mobile-bottom-sheet-card .buttonList > label svg,
+.mobile-bottom-sheet-card .buttonList > button svg,
+.mobile-bottom-sheet-card .buttonList .ToolIcon svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.mobile-bottom-sheet-card .buttonList > label:hover,
+.mobile-bottom-sheet-card .buttonList > button:hover,
+.mobile-bottom-sheet-card .buttonList .ToolIcon:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.mobile-bottom-sheet-card .buttonList .ToolIcon.active,
+.mobile-bottom-sheet-card .buttonList .active {
+  background: rgba(99, 102, 241, 0.22) !important;
+  color: #a5b4fc !important;
+  border-color: rgba(129, 140, 248, 0.6) !important;
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.3) !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList > label,
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList > button,
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList .ToolIcon {
+  background: #f1f5f9 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #334155 !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList > label:hover,
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList > button:hover,
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList .ToolIcon:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList .ToolIcon.active,
+[data-theme='light'] .mobile-bottom-sheet-card .buttonList .active {
+  background: #e0e7ff !important;
+  color: #4338ca !important;
+  border-color: #818cf8 !important;
+  box-shadow: inset 0 0 0 1px #818cf8 !important;
+}
+
+/* Opacity Slider in Mobile Sheet (Compact) */
+.mobile-bottom-sheet-card input[type="range"],
+.mobile-bottom-sheet-card .doodle-opacity-slider {
+  width: 100% !important;
+  accent-color: #6366f1 !important;
+  cursor: pointer !important;
+  height: 4px !important;
+  border-radius: 2px !important;
+  margin: 2px 0 0 !important;
+}
+
+.mobile-bottom-sheet-card .opacity-value-badge {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #a5b4fc !important;
+  background: rgba(99, 102, 241, 0.15) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .opacity-value-badge {
+  color: #4338ca !important;
+  background: #e0e7ff !important;
+}
+
+/* Action & Mind Map Buttons in Mobile Bottom Sheet (Compact 28px) */
+.mobile-bottom-sheet-card .property-action-button {
+  height: 28px !important;
+  min-height: 28px !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  cursor: pointer !important;
+  padding: 0 8px !important;
+  transition: all 0.12s ease !important;
+}
+
+.mobile-bottom-sheet-card .property-action-button svg {
+  width: 12px !important;
+  height: 12px !important;
+  flex-shrink: 0 !important;
+}
+
+.mobile-bottom-sheet-card .property-action-button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.mobile-bottom-sheet-card .property-action-delete {
+  color: #f87171 !important;
+}
+
+.mobile-bottom-sheet-card .property-action-delete:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #ef4444 !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .property-action-button {
+  background: #f1f5f9 !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #334155 !important;
+}
+
+[data-theme='light'] .mobile-bottom-sheet-card .property-action-button:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+

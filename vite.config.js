@@ -52,13 +52,9 @@ export default defineConfig({
           if (id.includes('LibrarySidebar') || id.includes('SmartAutoLayoutModal') || id.includes('WireframeToCodeModal') || id.includes('MermaidToDoodleModal') || id.includes('NapkinToVectorScannerModal')) {
             return 'heavy-modals';
           }
-          // Engine components
-          if (id.includes('/engine/')) {
+          // Engine components & utils combined to eliminate circular chunk dependency
+          if (id.includes('/engine/') || id.includes('/utils/')) {
             return 'engine';
-          }
-          // Utils
-          if (id.includes('/utils/')) {
-            return 'utils';
           }
           // Components (lazy-loaded modals)
           if (id.includes('/components/') && (id.includes('Modal') || id.includes('Panel') || id.includes('Overlay'))) {

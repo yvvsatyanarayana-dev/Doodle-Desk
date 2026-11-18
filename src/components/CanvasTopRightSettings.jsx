@@ -35,6 +35,7 @@ function CanvasTopRightSettingsComponent({ isOpen, onTogglePreferences }) {
     <button
       type="button"
       className={`ToolIcon ToolIcon_type_button canvas-settings-trigger ${isOpen ? 'active' : ''}`}
+      data-tooltip="Settings (Ctrl+,)"
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();

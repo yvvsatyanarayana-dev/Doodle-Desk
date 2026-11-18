@@ -160,6 +160,8 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI, workspaceId, fileId
   const broadcastChannelRef = useRef(null);
   const isRemoteUpdateRef = useRef(false);
   const lastBroadcastElementsSigRef = useRef(null);
+  const lastBroadcastPointerTimeRef = useRef(0);
+  const lastBroadcastPointerStateRef = useRef({ button: 'up', tool: 'selection' });
   const statusRef = useRef(status);
   const collaboratorsRef = useRef(collaborators);
   collaboratorsRef.current = collaborators;
@@ -390,17 +392,17 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI, workspaceId, fileId
       try {
         const raw = localStorage.getItem(ACTIVE_HOST_KEY);
         if (!raw) {
-          setDiscoveredRoom(null);
+          setDiscoveredRoom((prev) => (prev === null ? prev : null));
           return;
         }
         const data = JSON.parse(raw);
         if (data && data.roomId && data.hostId !== myProfile.id && Date.now() - (data.timestamp || 0) < 6000) {
-          setDiscoveredRoom(data);
+          setDiscoveredRoom((prev) => (prev?.roomId === data.roomId && prev?.timestamp === data.timestamp ? prev : data));
         } else {
-          setDiscoveredRoom(null);
+          setDiscoveredRoom((prev) => (prev === null ? prev : null));
         }
       } catch {
-        setDiscoveredRoom(null);
+        setDiscoveredRoom((prev) => (prev === null ? prev : null));
       }
     };
 
@@ -958,10 +960,23 @@ export function useLiveCollaboration({ doodleAPI, canvasAPI, workspaceId, fileId
     });
   }, []);
 
-  // Broadcast cursor movements to peers
+  // Broadcast cursor movements to peers (throttled to ~30fps/33ms during motion, immediate on button/tool state changes)
   const broadcastPointer = useCallback(
     (sceneX, sceneY, button = 'up', selectedElementIds = {}, tool = 'selection', laserMode = 'beam') => {
       if (status === 'disconnected') return;
+      const now = performance.now();
+      const stateChanged =
+        lastBroadcastPointerStateRef.current.button !== button ||
+        lastBroadcastPointerStateRef.current.tool !== tool;
+
+      if (!stateChanged && now - lastBroadcastPointerTimeRef.current < 33) {
+        return;
+      }
+
+      lastBroadcastPointerTimeRef.current = now;
+      lastBroadcastPointerStateRef.current.button = button;
+      lastBroadcastPointerStateRef.current.tool = tool;
+
       broadcastData({
         type: 'pointer',
         x: sceneX,

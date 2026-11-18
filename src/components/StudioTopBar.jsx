@@ -37,6 +37,8 @@ import {
   MicOff,
   Timer,
   Smartphone,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import { WorkspaceIconBadge } from './WorkspaceIcons';
 import WorkspaceDropdown from './WorkspaceDropdown';
@@ -52,6 +54,8 @@ function StudioTopBarComponent({
   canvasStyle = 'standard',
   onSetCanvasStyle,
   onThemeToggle,
+  onUndo,
+  onRedo,
   onNew,
   onOpen,
   onSave,
@@ -354,10 +358,11 @@ function StudioTopBarComponent({
                 const topbar = document.querySelector('.studio-topbar');
                 const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom;
                 const computedTop = topbarBottom + 16;
-                // Move workspace dropdown to the left edge so it never touches the center tool bar
+                const maxLeft = Math.max(8, window.innerWidth - 356);
+                const targetLeft = Math.min(Math.max(8, rect.left), maxLeft);
                 setWsDropPos({
                   top: computedTop,
-                  left: 12,
+                  left: targetLeft,
                 });
               }
               setIsWorkspaceMenuOpen(!isWorkspaceMenuOpen);
@@ -521,9 +526,10 @@ function StudioTopBarComponent({
               style={{
                 position: 'absolute',
                 top: '100%',
-                left: '-130px',
+                left: 'max(-130px, calc(8px - 100%))',
                 marginTop: '16px',
-                width: '240px',
+                width: 'min(240px, calc(100vw - 24px))',
+                maxWidth: 'calc(100vw - 24px)',
                 boxSizing: 'border-box',
                 background: isDark ? '#131316' : '#ffffff',
                 border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)'),
@@ -789,6 +795,33 @@ function StudioTopBarComponent({
 
       {/* Right: Actions & Custom Window Controls */}
       <div className="studio-topbar-right app-no-drag">
+        {/* Mobile Quick Undo & Redo Header Controls */}
+        <div className="studio-mobile-undo-redo">
+          <button
+            type="button"
+            className="studio-action-btn studio-mobile-undo-btn"
+            onClick={() => {
+              if (onUndo) onUndo();
+              else window.__doodleUndo?.();
+            }}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+          >
+            <Undo2 size={13} />
+          </button>
+          <button
+            type="button"
+            className="studio-action-btn studio-mobile-redo-btn"
+            onClick={() => {
+              if (onRedo) onRedo();
+              else window.__doodleRedo?.();
+            }}
+            title="Redo (Ctrl+Y)"
+            aria-label="Redo"
+          >
+            <Redo2 size={13} />
+          </button>
+        </div>
 
         {/* Live Collaboration — unified capsule */}
         <div
@@ -812,9 +845,10 @@ function StudioTopBarComponent({
                   const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
                   const libRect = libraryEl?.getBoundingClientRect();
                   const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
+                  const maxRight = Math.max(8, Math.min(window.innerWidth - 316, libRightOffset + 12));
                   setCollabDropPos({
                     top: topbarBottom + 16,
-                    right: Math.max(64, libRightOffset + 12),
+                    right: Math.max(8, maxRight),
                   });
                 }
                 setIsCollabMenuOpen(!isCollabMenuOpen);
@@ -822,7 +856,7 @@ function StudioTopBarComponent({
               title="Live Collaboration"
             >
               <Radio size={13} style={{ color: discoveredRoom ? '#10b981' : undefined }} />
-              <span style={{ fontSize: '12px', fontWeight: 600 }}>
+              <span className="studio-btn-label" style={{ fontSize: '12px', fontWeight: 600 }}>
                 {discoveredRoom ? 'Join Live' : 'Live Collab'}
               </span>
               {discoveredRoom && (
@@ -847,9 +881,10 @@ function StudioTopBarComponent({
                     const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
                     const libRect = libraryEl?.getBoundingClientRect();
                     const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
+                    const maxRight = Math.max(8, Math.min(window.innerWidth - 316, libRightOffset + 12));
                     setCollabDropPos({
                       top: topbarBottom + 16,
-                      right: Math.max(64, libRightOffset + 12),
+                      right: Math.max(8, maxRight),
                     });
                   }
                   setIsCollabMenuOpen(!isCollabMenuOpen);
@@ -861,7 +896,7 @@ function StudioTopBarComponent({
                 ) : (
                   <span className="studio-collab-live-dot" />
                 )}
-                <span style={{ color: isDark ? '#34d399' : '#059669', fontSize: '12px', fontWeight: 600 }}>
+                <span className="studio-btn-label" style={{ color: isDark ? '#34d399' : '#059669', fontSize: '12px', fontWeight: 600 }}>
                   {collabStatus === 'connecting' ? 'Connecting...' : 'Live'}
                 </span>
                 <span className="studio-collab-count-badge">
@@ -895,7 +930,7 @@ function StudioTopBarComponent({
                     ) : (
                       <Mic size={13} style={{ color: '#10b981' }} className={voiceState?.isSpeaking ? 'animate-pulse' : ''} />
                     )}
-                    <span style={{ fontSize: '11.5px', fontWeight: 600 }}>
+                    <span className="studio-btn-label" style={{ fontSize: '11.5px', fontWeight: 600 }}>
                       {voiceState?.isMuted ? 'Muted' : 'Mic On'}
                     </span>
                   </button>
@@ -977,10 +1012,10 @@ function StudioTopBarComponent({
                 const libraryEl = document.querySelector('.layer-ui__wrapper__top-right') || document.querySelector('.sidebar-trigger');
                 const libRect = libraryEl?.getBoundingClientRect();
                 const libRightOffset = libRect ? window.innerWidth - libRect.left : 52;
-                // Move to right: neatly between library button and center tool bar
+                const maxRight = Math.max(8, Math.min(window.innerWidth - 280, libRightOffset + 12));
                 setExportDropPos({
                   top: topbarBottom + 16,
-                  right: Math.max(64, libRightOffset + 12),
+                  right: Math.max(8, maxRight),
                 });
               }
               setIsExportMenuOpen(!isExportMenuOpen);
@@ -988,7 +1023,7 @@ function StudioTopBarComponent({
             title="Export canvas"
           >
             <Download size={13} />
-            <span style={{ fontSize: '12px', fontWeight: 600 }}>Export</span>
+            <span className="studio-btn-label" style={{ fontSize: '12px', fontWeight: 600 }}>Export</span>
             <ChevronDown size={12} />
           </button>
 

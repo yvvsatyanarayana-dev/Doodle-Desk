@@ -5,6 +5,8 @@
 // - Roughness 2: Cartoonist (extra wobbly, expressive sketchy strokes with pronounced corner overshoots)
 
 const hachurePathCache = new WeakMap();
+const dotsPathCache = new WeakMap();
+const zigzagPathCache = new WeakMap();
 
 function pseudoRandom(seed) {
   // Mulberry32 LCG
@@ -89,27 +91,27 @@ export function sketchyLine(ctx, x1, y1, x2, y2, seed, roughness = 1, batch = fa
  * Draw a sketchy rectangle with corner crosses.
  * All 4 edges overshoot and meet at corners with natural hand-drawn overlaps.
  */
-export function sketchyRect(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyRect(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   if (roughness < 0.1) {
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.rect(x, y, w, h);
-    ctx.stroke();
+    if (!batch) ctx.stroke();
     return;
   }
   // Top: left to right
-  sketchyLine(ctx, x, y, x + w, y, seed, roughness);
+  sketchyLine(ctx, x, y, x + w, y, seed, roughness, batch);
   // Right: top to bottom
-  sketchyLine(ctx, x + w, y, x + w, y + h, seed + 101, roughness);
+  sketchyLine(ctx, x + w, y, x + w, y + h, seed + 101, roughness, batch);
   // Bottom: right to left
-  sketchyLine(ctx, x + w, y + h, x, y + h, seed + 202, roughness);
+  sketchyLine(ctx, x + w, y + h, x, y + h, seed + 202, roughness, batch);
   // Left: bottom to top
-  sketchyLine(ctx, x, y + h, x, y, seed + 303, roughness);
+  sketchyLine(ctx, x, y + h, x, y, seed + 303, roughness, batch);
 }
 
 /**
  * Helper to draw a sketchy hand-drawn arc (used in rounded rectangle corners & cylinder bases).
  */
-export function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, roughness = 1, ry = null) {
+export function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, roughness = 1, ry = null, batch = false) {
   if (r <= 0.5) return;
   const actualRy = ry !== null ? ry : r;
   const passes = roughness >= 2 ? 2 : 1;
@@ -119,7 +121,7 @@ export function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, rough
   for (let pass = 0; pass < passes; pass++) {
     const rng = pseudoRandom(seed + pass * 731);
     const jAmt = roughness * 0.6;
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     for (let i = 0; i <= steps; i++) {
       const a = startAngle + (i / steps) * sweep;
       const jrX = r + (rng() - 0.5) * jAmt;
@@ -129,22 +131,22 @@ export function drawSketchyArc(ctx, cx, cy, r, startAngle, endAngle, seed, rough
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   }
 }
 
 /**
  * Draw a rounded rectangle with seed-stable hand-drawn strokes.
  */
-export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1) {
+export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1, batch = false) {
   const r = Math.min(radius, Math.min(w, h) / 2);
   if (r <= 0.5) {
-    sketchyRect(ctx, x, y, w, h, seed, roughness);
+    sketchyRect(ctx, x, y, w, h, seed, roughness, batch);
     return;
   }
 
   if (roughness < 0.1) {
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       ctx.roundRect(x, y, w, h, r);
     } else {
@@ -159,7 +161,7 @@ export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1)
       ctx.quadraticCurveTo(x, y, x + r, y);
       ctx.closePath();
     }
-    ctx.stroke();
+    if (!batch) ctx.stroke();
     return;
   }
 
@@ -170,7 +172,7 @@ export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1)
     const rng = pseudoRandom(seed + pass * 731);
     const jAmt = roughness * 0.5;
 
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(x + w - r, y);
 
     // Corner 1: top-right arc (-PI/2 to 0)
@@ -214,7 +216,7 @@ export function sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness = 1)
     ctx.lineTo(x + w - r, y + (rng() - 0.5) * jAmt);
 
     ctx.closePath();
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   }
 }
 
@@ -416,14 +418,14 @@ export function generateSketchyCrossHatchPath(w, h, seed = 0, roughness = 1, str
  * Draw a sketchy ellipse with 2-pass overlapping loop.
  * Passes sweep past 360° by ~20° to eliminate flat seams and produce an authentic hand-drawn look.
  */
-export function sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness = 1) {
+export function sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness = 1, batch = false) {
   const absRx = Math.max(0.1, Math.abs(rx));
   const absRy = Math.max(0.1, Math.abs(ry));
 
   if (roughness < 0.1) {
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.ellipse(cx, cy, absRx, absRy, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    if (!batch) ctx.stroke();
     return;
   }
 
@@ -451,7 +453,7 @@ export function sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness = 1) {
     }
 
     // Draw smooth Catmull-Rom spline through points
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = points[Math.max(0, i - 1)];
@@ -464,24 +466,24 @@ export function sketchyEllipse(ctx, cx, cy, rx, ry, seed, roughness = 1) {
       const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
     }
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   }
 }
 
 /**
  * Draw a sketchy diamond with corner crosses or rounded corners.
  */
-export function sketchyDiamond(ctx, x, y, w, h, seed, roughness = 1, isRounded = false) {
+export function sketchyDiamond(ctx, x, y, w, h, seed, roughness = 1, isRounded = false, batch = false) {
   const rw = Math.max(0.1, Math.abs(w));
   const rh = Math.max(0.1, Math.abs(h));
   const cx = x + rw / 2;
   const cy = y + rh / 2;
 
   if (!isRounded) {
-    sketchyLine(ctx, cx, y, x + rw, cy, seed, roughness);
-    sketchyLine(ctx, x + rw, cy, cx, y + rh, seed + 101, roughness);
-    sketchyLine(ctx, cx, y + rh, x, cy, seed + 202, roughness);
-    sketchyLine(ctx, x, cy, cx, y, seed + 303, roughness);
+    sketchyLine(ctx, cx, y, x + rw, cy, seed, roughness, batch);
+    sketchyLine(ctx, x + rw, cy, cx, y + rh, seed + 101, roughness, batch);
+    sketchyLine(ctx, cx, y + rh, x, cy, seed + 202, roughness, batch);
+    sketchyLine(ctx, x, cy, cx, y, seed + 303, roughness, batch);
     return;
   }
 
@@ -509,7 +511,7 @@ export function sketchyDiamond(ctx, x, y, w, h, seed, roughness = 1, isRounded =
     const rng = pseudoRandom(seed + pass * 541);
     const jAmt = roughness * 0.5;
 
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(T_out[0], T_out[1]);
 
     // Top-right edge
@@ -533,7 +535,7 @@ export function sketchyDiamond(ctx, x, y, w, h, seed, roughness = 1, isRounded =
     ctx.quadraticCurveTo(cx + (rng() - 0.5) * jAmt, y + (rng() - 0.5) * jAmt, T_out[0], T_out[1]);
 
     ctx.closePath();
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   }
 }
 
@@ -667,22 +669,52 @@ export function dotsFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
 
   const gap = Math.max(9, (ctx.lineWidth || 2) * 4.5);
   const dotR = Math.max(1.3, (ctx.lineWidth || 2) * 0.65);
-  const rng = pseudoRandom(seed + 999);
+  const cacheSignature = [minX, minY, maxX, maxY, seed, roughness, gap, dotR].join(':');
+  let cachedPath = null;
+  if (cacheOwner && typeof cacheOwner === 'object' && typeof Path2D !== 'undefined') {
+    let pathsBySignature = dotsPathCache.get(cacheOwner);
+    cachedPath = pathsBySignature?.get(cacheSignature) || null;
+    if (!cachedPath) {
+      cachedPath = new Path2D();
+      if (!pathsBySignature || pathsBySignature.size >= 2) {
+        pathsBySignature = new Map();
+        dotsPathCache.set(cacheOwner, pathsBySignature);
+      }
+      pathsBySignature.set(cacheSignature, cachedPath);
+      const rng = pseudoRandom(seed + 999);
+      let row = 0;
+      for (let y = minY + gap / 2; y <= maxY + gap / 2; y += gap) {
+        const offsetX = (row % 2 === 1) ? gap / 2 : 0;
+        for (let x = minX + gap / 2 + offsetX; x <= maxX + gap / 2; x += gap) {
+          const jx = (rng() - 0.5) * (roughness * 1.4);
+          const jy = (rng() - 0.5) * (roughness * 1.4);
+          cachedPath.moveTo(x + jx + dotR, y + jy);
+          cachedPath.arc(x + jx, y + jy, dotR, 0, Math.PI * 2);
+        }
+        row++;
+      }
+    }
+  }
 
   ctx.fillStyle = ctx.strokeStyle;
-  ctx.beginPath();
-  let row = 0;
-  for (let y = minY + gap / 2; y <= maxY + gap / 2; y += gap) {
-    const offsetX = (row % 2 === 1) ? gap / 2 : 0;
-    for (let x = minX + gap / 2 + offsetX; x <= maxX + gap / 2; x += gap) {
-      const jx = (rng() - 0.5) * (roughness * 1.4);
-      const jy = (rng() - 0.5) * (roughness * 1.4);
-      ctx.moveTo(x + jx + dotR, y + jy);
-      ctx.arc(x + jx, y + jy, dotR, 0, Math.PI * 2);
+  if (cachedPath) {
+    ctx.fill(cachedPath);
+  } else {
+    const rng = pseudoRandom(seed + 999);
+    ctx.beginPath();
+    let row = 0;
+    for (let y = minY + gap / 2; y <= maxY + gap / 2; y += gap) {
+      const offsetX = (row % 2 === 1) ? gap / 2 : 0;
+      for (let x = minX + gap / 2 + offsetX; x <= maxX + gap / 2; x += gap) {
+        const jx = (rng() - 0.5) * (roughness * 1.4);
+        const jy = (rng() - 0.5) * (roughness * 1.4);
+        ctx.moveTo(x + jx + dotR, y + jy);
+        ctx.arc(x + jx, y + jy, dotR, 0, Math.PI * 2);
+      }
+      row++;
     }
-    row++;
+    ctx.fill();
   }
-  ctx.fill();
   ctx.restore();
 }
 
@@ -719,40 +751,92 @@ export function zigzagFill(ctx, paths, seed, roughness = 1, cacheOwner = null) {
   const step = Math.max(8, gap * 0.6);
   const amp = Math.min(gap * 0.4, 7);
 
-  ctx.beginPath();
-  for (let d = -diagLen; d < diagLen; d += gap) {
-    const x1 = cx + cos * d - sin * diagLen;
-    const y1 = cy + sin * d + cos * diagLen;
-    const x2 = cx + cos * d + sin * diagLen;
-    const y2 = cy + sin * d - cos * diagLen;
+  const cacheSignature = [minX, minY, maxX, maxY, seed, roughness, gap, step, amp].join(':');
+  let cachedPath = null;
+  if (cacheOwner && typeof cacheOwner === 'object' && typeof Path2D !== 'undefined') {
+    let pathsBySignature = zigzagPathCache.get(cacheOwner);
+    cachedPath = pathsBySignature?.get(cacheSignature) || null;
+    if (!cachedPath) {
+      cachedPath = new Path2D();
+      if (!pathsBySignature || pathsBySignature.size >= 2) {
+        pathsBySignature = new Map();
+        zigzagPathCache.set(cacheOwner, pathsBySignature);
+      }
+      pathsBySignature.set(cacheSignature, cachedPath);
 
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.hypot(dx, dy);
-    if (len < 1) continue;
+      for (let d = -diagLen; d < diagLen; d += gap) {
+        const x1 = cx + cos * d - sin * diagLen;
+        const y1 = cy + sin * d + cos * diagLen;
+        const x2 = cx + cos * d + sin * diagLen;
+        const y2 = cy + sin * d - cos * diagLen;
 
-    const ux = dx / len;
-    const uy = dy / len;
-    const perpX = -uy;
-    const perpY = ux;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.hypot(dx, dy);
+        if (len < 1) continue;
 
-    const rng = pseudoRandom(seed + Math.round(d) * 19);
-    ctx.moveTo(x1, y1);
-    let dist = 0;
-    let up = true;
-    while (dist < len) {
-      dist += step;
-      const t = Math.min(dist, len);
-      const px = x1 + ux * t;
-      const py = y1 + uy * t;
-      const wave = up ? amp : -amp;
-      const jx = (rng() - 0.5) * (roughness * 0.8);
-      const jy = (rng() - 0.5) * (roughness * 0.8);
-      ctx.lineTo(px + perpX * wave + jx, py + perpY * wave + jy);
-      up = !up;
+        const ux = dx / len;
+        const uy = dy / len;
+        const perpX = -uy;
+        const perpY = ux;
+
+        const rng = pseudoRandom(seed + Math.round(d) * 19);
+        cachedPath.moveTo(x1, y1);
+        let dist = 0;
+        let up = true;
+        while (dist < len) {
+          dist += step;
+          const t = Math.min(dist, len);
+          const px = x1 + ux * t;
+          const py = y1 + uy * t;
+          const wave = up ? amp : -amp;
+          const jx = (rng() - 0.5) * (roughness * 0.8);
+          const jy = (rng() - 0.5) * (roughness * 0.8);
+          cachedPath.lineTo(px + perpX * wave + jx, py + perpY * wave + jy);
+          up = !up;
+        }
+      }
     }
   }
-  ctx.stroke();
+
+  if (cachedPath) {
+    ctx.stroke(cachedPath);
+  } else {
+    ctx.beginPath();
+    for (let d = -diagLen; d < diagLen; d += gap) {
+      const x1 = cx + cos * d - sin * diagLen;
+      const y1 = cy + sin * d + cos * diagLen;
+      const x2 = cx + cos * d + sin * diagLen;
+      const y2 = cy + sin * d - cos * diagLen;
+
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+
+      const ux = dx / len;
+      const uy = dy / len;
+      const perpX = -uy;
+      const perpY = ux;
+
+      const rng = pseudoRandom(seed + Math.round(d) * 19);
+      ctx.moveTo(x1, y1);
+      let dist = 0;
+      let up = true;
+      while (dist < len) {
+        dist += step;
+        const t = Math.min(dist, len);
+        const px = x1 + ux * t;
+        const py = y1 + uy * t;
+        const wave = up ? amp : -amp;
+        const jx = (rng() - 0.5) * (roughness * 0.8);
+        const jy = (rng() - 0.5) * (roughness * 0.8);
+        ctx.lineTo(px + perpX * wave + jx, py + perpY * wave + jy);
+        up = !up;
+      }
+    }
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -890,54 +974,54 @@ export function getCloudPolygon(x, y, w, h) {
 /**
  * Draw hand-drawn sketchy closed polygon.
  */
-export function sketchyPolygon(ctx, vertices, seed, roughness = 1) {
+export function sketchyPolygon(ctx, vertices, seed, roughness = 1, batch = false) {
   if (!vertices || vertices.length < 2) return;
   if (roughness < 0.1) {
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.moveTo(vertices[0][0], vertices[0][1]);
     for (let i = 1; i < vertices.length; i++) {
       ctx.lineTo(vertices[i][0], vertices[i][1]);
     }
     ctx.closePath();
-    ctx.stroke();
+    if (!batch) ctx.stroke();
     return;
   }
   const len = vertices.length;
   for (let i = 0; i < len; i++) {
     const v0 = vertices[i];
     const v1 = vertices[(i + 1) % len];
-    sketchyLine(ctx, v0[0], v0[1], v1[0], v1[1], seed + i * 101, roughness);
+    sketchyLine(ctx, v0[0], v0[1], v1[0], v1[1], seed + i * 101, roughness, batch);
   }
 }
 
-export function sketchyTriangle(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyTriangle(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const vertices = getTriangleVertices(x, y, w, h);
-  sketchyPolygon(ctx, vertices, seed, roughness);
+  sketchyPolygon(ctx, vertices, seed, roughness, batch);
 }
 
-export function sketchyStar(ctx, x, y, w, h, seed, roughness = 1, points = 5) {
+export function sketchyStar(ctx, x, y, w, h, seed, roughness = 1, points = 5, batch = false) {
   const vertices = getStarVertices(x, y, w, h, points);
-  sketchyPolygon(ctx, vertices, seed, roughness);
+  sketchyPolygon(ctx, vertices, seed, roughness, batch);
 }
 
-export function sketchyHexagon(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyHexagon(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const vertices = getHexagonVertices(x, y, w, h);
-  sketchyPolygon(ctx, vertices, seed, roughness);
+  sketchyPolygon(ctx, vertices, seed, roughness, batch);
 }
 
-export function sketchyOctagon(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyOctagon(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const vertices = getOctagonVertices(x, y, w, h);
-  sketchyPolygon(ctx, vertices, seed, roughness);
+  sketchyPolygon(ctx, vertices, seed, roughness, batch);
 }
 
-export function sketchyParallelogram(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyParallelogram(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const vertices = getParallelogramVertices(x, y, w, h);
-  sketchyPolygon(ctx, vertices, seed, roughness);
+  sketchyPolygon(ctx, vertices, seed, roughness, batch);
 }
 
-export function sketchyCapsule(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyCapsule(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const radius = Math.min(Math.abs(w), Math.abs(h)) / 2;
-  sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness);
+  sketchyRoundedRect(ctx, x, y, w, h, radius, seed, roughness, batch);
 }
 
 /**
@@ -947,7 +1031,7 @@ export function sketchyCapsule(ctx, x, y, w, h, seed, roughness = 1) {
  * 3. Right vertical edge
  * 4. Matching curved bottom arc
  */
-export function sketchyCylinder(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyCylinder(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const rw = Math.max(0.1, Math.abs(w));
   const rh = Math.max(0.1, Math.abs(h));
   const lidH = Math.min(rh * 0.35, 34);
@@ -956,28 +1040,28 @@ export function sketchyCylinder(ctx, x, y, w, h, seed, roughness = 1) {
   const cx = x + rx;
 
   // 1. Top lid ellipse
-  sketchyEllipse(ctx, cx, y + ry, rx, ry, seed, roughness);
+  sketchyEllipse(ctx, cx, y + ry, rx, ry, seed, roughness, batch);
 
   // 2. Left vertical edge
-  sketchyLine(ctx, x, y + ry, x, y + rh - ry, seed + 101, roughness);
+  sketchyLine(ctx, x, y + ry, x, y + rh - ry, seed + 101, roughness, batch);
 
   // 3. Right vertical edge
-  sketchyLine(ctx, x + rw, y + ry, x + rw, y + rh - ry, seed + 202, roughness);
+  sketchyLine(ctx, x + rw, y + ry, x + rw, y + rh - ry, seed + 202, roughness, batch);
 
   // 4. Bottom curved arc (matching lower half of ellipse)
   if (roughness < 0.1) {
-    ctx.beginPath();
+    if (!batch) ctx.beginPath();
     ctx.ellipse(cx, y + rh - ry, rx, ry, 0, 0, Math.PI);
-    ctx.stroke();
+    if (!batch) ctx.stroke();
   } else {
-    drawSketchyArc(ctx, cx, y + rh - ry, rx, 0, Math.PI, seed + 303, roughness, ry);
+    drawSketchyArc(ctx, cx, y + rh - ry, rx, 0, Math.PI, seed + 303, roughness, ry, batch);
   }
 }
 
 /**
  * Draw a sketchy Cloud shape with perimeter puffy arcs.
  */
-export function sketchyCloud(ctx, x, y, w, h, seed, roughness = 1) {
+export function sketchyCloud(ctx, x, y, w, h, seed, roughness = 1, batch = false) {
   const lobes = 7;
   const rx = Math.abs(w) / 2;
   const ry = Math.abs(h) / 2;
@@ -993,11 +1077,11 @@ export function sketchyCloud(ctx, x, y, w, h, seed, roughness = 1) {
     const lobeR = (rx + ry) / (lobes * 0.85);
 
     if (roughness < 0.1) {
-      ctx.beginPath();
+      if (!batch) ctx.beginPath();
       ctx.arc(lobeCx, lobeCy, lobeR, a1 - 0.2, a2 + 0.2);
-      ctx.stroke();
+      if (!batch) ctx.stroke();
     } else {
-      drawSketchyArc(ctx, lobeCx, lobeCy, lobeR, a1 - 0.2, a2 + 0.2, seed + i * 83, roughness);
+      drawSketchyArc(ctx, lobeCx, lobeCy, lobeR, a1 - 0.2, a2 + 0.2, seed + i * 83, roughness, null, batch);
     }
   }
 }

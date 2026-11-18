@@ -8,9 +8,10 @@ export function FooterLeft({
   onZoomReset,
   onUndo,
   onRedo,
+  hasSelection = false,
 }) {
   return (
-    <div className="layer-ui__wrapper__footer-left">
+    <div className={`layer-ui__wrapper__footer-left${hasSelection ? ' has-selection' : ''}`}>
       <div className="Stack">
         {/* Zoom Actions Pill */}
         <div className="zoom-actions">
