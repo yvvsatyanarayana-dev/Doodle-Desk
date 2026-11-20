@@ -146,7 +146,7 @@ describe('Shape selection fixes', () => {
     // 1 rotation handle arc
     expect(ctx.arc).toHaveBeenCalledTimes(1);
 
-    // Selection stroke style is set (vibrant indigo/purple)
-    expect(ctx.strokeStyle).toMatch(/#6366f1|#818cf8/);
+    // Selection stroke style is set (neutral monochrome theme matching app palette)
+    expect(ctx.strokeStyle).toMatch(/#d4d4d8|#a1a1aa|#18181b|#27272a|#10b981|#059669|#6366f1|#818cf8/);
   });
 });

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Trash2, X, GripVertical, Sparkles } from 'lucide-react';
+import { Plus, Trash2, X, GripVertical, Sparkles, MoreHorizontal } from 'lucide-react';
 import {
   generateSketchyLinePath,
   generateSketchyRoundedRectPath,
@@ -62,7 +62,7 @@ export function InteractiveTableCard({
   const hoverTimeoutRef = useRef(null);
 
   // Toolbar visibility: stay visible when selected, editing cell/header, or hovered
-  const isSelected = Boolean(appState?.selectedElementIds?.[element.id]);
+  const isSelected = Boolean(appState?.selectedElementIds?.[element.id]) || Boolean(doodleAPI?.getSelectedElements?.()?.some?.(el => el.id === element.id));
   const isEditing = activeCell !== null || isHeaderFocused !== null;
   const showToolbar = isSelected || isEditing || isHovered;
 
@@ -399,8 +399,10 @@ export function InteractiveTableCard({
     const rect = containerRef.current?.getBoundingClientRect();
     const x = e.clientX - (rect?.left || 0);
     const y = e.clientY - (rect?.top || 0);
-    setActiveCell({ rowIdx, colId });
-    setContextMenu({ x, y, rowIdx, colId });
+    const rIdx = (rowIdx !== undefined && rowIdx !== null) ? rowIdx : (activeCell?.rowIdx ?? 0);
+    const cId = colId || activeCell?.colId || columns[0]?.id;
+    setActiveCell({ rowIdx: rIdx, colId: cId });
+    setContextMenu({ x, y, rowIdx: rIdx, colId: cId });
   };
 
   // Close context menu on outside click
@@ -493,6 +495,9 @@ export function InteractiveTableCard({
       onMouseEnter={handleMouseEnter}
       onMouseOver={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onContextMenu={(e) => {
+        handleContextMenu(e, activeCell?.rowIdx ?? 0, activeCell?.colId ?? columns[0]?.id);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         doodleAPI?.setSelectedElements?.({ [element.id]: true });
@@ -674,7 +679,7 @@ export function InteractiveTableCard({
         ))}
       </svg>
 
-      {/* ── Floating Quick Action Pill (Floats cleanly ABOVE the table) ── */}
+      {/* ── Floating Quick Action Pill ── */}
       {showToolbar && (
         <div
           className="table-toolbar-bridge"
@@ -699,12 +704,12 @@ export function InteractiveTableCard({
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '20px',
-              background: isDarkMode ? 'rgba(39, 39, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)',
-              border: `1.5px solid ${strokeColor}`,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-              backdropFilter: 'blur(8px)',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              background: isDarkMode ? '#1e1e24' : '#ffffff',
+              border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(0, 0, 0, 0.12)',
+              boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.45)' : '0 8px 24px rgba(0,0,0,0.14)',
+              backdropFilter: 'blur(10px)',
             }}
           >
             <div
@@ -742,17 +747,17 @@ export function InteractiveTableCard({
                 gap: '4px',
                 padding: '3px 9px',
                 borderRadius: '12px',
-                border: 'none',
-                background: '#6366f1',
-                color: '#ffffff',
+                border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(0, 0, 0, 0.12)',
+                background: isDarkMode ? '#27272a' : '#f1f5f9',
+                color: strokeColor,
                 fontSize: '11px',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
-                boxShadow: '0 2px 6px rgba(99,102,241,0.35)',
+                boxShadow: 'none',
               }}
             >
-              <Sparkles size={11} />
+              <Sparkles size={11} style={{ opacity: 0.85 }} />
               <span>Flashcards</span>
             </button>
 
@@ -900,6 +905,42 @@ export function InteractiveTableCard({
             >
               <Trash2 size={11} />
               <span>Row</span>
+            </button>
+
+            <div style={{ width: '1px', height: '14px', background: strokeColor, opacity: 0.25, margin: '0 2px' }} />
+
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleContextMenu(e, activeCell?.rowIdx ?? 0, activeCell?.colId ?? columns[0]?.id);
+              }}
+              title="More Table Options (Right-click)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                padding: '3px 6px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'transparent',
+                color: strokeColor,
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                opacity: 0.8,
+              }}
+            >
+              <MoreHorizontal size={13} />
             </button>
           </div>
         </div>
@@ -1222,18 +1263,18 @@ export function InteractiveTableCard({
             position: 'absolute',
             left: `${contextMenu.x}px`,
             top: `${contextMenu.y}px`,
-            background: isDarkMode ? '#27272a' : '#ffffff',
-            border: `1px solid ${strokeColor}`,
-            borderRadius: '8px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-            padding: '4px',
+            background: isDarkMode ? '#1e1e24' : '#ffffff',
+            border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(0, 0, 0, 0.12)',
+            borderRadius: '10px',
+            boxShadow: isDarkMode ? '0 12px 32px rgba(0,0,0,0.5)' : '0 12px 32px rgba(0,0,0,0.18)',
+            padding: '5px',
             zIndex: 100,
             display: 'flex',
             flexDirection: 'column',
             gap: '2px',
             fontSize: '12px',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-            minWidth: '160px',
+            fontFamily: fontStack || '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            minWidth: '175px',
           }}
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
@@ -1246,8 +1287,10 @@ export function InteractiveTableCard({
               setContextMenu(null);
             }}
             style={contextBtnStyle(isDarkMode, strokeColor)}
+            onMouseEnter={(e) => (e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Plus size={12} />
+            <Plus size={13} style={{ opacity: 0.85 }} />
             <span>Insert Row Above</span>
           </button>
 
@@ -1258,8 +1301,10 @@ export function InteractiveTableCard({
               setContextMenu(null);
             }}
             style={contextBtnStyle(isDarkMode, strokeColor)}
+            onMouseEnter={(e) => (e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Plus size={12} />
+            <Plus size={13} style={{ opacity: 0.85 }} />
             <span>Insert Row Below</span>
           </button>
 
@@ -1272,14 +1317,19 @@ export function InteractiveTableCard({
             disabled={rows.length <= 1}
             style={{
               ...contextBtnStyle(isDarkMode, strokeColor),
-              color: rows.length <= 1 ? '#71717a' : '#ef4444',
+              color: rows.length <= 1 ? (isDarkMode ? '#52525b' : '#94a3b8') : '#ef4444',
+              cursor: rows.length <= 1 ? 'not-allowed' : 'pointer',
             }}
+            onMouseEnter={(e) => {
+              if (rows.length > 1) e.currentTarget.style.background = isDarkMode ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.08)';
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} />
             <span>Delete Row</span>
           </button>
 
-          <div style={{ height: '1px', background: strokeColor, opacity: 0.25, margin: '2px 0' }} />
+          <div style={{ height: '1px', background: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', margin: '3px 0' }} />
 
           <button
             type="button"
@@ -1289,8 +1339,10 @@ export function InteractiveTableCard({
               setContextMenu(null);
             }}
             style={contextBtnStyle(isDarkMode, strokeColor)}
+            onMouseEnter={(e) => (e.currentTarget.style.background = isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Plus size={12} />
+            <Plus size={13} style={{ opacity: 0.85 }} />
             <span>Insert Column Right</span>
           </button>
 
@@ -1303,14 +1355,19 @@ export function InteractiveTableCard({
             disabled={columns.length <= 1}
             style={{
               ...contextBtnStyle(isDarkMode, strokeColor),
-              color: columns.length <= 1 ? '#71717a' : '#ef4444',
+              color: columns.length <= 1 ? (isDarkMode ? '#52525b' : '#94a3b8') : '#ef4444',
+              cursor: columns.length <= 1 ? 'not-allowed' : 'pointer',
             }}
+            onMouseEnter={(e) => {
+              if (columns.length > 1) e.currentTarget.style.background = isDarkMode ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.08)';
+            }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} />
             <span>Delete Column</span>
           </button>
 
-          <div style={{ height: '1px', background: strokeColor, opacity: 0.25, margin: '2px 0' }} />
+          <div style={{ height: '1px', background: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', margin: '3px 0' }} />
 
           <button
             type="button"
@@ -1320,11 +1377,13 @@ export function InteractiveTableCard({
             }}
             style={{
               ...contextBtnStyle(isDarkMode, strokeColor),
-              color: '#6366f1',
-              fontWeight: 700,
+              color: strokeColor,
+              fontWeight: 500,
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <Sparkles size={12} />
+            <Sparkles size={13} style={{ opacity: 0.85 }} />
             <span>Practice as Flashcards...</span>
           </button>
         </div>
@@ -1354,16 +1413,19 @@ function contextBtnStyle(isDark, strokeColor) {
   return {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    padding: '6px 10px',
+    gap: '8px',
+    padding: '7px 10px',
     border: 'none',
     background: 'transparent',
     color: strokeColor,
     fontSize: '12px',
     cursor: 'pointer',
-    borderRadius: '4px',
+    borderRadius: '6px',
     textAlign: 'left',
     width: '100%',
+    fontFamily: 'inherit',
+    fontWeight: 500,
+    transition: 'background 0.12s ease',
   };
 }
 

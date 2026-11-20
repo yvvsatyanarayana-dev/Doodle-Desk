@@ -428,11 +428,11 @@ export function InteractiveTableFlashcardsModal({
                 width: '36px',
                 height: '36px',
                 borderRadius: '10px',
-                backgroundColor: 'rgba(99, 102, 241, 0.16)',
+                backgroundColor: 'rgba(16, 185, 129, 0.16)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#818cf8',
+                color: '#10b981',
               }}
             >
               <Brain size={20} />
@@ -446,8 +446,8 @@ export function InteractiveTableFlashcardsModal({
                     fontWeight: 700,
                     padding: '2px 8px',
                     borderRadius: '12px',
-                    backgroundColor: 'rgba(99, 102, 241, 0.16)',
-                    color: '#818cf8',
+                    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+                    color: '#10b981',
                     letterSpacing: '0.02em',
                   }}
                 >
@@ -469,8 +469,8 @@ export function InteractiveTableFlashcardsModal({
                 padding: '6px 8px',
                 borderRadius: '8px',
                 border: 'none',
-                background: soundEnabled ? (isDark ? 'rgba(99, 102, 241, 0.12)' : 'rgba(99, 102, 241, 0.08)') : 'transparent',
-                color: soundEnabled ? '#818cf8' : (isDark ? '#71717a' : '#94a3b8'),
+                background: soundEnabled ? (isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)') : 'transparent',
+                color: soundEnabled ? '#10b981' : (isDark ? '#71717a' : '#94a3b8'),
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -522,7 +522,7 @@ export function InteractiveTableFlashcardsModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {/* Question column selection */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontWeight: 700, color: '#818cf8', letterSpacing: '0.01em' }}>Question:</span>
+              <span style={{ fontWeight: 700, color: '#10b981', letterSpacing: '0.01em' }}>Question:</span>
               <select
                 value={questionColId || ''}
                 onChange={(e) => {
@@ -560,9 +560,9 @@ export function InteractiveTableFlashcardsModal({
                 gap: '4px',
                 padding: '5px 10px',
                 borderRadius: '8px',
-                border: isDark ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid rgba(99, 102, 241, 0.35)',
-                background: isDark ? 'rgba(99, 102, 241, 0.12)' : 'rgba(99, 102, 241, 0.08)',
-                color: '#818cf8',
+                border: isDark ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(16, 185, 129, 0.35)',
+                background: isDark ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)',
+                color: '#10b981',
                 fontSize: '11px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -783,8 +783,8 @@ export function InteractiveTableFlashcardsModal({
                       gap: '5px',
                       padding: '3px 10px',
                       borderRadius: '12px',
-                      backgroundColor: 'rgba(99, 102, 241, 0.15)',
-                      color: '#818cf8',
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      color: '#10b981',
                       fontSize: '11px',
                       fontWeight: 700,
                       letterSpacing: '0.04em',
@@ -1059,12 +1059,12 @@ export function InteractiveTableFlashcardsModal({
                 padding: '6px 12px',
                 borderRadius: '8px',
                 border: isShuffled
-                  ? '1px solid rgba(99, 102, 241, 0.5)'
+                  ? '1px solid rgba(16, 185, 129, 0.5)'
                   : isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #cbd5e1',
                 backgroundColor: isShuffled
-                  ? 'rgba(99, 102, 241, 0.16)'
+                  ? 'rgba(16, 185, 129, 0.16)'
                   : isDark ? '#27272a' : '#ffffff',
-                color: isShuffled ? '#818cf8' : isDark ? '#e4e4e7' : '#334155',
+                color: isShuffled ? '#10b981' : isDark ? '#e4e4e7' : '#334155',
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -1133,12 +1133,12 @@ export function InteractiveTableFlashcardsModal({
                 padding: '8px 18px',
                 borderRadius: '10px',
                 border: 'none',
-                backgroundColor: '#6366f1',
+                backgroundColor: '#10b981',
                 color: '#ffffff',
                 fontSize: '13px',
                 fontWeight: 700,
                 cursor: totalCards === 0 ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
               }}
             >
               <RotateCw size={14} />

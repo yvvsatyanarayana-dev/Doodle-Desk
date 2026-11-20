@@ -578,6 +578,67 @@ describe('InteractiveTableCard (Pure Canvas Shape)', () => {
     act(() => root.unmount());
     document.body.removeChild(container);
   });
+
+  it('opens right-click context menu anywhere on table with options and no blue color', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const mockAPI = {
+      getSceneElements: vi.fn(() => [sampleElement]),
+      updateScene: vi.fn(),
+    };
+
+    act(() => {
+      root.render(
+        <InteractiveTableCard
+          element={sampleElement}
+          doodleAPI={mockAPI}
+          isDark={true}
+        />
+      );
+    });
+
+    const tableShape = container.querySelector('.interactive-table-shape');
+    expect(tableShape).toBeTruthy();
+
+    // Right click anywhere on the table
+    act(() => {
+      tableShape.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 150 }));
+    });
+
+    // Right-click menu items appear
+    expect(container.textContent).toContain('Insert Row Above');
+    expect(container.textContent).toContain('Insert Row Below');
+    expect(container.textContent).toContain('Delete Row');
+    expect(container.textContent).toContain('Insert Column Right');
+    expect(container.textContent).toContain('Delete Column');
+    expect(container.textContent).toContain('Practice as Flashcards...');
+
+    // Flashcards button in context menu matches clean theme, NOT blue (#6366f1)
+    const flashcardsBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent.includes('Practice as Flashcards')
+    );
+    expect(flashcardsBtn).toBeTruthy();
+    expect(flashcardsBtn.style.color).not.toBe('rgb(99, 102, 241)');
+
+    // Click "Insert Row Below" from the right-click context menu
+    const addRowMenuBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent.includes('Insert Row Below')
+    );
+    expect(addRowMenuBtn).toBeTruthy();
+    act(() => {
+      addRowMenuBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mockAPI.updateScene).toHaveBeenCalled();
+    const updatedCall = mockAPI.updateScene.mock.calls[0][0];
+    const updatedTable = updatedCall.elements.find((el) => el.id === sampleElement.id);
+    expect(updatedTable.tableData.rows.length).toBe(3);
+
+    act(() => root.unmount());
+    document.body.removeChild(container);
+  });
 });
 
 

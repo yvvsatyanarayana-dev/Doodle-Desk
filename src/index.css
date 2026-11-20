@@ -4821,8 +4821,6 @@ textarea.font-mono {
 .studio-topbar-left {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 32%;
-  overflow: hidden;
 }
 .studio-topbar-center {
   flex: 0 1 auto;
@@ -4857,8 +4855,8 @@ textarea.font-mono {
 .studio-brand-title { color: inherit !important; white-space: nowrap; }
 .studio-chevron { color: #a1a1aa; }
 .studio-doc-divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
-.studio-doc-info { color: #a1a1aa; font-size: 12px; }
-.studio-doc-name { max-width: 180px; overflow: hidden; color: #d4d4d8; text-overflow: ellipsis; white-space: nowrap; }
+.studio-doc-info { color: #a1a1aa; font-size: 12px; min-width: 0; }
+.studio-doc-name { max-width: clamp(70px, 14vw, 180px); min-width: 30px; overflow: hidden; color: #d4d4d8; text-overflow: ellipsis; white-space: nowrap; }
 .studio-doc-name-input { width: 150px; color: #f4f4f5; background: #202024; border: 1px solid #3f3f46; border-radius: 5px; }
 .studio-doc-dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; }
 .studio-doc-dot.dirty { background: #fbbf24; }
@@ -12792,7 +12790,7 @@ label.force-tool-unselected,
   border: none;
   outline: none;
   background: transparent;
-  color: #f4f4f5;
+  color: inherit;
 }
 
 .studio-modal-card input,

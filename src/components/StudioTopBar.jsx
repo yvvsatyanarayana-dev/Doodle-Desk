@@ -358,8 +358,15 @@ function StudioTopBarComponent({
                 const topbar = document.querySelector('.studio-topbar');
                 const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom;
                 const computedTop = topbarBottom + 16;
-                const maxLeft = Math.max(8, window.innerWidth - 356);
-                const targetLeft = Math.min(Math.max(8, rect.left), maxLeft);
+                const toolbar = document.querySelector('.App-toolbar');
+                const toolbarLeft = toolbar ? toolbar.getBoundingClientRect().left : window.innerWidth / 2 - 200;
+                let targetLeft = rect.left - 130;
+                const maxLeftBeforeToolbar = toolbarLeft - 340 - 20;
+                if (maxLeftBeforeToolbar > 12) {
+                  targetLeft = Math.min(targetLeft, maxLeftBeforeToolbar);
+                }
+                const maxLeft = Math.max(12, window.innerWidth - 356);
+                targetLeft = Math.min(Math.max(12, targetLeft), maxLeft);
                 setWsDropPos({
                   top: computedTop,
                   left: targetLeft,
@@ -425,8 +432,8 @@ function StudioTopBarComponent({
         <div className="studio-doc-divider" />
 
         {/* Document Status & Editable Title with Quick File Switcher */}
-        <div ref={quickFileMenuRef} className="studio-doc-info" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className={`studio-doc-dot ${isDirty ? 'dirty' : 'saved'}`} />
+        <div ref={quickFileMenuRef} className="studio-doc-info" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexShrink: 1 }}>
+          <span className={`studio-doc-dot ${isDirty ? 'dirty' : 'saved'}`} style={{ flexShrink: 0 }} />
           {isEditingTitle ? (
             <input
               type="text"
@@ -444,11 +451,12 @@ function StudioTopBarComponent({
               autoFocus
             />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 0, flexShrink: 1 }}>
               <span
                 className="studio-doc-name editable"
                 onClick={() => setIsEditingTitle(true)}
                 title="Click to rename drawing file"
+                style={{ minWidth: 0 }}
               >
                 {currentFileName}
               </span>
@@ -470,6 +478,7 @@ function StudioTopBarComponent({
                   color: isDark ? '#71717a' : '#64748b',
                   borderRadius: '4px',
                   transition: 'color 0.12s, background 0.12s',
+                  flexShrink: 0,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = isDark ? '#e4e4e7' : '#0f172a';
@@ -505,6 +514,7 @@ function StudioTopBarComponent({
               color: isDark ? '#a1a1aa' : '#475569',
               fontSize: '11px',
               transition: 'all 0.12s',
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.12)';

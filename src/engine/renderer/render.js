@@ -1288,7 +1288,7 @@ function renderSingleElementSelection(ctx, el, zoom = 1) {
 
   const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
   const handleBg = isLight ? '#ffffff' : '#232329';
-  const primaryColor = isLight ? '#6366f1' : '#818cf8';
+  const primaryColor = isLight ? '#18181b' : '#d4d4d8';
 
   // Dedicated linear selection handles for Arrow & Line (Doodle style: Start circle, Midpoint filled purple circle, End circle - NO bounding box or corner squares!)
   if (el.type === ELEMENT_TYPES.ARROW || el.type === ELEMENT_TYPES.LINE) {
@@ -1450,7 +1450,10 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
   const rw = (maxX - minX) + padding * 2;
   const rh = (maxY - minY) + padding * 2;
 
-  ctx.strokeStyle = '#6366f1';
+  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
+  const primaryColor = isLight ? '#18181b' : '#d4d4d8';
+
+  ctx.strokeStyle = primaryColor;
   ctx.lineWidth = 1.5 / zoom;
   ctx.setLineDash([4 / zoom, 4 / zoom]);
   ctx.strokeRect(rx, ry, rw, rh);
@@ -1459,8 +1462,8 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
   // Corner resize handles for the entire group
   const handleSize = 8 / zoom;
   const corners = [[rx, ry], [rx + rw, ry], [rx, ry + rh], [rx + rw, ry + rh]];
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#6366f1';
+  ctx.fillStyle = isLight ? '#ffffff' : '#18181b';
+  ctx.strokeStyle = primaryColor;
   ctx.lineWidth = 1.5 / zoom;
   for (const [hx, hy] of corners) {
     ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
@@ -1489,7 +1492,7 @@ export function renderSelectionOverlay(ctx, elements, zoom = 1) {
   const pillX = rx;
   const pillY = ry - pillH - 6 / zoom;
 
-  ctx.fillStyle = '#6366f1';
+  ctx.fillStyle = primaryColor;
   if (ctx.roundRect) {
     ctx.beginPath();
     ctx.roundRect(pillX, pillY, pillW, pillH, 4 / zoom);
